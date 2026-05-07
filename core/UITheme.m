@@ -33,8 +33,9 @@ classdef UITheme
         fontBody    = 11
         fontSmall   = 10
         fontTiny    = 9
-        % Header dimensions (for sub-windows that add a header)
-        headerHeight = 52
+        % Header dimensions (for sub-windows that add a header). Tall enough
+        % to fit a 22pt bold title + 11pt subtitle on two rows without overlap.
+        headerHeight = 80
         headerPaddingH = 20
         headerPaddingV = 14
         % Footer (copyright bar) – fixed height so content never overlaps
