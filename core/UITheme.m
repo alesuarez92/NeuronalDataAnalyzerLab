@@ -37,5 +37,9 @@ classdef UITheme
         headerHeight = 52
         headerPaddingH = 20
         headerPaddingV = 14
+        % Footer (copyright bar) – fixed height so content never overlaps
+        footerHeight = 28
+        % Padding inside graph/axes panels so titles and labels are not clipped
+        axesPanelPadding = [12 40 12 12]  % [L B R T]: extra top for axis title
     end
 end

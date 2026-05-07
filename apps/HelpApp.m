@@ -71,7 +71,8 @@ classdef HelpApp < handle
                 'Color', T.bgGray);
 
             mainGrid = uigridlayout(app.UIFig, [3, 1], ...
-                'RowHeight', {T.headerHeight, '1x', 22}, 'Padding', [0 0 12 12], 'RowSpacing', 0);
+                'RowHeight', {T.headerHeight, '1x', T.footerHeight}, 'Padding', [0 0 0 0], 'RowSpacing', 0);
+            % --- Header: full-width (covers upper part completely) ---
             app.HeaderPanel = uipanel(mainGrid, ...
                 'BackgroundColor', T.headerBg, 'BorderType', 'none');
             uilabel(app.HeaderPanel, 'Text', 'NeuroAnalyzer Help', ...
@@ -82,7 +83,8 @@ classdef HelpApp < handle
                 'FontSize', T.fontSubtitle, 'FontColor', T.headerSubtitleColor);
             app.TabGroup = uitabgroup(mainGrid);
             app.Tabs = {'Welcome', 'LDF Extract', 'LDF Process', 'Filtering', ...
-                'LDF Average', 'Ephys Extract', 'LFP Analysis', 'MUA Analysis', 'Signal Characterization'};
+                'LDF Average', 'Ephys Extract', 'LFP Analysis', 'MUA Analysis', ...
+                'ROI Analysis', 'Signal Characterization'};
 
             t0 = uitab(app.TabGroup, 'Title', app.Tabs{1});
             app.TabHandles = {t0};
@@ -104,14 +106,20 @@ classdef HelpApp < handle
             app.addProcessTab(t5, HelpApp.textEphysExtract(), 'EphysExtractWorkflow.png', 'EphysExtractPrinciple.png');
             t6 = uitab(app.TabGroup, 'Title', app.Tabs{7});
             app.TabHandles{7} = t6;
-            app.addProcessTab(t6, HelpApp.textLFPAnalysis(), 'LFPAnalysisWorkflow.png', 'LFPAnalysisPrinciple.png');
+            app.addProcessTab(t6, HelpApp.textLFPAnalysis(), 'LFPAnalysisWorkflow.png', 'LFPAnalysisPrinciple.png', 'LFPAnalysisCSD.png');
             t7 = uitab(app.TabGroup, 'Title', app.Tabs{8});
             app.TabHandles{8} = t7;
             app.addProcessTab(t7, HelpApp.textMUAAnalysis(), 'MUAAnalysisWorkflow.png', 'MUAAnalysisPrinciple.png');
             t8 = uitab(app.TabGroup, 'Title', app.Tabs{9});
             app.TabHandles{9} = t8;
-            app.addProcessTab(t8, HelpApp.textSignalCharacterization(), 'SignalCharacterizationWorkflow.png', 'SignalCharacterizationPrinciple.png');
-            uihyperlink(mainGrid, 'Text', '© Copyrights by Alejandro Suarez, Ph.D.', ...
+            app.addProcessTab(t8, HelpApp.textROIAnalysis(), 'ROIAnalysisWorkflow.png', 'ROIAnalysisPrinciple.png');
+            t9 = uitab(app.TabGroup, 'Title', app.Tabs{10});
+            app.TabHandles{10} = t9;
+            app.addProcessTab(t9, HelpApp.textSignalCharacterization(), 'SignalCharacterizationWorkflow.png', 'SignalCharacterizationPrinciple.png');
+            % --- Fixed footer section for copyright ---
+            footerPanel = uipanel(mainGrid, 'BorderType', 'none', 'BackgroundColor', T.bgGray);
+            footerGrid = uigridlayout(footerPanel, [1, 1], 'Padding', [12 4 12 4]);
+            uihyperlink(footerGrid, 'Text', '© Copyrights by Alejandro Suarez, Ph.D.', ...
                 'URL', 'https://github.com/alesuarez92', ...
                 'FontSize', T.fontSmall, 'HorizontalAlignment', 'right', 'FontColor', T.mutedColor);
         end
@@ -184,7 +192,49 @@ classdef HelpApp < handle
                 '• Ephys Extract: load TDT data and extract LFP/MUA'
                 '• LFP Analysis: ERP and CSD'
                 '• MUA Analysis: spike sorting and rate'
+                '• ROI Analysis: coregistered images, ROI/line, brightness, ΔF/F, speed, kymograph, vessel diameter'
                 '• Signal Characterization: extract response features (peak latency, FWHM, AUC, etc.)'
+                ''};
+        end
+
+        %% textROIAnalysis - Step-by-step for ROI / Coregistered Image Analysis
+        function s = textROIAnalysis()
+            s = {
+                'ROI / Coregistered Image Analysis – Step by step'
+                '================================================'
+                ''
+                'Use this tool for image stacks (time series of coregistered frames):'
+                'blood flow, two-photon/multiphoton, fluorescence (e.g. gCaMP), vessel diameter.'
+                ''
+                '1. Load Stack'
+                '   Load a .mat (variables: stack or frames; optional: timeVec, roiMask)'
+                '   or a multi-frame TIFF. The stack can be grayscale (H×W×N) or RGB (H×W×3×N).'
+                ''
+                '2. Preprocessing (optional)'
+                '   • B&W 256: convert to 256-level grayscale (for fluorescence intensity).'
+                '   • Smooth: Gaussian smooth each frame.'
+                '   • Normalize: normalize to 0–1 (per frame or overall).'
+                ''
+                '3. Define ROI or Line'
+                '   • ROI: Click "Draw ROI" and draw a rectangle on the first frame.'
+                '     Used for: Brightness, Movement, ΔF/F, Speed.'
+                '   • Line: Click "Draw Line" and draw a line on the first frame.'
+                '     Used for: Kymograph, Vessel diameter.'
+                ''
+                '4. Choose Analysis'
+                '   • Brightness: mean intensity in ROI over time.'
+                '   • Movement: frame-to-frame change (mean absolute difference) in ROI.'
+                '   • Both: plot brightness and movement (two axes).'
+                '   • ΔF/F (gCaMP): (F − F0)/F0 in ROI; baseline = first N frames.'
+                '   • Speed (flow): flow/speed proxy in ROI (blood flow, 2P).'
+                '   • Kymograph: space–time image along the line (propagation, flow direction).'
+                '   • Vessel diameter: diameter over time from intensity profile along the line (FWHM).'
+                ''
+                '5. Compute & Plot'
+                '   Click to run. Time series appear in the plot axes; for Kymograph,'
+                '   a space–time image is shown. Export or use results for further analysis.'
+                ''
+                'Diagram (right): workflow and concepts (ROI intensity, kymograph, vessel diameter).'
                 ''};
         end
 
@@ -364,6 +414,8 @@ classdef HelpApp < handle
                 '4. CSD Analysis'
                 '   Run current source density (CSD) to visualize current flow'
                 '   across channels (e.g. along a linear probe).'
+                ''
+                'Diagram (right): workflow, CSD explanation (sources/sinks, depth), and principle.'
                 ''};
         end
 

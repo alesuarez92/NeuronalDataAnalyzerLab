@@ -20,6 +20,7 @@ end
 addpath(rootDir);
 addpath(fullfile(rootDir, 'apps'));
 addpath(fullfile(rootDir, 'core'));
+addpath(fullfile(rootDir, 'core', 'imaging'));
 addpath(genpath(fullfile(rootDir, 'Utilities')));
 % Project root for docs and resources (used by HelpApp, etc.)
 setpref('NeuroAnalyzer', 'RootDir', rootDir);

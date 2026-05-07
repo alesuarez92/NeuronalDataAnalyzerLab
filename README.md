@@ -19,9 +19,8 @@ You can also use **Current Folder** to navigate to the NeuroAnalyzer folder and 
 ## Structure
 
 - **NeuroAnalyzer.m** – Entry point; run this to open the app.
-- **Main.m** – Main launcher (in `core/`); typically invoked by `NeuroAnalyzer`.
-- **apps/** – Application windows (Extract LDF, Signal Characterization, Help, etc.).
-- **core/** – Core logic (theme, project paths, data loading, validation, processing).
+- **Main.m** – Main launcher (in `core/`); three sections: (1) Filtering & signal processing, (2) Imaging & ROI, (3) Signal characterization.- **apps/** – Application windows (Extract LDF, ROI Analysis, Signal Characterization, Help, etc.).
+- **core/** – Core logic (theme, project paths, data loading, validation, processing); **core/imaging/** – B&W 256, ROI intensity and movement.
 - **docs/** – Help images and documentation.
 - **Utilities/** – Third-party utilities (e.g. TDT SDK).
 
@@ -29,6 +28,11 @@ You can also use **Current Folder** to navigate to the NeuroAnalyzer folder and 
 
 - MATLAB R2018b or later (R2021a+ recommended for Help hyperlinks).
 - For TDT data: place or link the TDT MATLAB SDK under `Utilities/` as used by the toolbox.
+
+## Development
+
+- **Tests:** From the project folder in MATLAB, run `run_tests`, or `runtests('tests')`. See `tests/README.md`.
+- **License:** See `LICENSE.txt` (All Rights Reserved, use-only terms).
 
 ## Author
 

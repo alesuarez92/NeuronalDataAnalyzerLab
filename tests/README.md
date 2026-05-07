@@ -2,14 +2,21 @@
 
 ## Running tests
 
-From MATLAB, with the project root (NeuroAnalyzer folder) on the path:
+**Option 1 – From project root (easiest)**  
+Open the project folder in MATLAB, then in the Command Window:
 
 ```matlab
-cd('/path/to/NeuroAnalyzer')
+run_tests
+```
+
+**Option 2 – From MATLAB with path set**
+
+```matlab
+cd('/path/to/NeuroAnalyzer')   % or NeuroAnalyzerLab_MATLAB
 runtests('tests')
 ```
 
-Or run a single test file:
+**Option 3 – Single test file**
 
 ```matlab
 runtests('tests/ValidationTest')
