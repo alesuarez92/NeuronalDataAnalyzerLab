@@ -9,6 +9,9 @@
 
 classdef UITheme
     properties(Constant)
+        % Release version (semantic versioning). Shown in every app's footer
+        % next to the copyright. Update together with CHANGELOG.md.
+        version = '0.1.0'
         % Backgrounds
         bgGray      = [0.96 0.965 0.98]   % Main/content background
         headerBg    = [0.18 0.28 0.48]    % Header bar (dark blue)
