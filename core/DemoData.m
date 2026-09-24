@@ -329,10 +329,13 @@ classdef DemoData
                 on = x >= 0 & x < 0.3;
                 evoked(on) = evoked(on) + erp(x(on));
             end
+            % Background: a 1/f-like field shared across the shank (volume
+            % conduction, so it cancels in the CSD) plus small local noise
+            shared = filter(1, [1 -0.98], randn(rs, 1, nL)) * 3e-6;
             lfp = zeros(nCh, nL);
             for c = 1:nCh
-                bg = filter(1, [1 -0.98], randn(rs, 1, nL)) * 3e-6;   % 1/f-like background
-                lfp(c, :) = profile(c) * evoked + bg + 2e-6 * randn(rs, 1, nL);
+                local = filter(1, [1 -0.9], randn(rs, 1, nL)) * 0.3e-6;
+                lfp(c, :) = profile(c) * evoked + shared + local + 1e-6 * randn(rs, 1, nL);
             end
 
             % --- MUA: three units, higher rate for 50 ms after each stimulus ---
