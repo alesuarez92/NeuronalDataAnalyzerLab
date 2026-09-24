@@ -11,6 +11,9 @@
 % baseline" subtracts each trial's pre-stimulus (t < 0) mean. Clear
 % removes all trials. updateControls() enables actions from the data
 % state and marks the next step primary.
+% "Try demo data" (loadDemo) replaces the trials with DemoData's
+% synthetic trials (relative to baseline on). Programmatic use (no dialogs):
+% openFiles(paths), setRelative(tf), plotGrandAverage().
 % =========================================================================
 
 classdef LDFGrandAverageApp < handle
@@ -21,6 +24,7 @@ classdef LDFGrandAverageApp < handle
         HelpBtn        % Opens HelpApp('LDF Average')
         LoadBtn        % Step 1: add segmented files
         ClearBtn       % Step 1: remove all trials
+        DemoBtn        % Step 1: load synthetic trials (DemoData)
         FileList       % Step 1: loaded files with trial counts
         InfoLabel      % Step 1: total trials, time window
         RelativeCheck  % Step 2: subtract pre-stimulus baseline
@@ -60,7 +64,7 @@ classdef LDFGrandAverageApp < handle
             heights = cell(1, 4);
 
             % --- 1 Load trial files ---
-            [p, g, heights{1}] = stepCard(left, 1, 'Load trial files', {T.buttonHeight, 120, 34});
+            [p, g, heights{1}] = stepCard(left, 1, 'Load trial files', {T.buttonHeight, T.buttonHeight, 120, 34});
             p.Layout.Row = 1;
             app.LoadBtn = UIKit.button(g, 'Add files...', @(~,~)app.loadFiles(), 'primary', ...
                 'Add one or more .mat files with segmentedLDF and segmentedTime (saved by LDF Processing); trials are pooled');
@@ -68,11 +72,15 @@ classdef LDFGrandAverageApp < handle
             app.ClearBtn = UIKit.button(g, 'Clear all', @(~,~)app.clearSegments(), 'danger', ...
                 'Remove all loaded trials and start again');
             app.ClearBtn.Layout.Row = 2; app.ClearBtn.Layout.Column = 2;
+            app.DemoBtn = UIKit.button(g, 'Try demo data', @(~,~)app.loadDemo(), 'secondary', ...
+                ['Replace the loaded trials with synthetic ones with known answers (-5 to +20 s at 10 Hz; ' ...
+                'each has a +30 PU response peaking 4 s after onset on a ~120 PU baseline)']);
+            app.DemoBtn.Layout.Row = 3; app.DemoBtn.Layout.Column = [1 2];
             app.FileList = uilistbox(g, 'Items', {'(no files loaded)'}, 'FontSize', T.fontSmall, ...
                 'Tooltip', 'Files pooled so far, with the number of trials each contributed');
-            app.FileList.Layout.Row = 3; app.FileList.Layout.Column = [1 2];
+            app.FileList.Layout.Row = 4; app.FileList.Layout.Column = [1 2];
             app.InfoLabel = infoLabel(g, 'No trials loaded', 'Total number of trials and time window');
-            app.InfoLabel.Layout.Row = 4; app.InfoLabel.Layout.Column = [1 2];
+            app.InfoLabel.Layout.Row = 5; app.InfoLabel.Layout.Column = [1 2];
 
             % --- 2 Options ---
             [p, g, heights{2}] = stepCard(left, 2, 'Options', {T.controlHeight, 30});
@@ -135,7 +143,7 @@ classdef LDFGrandAverageApp < handle
         % -------------------------------------------------------------
         % Files without segmentedLDF/segmentedTime, or whose time axis
         % differs from the trials already loaded, are skipped and listed
-        % in a warning.
+        % in a warning. Picks the files, then openFiles(paths).
         % -------------------------------------------------------------
         function loadFiles(app)
             UIKit.setStatus(app.StatusLabel, 'Choose segmented trial files...', 'busy');
@@ -149,6 +157,24 @@ classdef LDFGrandAverageApp < handle
                 return;
             end
             if ischar(files), files = {files}; end
+            app.openFiles(fullfile(path, files));
+        end
+
+        %% openFiles - Add segmented files by path (no dialog)
+        % -------------------------------------------------------------
+        % paths: cell array of .mat paths (or one char path). Same rules
+        % as loadFiles; returns the number of trials added.
+        % -------------------------------------------------------------
+        function added = openFiles(app, paths)
+            added = 0;
+            if ischar(paths) || isstring(paths), paths = cellstr(paths); end
+            if isempty(paths), return; end
+            files = cell(size(paths));
+            for i = 1:numel(paths)
+                [~, name, ext] = fileparts(paths{i});
+                files{i} = [name ext];
+            end
+            path = fileparts(paths{end});
 
             dlg = UIKit.busy(app.UIFig, sprintf('Loading %d file(s)...', numel(files)));
             skipped = {};
@@ -156,7 +182,7 @@ classdef LDFGrandAverageApp < handle
             for i = 1:length(files)
                 if isvalid(dlg), dlg.Message = sprintf('Loading %s (%d of %d)...', files{i}, i, numel(files)); end
                 try
-                    data = load(fullfile(path, files{i}));
+                    data = load(paths{i});
                 catch ME
                     skipped{end+1} = sprintf('%s: could not be read (%s)', files{i}, ME.message); %#ok<AGROW>
                     continue;
@@ -195,6 +221,44 @@ classdef LDFGrandAverageApp < handle
                 UIKit.alert(app.UIFig, sprintf('These files were skipped:\n%s', strjoin(skipped, newline)), ...
                     'Some files skipped', 'warning');
             end
+        end
+
+        %% loadDemo - Replace the trials with DemoData's synthetic trials
+        % -------------------------------------------------------------
+        % -5 to +20 s at 10 Hz, one trial per stimulus; each has a +30 PU
+        % hyperemia peaking 4 s after onset. Turns "Relative to baseline"
+        % on so "Plot grand average" shows the response directly. The last
+        % used folder is not changed by the demo.
+        % -------------------------------------------------------------
+        function loadDemo(app)
+            prevLast = Exporter.getLastUsedPath();
+            dlg = UIKit.busy(app.UIFig, 'Preparing demo data (first time only takes a few seconds)…');
+            try
+                p = DemoData.file('ldfTrials');
+                UIKit.done(dlg);
+                if ~isempty(app.SegmentedData)
+                    app.clearSegments();
+                end
+                app.RelativeCheck.Value = true;
+                added = app.openFiles({p});
+                restoreLastPath(prevLast);
+                if added == 0, return; end
+                t = app.SegmentedTime;
+                UIKit.setStatus(app.StatusLabel, sprintf(['Demo loaded: %d LDF trials (%g to %g s around onset), ' ...
+                    'each with a ~30 PU response peaking 4 s after onset. "Relative to baseline" is on. ' ...
+                    'Next: press "Plot grand average".'], added, t(1), t(end)), 'success');
+            catch ME
+                UIKit.done(dlg);
+                restoreLastPath(prevLast);
+                UIKit.setStatus(app.StatusLabel, sprintf('Could not load the demo data: %s', ME.message), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not load the demo data:\n%s', ME.message), 'Demo data', 'error');
+            end
+        end
+
+        %% setRelative - Turn "Relative to baseline" on/off programmatically
+        function setRelative(app, tf)
+            app.RelativeCheck.Value = logical(tf);
+            app.updateSegmentPlot();
         end
 
         %% updateSegmentPlot - Plot all trials (baseline-corrected if checked)
@@ -300,16 +364,26 @@ classdef LDFGrandAverageApp < handle
         %% showPlaceholders - Empty-axes hints before data
         function showPlaceholders(app)
             legend(app.GrandAxes, 'off');
-            UIKit.emptyAxes(app.Ax, 'Add trial files to begin');
-            UIKit.emptyAxes(app.GrandAxes, 'Grand average (mean ± SD) appears here');
+            % styleAxes first: it removes emptyAxes placeholders
             UIKit.styleAxes(app.Ax, 'All trials');
             UIKit.styleAxes(app.GrandAxes, 'Grand average');
+            UIKit.emptyAxes(app.Ax, 'Add trial files (or Try demo data) to begin');
+            UIKit.emptyAxes(app.GrandAxes, 'Grand average (mean ± SD) appears here');
         end
     end
 end
 
 %% Local helpers
 % -------------------------------------------------------------------------
+
+%% restoreLastPath - Put back the last used folder after loading demo data
+function restoreLastPath(prev)
+    if isempty(prev)
+        if ispref('NeuroAnalyzer', 'LastUsedPath'), rmpref('NeuroAnalyzer', 'LastUsedPath'); end
+    else
+        Exporter.setLastUsedPath(prev);
+    end
+end
 
 %% stepCard - Card with a numbered step label and a 2-column grid
 % rowHeights: heights of the rows below the step label. Returns the

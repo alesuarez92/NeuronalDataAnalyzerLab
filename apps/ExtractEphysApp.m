@@ -18,6 +18,11 @@
 %                      and stim channel snapshotted when processing ran.
 % Up to 4 channels are drawn one per tile; more are stacked with offsets in
 % one axes. Help button opens HelpApp on the "Ephys Extract" tab.
+% "Try demo data" (loadDemo) opens DemoData's synthetic tank
+% (DemoData.loadTank instead of TDTbin2mat) and selects stim ch 1 + all RAW
+% channels. Programmatic use (no dialogs): openTank(folder), setChannels(stim, raw),
+% plotRAWData(), processLFPData(params), processMUAData(params),
+% saveLFPTo(path, sel), saveMUATo(path, sel).
 % =========================================================================
 
 classdef ExtractEphysApp < handle
@@ -26,6 +31,7 @@ classdef ExtractEphysApp < handle
         UIFig
         StatusLabel          % Status bar (UIKit.setStatus)
         LoadBtn
+        DemoBtn              % Load the synthetic demo tank (DemoData)
         TankInfoLabel        % Tank name, Fs, duration, channel counts
         WhisChannelMenu      % Stimulus (Whis) channel dropdown (ItemsData = channel number)
         RAWList              % xRAW channels, multi-select (ItemsData = channel numbers)
@@ -74,17 +80,21 @@ classdef ExtractEphysApp < handle
             W.Body.ColumnWidth = {300, '1x'};
             W.Body.RowHeight = {'1x'};
 
-            left = uigridlayout(W.Body, [4 1], 'RowHeight', {136, '1x', 116, 124}, ...
+            left = uigridlayout(W.Body, [4 1], 'RowHeight', {136 + T.buttonHeight + 6, '1x', 116, 124}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 10, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
             left.Layout.Row = 1; left.Layout.Column = 1;
             bh = T.buttonHeight;
 
             % --- 1 Load TDT tank ---
-            g = cardGrid(left, {22, bh, '1x'});
+            g = cardGrid(left, {22, bh, bh, '1x'});
             UIKit.step(g, 1, 'Load TDT tank');
             app.LoadBtn = UIKit.button(g, 'Load TDT tank…', @(~,~)app.loadTDT(), 'primary', ...
                 'Choose a TDT tank/block folder (needs Whis and xRAW streams)');
+            app.DemoBtn = UIKit.button(g, 'Try demo data', @(~,~)app.loadDemo(), 'secondary', ...
+                ['Load a synthetic 30 s tank with known answers: 8 RAW channels 100 µm apart, ' ...
+                '15 whisker stimuli (every 2 s), an evoked potential with its sink at channel 4 ' ...
+                'and three units near channels 4-5']);
             app.TankInfoLabel = infoLabel(g, 'No tank loaded');
 
             % --- 2 Choose channels ---
@@ -136,7 +146,7 @@ classdef ExtractEphysApp < handle
             app.PlotCard.Layout.Row = 1; app.PlotCard.Layout.Column = 2;
             pg = uigridlayout(app.PlotCard, [1 1], 'Padding', [8 8 8 8], 'BackgroundColor', T.cardBg);
             app.AxContainer = uipanel(pg, 'BorderType', 'none', 'BackgroundColor', T.cardBg);
-            app.showPlaceholder('Signals', 'Load a TDT tank to begin');
+            app.showPlaceholder('Signals', 'Load a TDT tank (or Try demo data) to begin');
 
             app.updateControls();
         end
@@ -188,7 +198,7 @@ classdef ExtractEphysApp < handle
         end
 
 %% ------------------------------------------------------------------------------------------
-        %% loadTDT - Pick a tank folder, load it with TDTbin2mat, fill channel lists
+        %% loadTDT - Pick a tank folder, then openTank(folder)
         function loadTDT(app)
             startDir = ProjectManager.getImportDir();
             if isempty(startDir) || ~isfolder(startDir), startDir = pwd; end
@@ -198,15 +208,28 @@ classdef ExtractEphysApp < handle
                 UIKit.setStatus(app.StatusLabel, 'Load cancelled.', 'info');
                 return;
             end
+            app.openTank(folder);
+        end
+
+        %% openTank - Load a tank folder (no dialog), check streams, fill channel lists
+        % A demo tank (DemoData.isDemoTank) is read with DemoData.loadTank,
+        % anything else with TDTbin2mat. Returns true on success; on failure
+        % the previously loaded tank is kept.
+        function ok = openTank(app, folder)
+            ok = false;
             [~, tankName] = fileparts(folder);
 
             UIKit.setStatus(app.StatusLabel, sprintf('Loading %s…', tankName), 'busy');
             dlg = UIKit.busy(app.UIFig, sprintf('Loading TDT tank %s… this can take a minute.', tankName));
             try
-                % Resolve SDK relative to the toolbox root (apps/..), not pwd
-                rootDir = fileparts(fileparts(mfilename('fullpath')));
-                addpath(genpath(fullfile(rootDir, 'Utilities', 'TDTMatlabSDK')));
-                data = TDTbin2mat(folder);
+                if DemoData.isDemoTank(folder)
+                    data = DemoData.loadTank(folder);   % TDTbin2mat stand-in
+                else
+                    % Resolve SDK relative to the toolbox root (apps/..), not pwd
+                    rootDir = fileparts(fileparts(mfilename('fullpath')));
+                    addpath(genpath(fullfile(rootDir, 'Utilities', 'TDTMatlabSDK')));
+                    data = TDTbin2mat(folder);
+                end
             catch ME
                 UIKit.done(dlg);
                 UIKit.setStatus(app.StatusLabel, sprintf('Could not load %s: %s', tankName, ME.message), 'error');
@@ -252,8 +275,48 @@ classdef ExtractEphysApp < handle
 
             app.showPlaceholder('Signals', 'Tank loaded. Choose channels, then Plot RAW or Process LFP / MUA.');
             app.updateControls();
+            ok = true;
             UIKit.setStatus(app.StatusLabel, sprintf('Loaded %s (%d RAW channels, %.2f Hz, %s).', ...
                 tankName, nRaw, rawFs, fmtDuration(durS)), 'success');
+        end
+
+        %% loadDemo - Load DemoData's synthetic tank and select every channel
+        % 30 s; 8 RAW channels (100 um apart) at 24414 Hz; Whis ch 1 carries
+        % 20 ms pulses every 2 s from 1 s. Selects stim channel 1 and RAW
+        % channels 1-8 so Plot RAW / Process LFP / Process MUA just work.
+        function loadDemo(app)
+            dlg = UIKit.busy(app.UIFig, 'Preparing demo data (first time only takes a few seconds)…');
+            try
+                folder = DemoData.file('tdtTank');
+                UIKit.done(dlg);
+                if ~app.openTank(folder), return; end
+                nRaw = size(app.Data.streams.xRAW.data, 1);
+                app.setChannels(1, 1:nRaw);
+                nStim = numel(app.Data.truth.onsets);
+                UIKit.setStatus(app.StatusLabel, sprintf(['Demo loaded: %.0f s tank, %d RAW channels 100 µm apart, ' ...
+                    '%d stimuli (20 ms, every 2 s) on Whis ch 1. All channels selected. ' ...
+                    'Next: Process LFP (evoked sink at ch 4) or Process MUA (units near ch 4-5).'], ...
+                    app.Data.truth.duration, nRaw, nStim), 'success');
+            catch ME
+                UIKit.done(dlg);
+                UIKit.setStatus(app.StatusLabel, sprintf('Could not load the demo data: %s', ME.message), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not load the demo data:\n%s', ME.message), 'Demo data');
+            end
+        end
+
+        %% setChannels - Select stimulus (Whis) and RAW channels programmatically
+        % stimCh: Whis channel number ([] = keep); rawChs: xRAW channel
+        % numbers (channels not in the tank are ignored).
+        function setChannels(app, stimCh, rawChs)
+            if isempty(app.Data), return; end
+            if ~isempty(stimCh) && ismember(stimCh, app.WhisChannelMenu.ItemsData)
+                app.WhisChannelMenu.Value = stimCh;
+            end
+            if nargin >= 3
+                rawChs = rawChs(ismember(rawChs, app.RAWList.ItemsData));
+                app.RAWList.Value = rawChs(:)';
+            end
+            app.onChannelsChanged();
         end
 
         %% onChannelsChanged - Selection changed: refresh enable state and status
@@ -321,17 +384,26 @@ classdef ExtractEphysApp < handle
 
 %% ------------------------------------------------------------------------------------------
         %% processLFPData - Anti-alias + downsample, lowpass, notch; plot and keep for saving
-        function processLFPData(app)
+        % Without params the LFPProcessingParamsApp dialog asks for them.
+        % params (skips the dialog): lowCutoff (Hz, NaN = no lowpass),
+        % notch60 (logical), downsample (logical), downsampleRate (Hz);
+        % missing fields default to 300 Hz, false, true, 1000 Hz.
+        function processLFPData(app, params)
             if ~app.readSelection(), return; end
             T = UITheme;
 
-            % Launch parameter window
-            paramsApp = LFPProcessingParamsApp();
-            uiwait(paramsApp.UIFig);  % Wait for user input
-            params = paramsApp.Params;
-            if isempty(params)
-                UIKit.setStatus(app.StatusLabel, 'LFP processing cancelled.', 'info');
-                return;  % User cancelled
+            if nargin < 2 || isempty(params)
+                % Launch parameter window
+                paramsApp = LFPProcessingParamsApp();
+                uiwait(paramsApp.UIFig);  % Wait for user input
+                params = paramsApp.Params;
+                if isempty(params)
+                    UIKit.setStatus(app.StatusLabel, 'LFP processing cancelled.', 'info');
+                    return;  % User cancelled
+                end
+            else
+                params = withDefaults(params, struct('lowCutoff', 300, 'notch60', false, ...
+                    'downsample', true, 'downsampleRate', 1000));
             end
 
             raw_fs = app.Data.streams.xRAW.fs;
@@ -442,15 +514,6 @@ classdef ExtractEphysApp < handle
                 return;  % User cancelled
             end
 
-            lfp_data = cell2mat(processedLFP(selection)');
-            lfp_channels = lfpChannels(selection);
-            lfp_fs = fsLFP;
-            t_lfp = (0:size(lfp_data,2)-1)/lfp_fs;
-
-            stim_data = app.Data.streams.Whis.data(app.LastLFPStimChannel, :);
-            stim_fs = app.Data.streams.Whis.fs;
-            t_stim = (0:length(stim_data)-1)/stim_fs;
-
             % Save dialog
             [file, path] = uiputfile('*.mat', 'Save LFP Data As', app.defaultSavePath('LFP'));
             figure(app.UIFig);
@@ -458,34 +521,45 @@ classdef ExtractEphysApp < handle
                 UIKit.setStatus(app.StatusLabel, 'Save LFP cancelled.', 'info');
                 return;
             end
+            app.writeLFP(processedLFP, fsLFP, selection, fullfile(path, file));
+        end
 
-            UIKit.setStatus(app.StatusLabel, sprintf('Saving %s…', file), 'busy');
-            try
-                save(fullfile(path, file), ...
-                    'lfp_data', 'lfp_channels', 'lfp_fs', 't_lfp', ...
-                    'stim_data', 'stim_fs', 't_stim');
-            catch ME
-                app.fail('Save LFP failed', ME);
+        %% saveLFPTo - Save the last processed LFP to filePath without dialogs
+        % selection: indices into the processed channels (default: all).
+        % Returns true on success.
+        function ok = saveLFPTo(app, filePath, selection)
+            ok = false;
+            if isempty(app.LastProcessedLFP)
+                UIKit.alert(app.UIFig, 'No processed LFP data available. Run Process LFP first.', 'Save LFP');
                 return;
             end
-            app.LFPSaved = true;
-            app.updateControls();
-            UIKit.setStatus(app.StatusLabel, sprintf('Saved LFP (%d channel(s), %.2f Hz) to %s.', ...
-                numel(lfp_channels), lfp_fs, file), 'success');
+            if nargin < 3 || isempty(selection), selection = 1:numel(app.LastProcessedLFP); end
+            ok = app.writeLFP(app.LastProcessedLFP, app.LastLFPfs, selection, filePath);
         end
 
 %% ------------------------------------------------------------------------------------------
         %% processMUAData - Bandpass selected channels; smoothing for display envelope only
-        function processMUAData(app)
+        % Without params the MUAProcessingParamsApp dialog asks for them.
+        % params (skips the dialog): filterType ('Butterworth' |
+        % 'Chebyshev I'), order, lowCutoff, highCutoff (Hz), smoothMs,
+        % autoSmooth, overlayRaw; missing fields default to Butterworth,
+        % 4, 300, 3000, 2, true, false.
+        function processMUAData(app, params)
             if ~app.readSelection(), return; end
             T = UITheme;
 
-            paramApp = MUAProcessingParamsApp();
-            uiwait(paramApp.UIFig);
-            params = paramApp.Params;
-            if isempty(params)
-                UIKit.setStatus(app.StatusLabel, 'MUA processing cancelled.', 'info');
-                return;
+            if nargin < 2 || isempty(params)
+                paramApp = MUAProcessingParamsApp();
+                uiwait(paramApp.UIFig);
+                params = paramApp.Params;
+                if isempty(params)
+                    UIKit.setStatus(app.StatusLabel, 'MUA processing cancelled.', 'info');
+                    return;
+                end
+            else
+                params = withDefaults(params, struct('filterType', 'Butterworth', 'order', 4, ...
+                    'lowCutoff', 300, 'highCutoff', 3000, 'smoothMs', 2, 'autoSmooth', true, ...
+                    'overlayRaw', false));
             end
 
             fs = app.Data.streams.xRAW.fs;
@@ -590,39 +664,91 @@ classdef ExtractEphysApp < handle
                 return;
             end
 
-            mua_data = cell2mat(processedMUA(selection)');
-            mua_channels = muaChannels(selection);
-            mua_fs = fsMUA;
-            t_mua = (0:size(mua_data,2)-1)/mua_fs;
-
-            stim_data = app.Data.streams.Whis.data(app.LastMUAStimChannel, :);
-            stim_fs = app.Data.streams.Whis.fs;
-            t_stim = (0:length(stim_data)-1)/stim_fs;
-
             [file, path] = uiputfile('*.mat', 'Save MUA Data As', app.defaultSavePath('MUA'));
             figure(app.UIFig);
             if isequal(file, 0)
                 UIKit.setStatus(app.StatusLabel, 'Save MUA cancelled.', 'info');
                 return;
             end
+            app.writeMUA(processedMUA, fsMUA, filterParams, selection, fullfile(path, file));
+        end
 
+        %% saveMUATo - Save the last processed MUA to filePath without dialogs
+        % selection: indices into the processed channels (default: all).
+        % Returns true on success.
+        function ok = saveMUATo(app, filePath, selection)
+            ok = false;
+            if isempty(app.LastProcessedMUA)
+                UIKit.alert(app.UIFig, 'No processed MUA data available. Run Process MUA first.', 'Save MUA');
+                return;
+            end
+            if nargin < 3 || isempty(selection), selection = 1:numel(app.LastProcessedMUA); end
+            ok = app.writeMUA(app.LastProcessedMUA, app.LastMUAfs, app.LastMUAFilterParams, ...
+                selection, filePath);
+        end
+    end
+
+    methods (Access = private)
+        %% writeLFP - Write the selected LFP channels (+ stimulus) to filePath
+        function ok = writeLFP(app, processedLFP, fsLFP, selection, filePath)
+            ok = false;
+            lfp_data = cell2mat(processedLFP(selection)');
+            lfp_channels = app.LastLFPChannels(selection);
+            lfp_fs = fsLFP;
+            t_lfp = (0:size(lfp_data,2)-1)/lfp_fs; %#ok<NASGU>
+
+            stim_data = app.Data.streams.Whis.data(app.LastLFPStimChannel, :);
+            stim_fs = app.Data.streams.Whis.fs;
+            t_stim = (0:length(stim_data)-1)/stim_fs; %#ok<NASGU>
+
+            [~, name, ext] = fileparts(filePath);
+            file = [name ext];
             UIKit.setStatus(app.StatusLabel, sprintf('Saving %s…', file), 'busy');
             try
-                save(fullfile(path, file), ...
+                save(filePath, ...
+                    'lfp_data', 'lfp_channels', 'lfp_fs', 't_lfp', ...
+                    'stim_data', 'stim_fs', 't_stim');
+            catch ME
+                app.fail('Save LFP failed', ME);
+                return;
+            end
+            ok = true;
+            app.LFPSaved = true;
+            app.updateControls();
+            UIKit.setStatus(app.StatusLabel, sprintf('Saved LFP (%d channel(s), %.2f Hz) to %s.', ...
+                numel(lfp_channels), lfp_fs, file), 'success');
+        end
+
+        %% writeMUA - Write the selected MUA channels (+ stimulus, filterParams) to filePath
+        function ok = writeMUA(app, processedMUA, fsMUA, filterParams, selection, filePath) %#ok<INUSD> saved below
+            ok = false;
+            mua_data = cell2mat(processedMUA(selection)');
+            mua_channels = app.LastMUAChannels(selection);
+            mua_fs = fsMUA;
+            t_mua = (0:size(mua_data,2)-1)/mua_fs; %#ok<NASGU>
+
+            stim_data = app.Data.streams.Whis.data(app.LastMUAStimChannel, :);
+            stim_fs = app.Data.streams.Whis.fs;
+            t_stim = (0:length(stim_data)-1)/stim_fs; %#ok<NASGU>
+
+            [~, name, ext] = fileparts(filePath);
+            file = [name ext];
+            UIKit.setStatus(app.StatusLabel, sprintf('Saving %s…', file), 'busy');
+            try
+                save(filePath, ...
                     'mua_data', 'mua_channels', 'mua_fs', 't_mua', ...
                     'stim_data', 'stim_fs', 't_stim', 'filterParams');
             catch ME
                 app.fail('Save MUA failed', ME);
                 return;
             end
+            ok = true;
             app.MUASaved = true;
             app.updateControls();
             UIKit.setStatus(app.StatusLabel, sprintf('Saved MUA data and filter settings (%d channel(s)) to %s.', ...
                 numel(mua_channels), file), 'success');
         end
-    end
 
-    methods (Access = private)
         %% drawChannels - Stimulus tile on top, then the channels
         % layers: struct array (data = 1xN cell of row vectors, color, width,
         % name, center). <= 4 channels: one tile each; more: stacked offset
@@ -745,6 +871,14 @@ function g = cardGrid(parent, rowHeights, nCols)
     g = uigridlayout(c, [numel(rowHeights) nCols], 'RowHeight', rowHeights, ...
         'ColumnWidth', repmat({'1x'}, 1, nCols), 'Padding', [10 8 10 10], ...
         'RowSpacing', 6, 'ColumnSpacing', 8, 'BackgroundColor', T.cardBg);
+end
+
+%% Local helper: fill fields missing from params with defaults
+function params = withDefaults(params, defaults)
+    f = fieldnames(defaults);
+    for k = 1:numel(f)
+        if ~isfield(params, f{k}), params.(f{k}) = defaults.(f{k}); end
+    end
 end
 
 %% Local helper: set Enable on a cell array of components

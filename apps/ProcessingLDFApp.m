@@ -14,6 +14,10 @@
 % receiveProcessingParams, applyFilter, segmentByOnsetsConfig,
 % segmentLDFByOnsets, plotAverageSegment, saveData. updateControls()
 % enables actions from the data state and marks the next step primary.
+% "Try demo data" (loadDemo) opens DemoData's cropped LDF and pre-fills
+% threshold 2.5, pre 5 s, post 20 s, min interval 10 s. Programmatic use (no
+% dialogs): openFile(path), applyProcessingParams(params),
+% setSegmentParams(thr, pre, post, isi), segmentByOnsetsConfig(), saveData(path).
 % =========================================================================
 
 classdef ProcessingLDFApp < handle
@@ -23,6 +27,7 @@ classdef ProcessingLDFApp < handle
         StatusLabel      % Status bar label (UIKit.setStatus)
         HelpBtn          % Opens HelpApp('LDF Process')
         LoadBtn          % Step 1: load stim/LDF .mat
+        DemoBtn          % Step 1: load synthetic cropped LDF (DemoData)
         FsLabel          % Step 1: file name, sampling rate, duration
         FilterBtn        % Step 2: open LDFProcessingParamsApp
         ResetBtn         % Step 2: discard processing, back to loaded data
@@ -82,13 +87,17 @@ classdef ProcessingLDFApp < handle
             heights = cell(1, 5);
 
             % --- 1 Load ---
-            [p, g, heights{1}] = stepCard(left, 1, 'Load cropped LDF', {T.buttonHeight, 48});
+            [p, g, heights{1}] = stepCard(left, 1, 'Load cropped LDF', {T.buttonHeight, T.buttonHeight, 48});
             p.Layout.Row = 1;
             app.LoadBtn = UIKit.button(g, 'Load file...', @(~,~)app.loadData(), 'primary', ...
                 'Load a .mat file with stim, LDF, t and Fs (as saved by Extract LDF Data)');
             app.LoadBtn.Layout.Row = 2; app.LoadBtn.Layout.Column = [1 2];
+            app.DemoBtn = UIKit.button(g, 'Try demo data', @(~,~)app.loadDemo(), 'secondary', ...
+                ['Load a synthetic 260 s cropped LDF with known answers (9 stimuli of 5 s, 5 V TTL; ' ...
+                'each followed by a +30 PU response peaking 4 s after onset) and pre-fill the segmentation']);
+            app.DemoBtn.Layout.Row = 3; app.DemoBtn.Layout.Column = [1 2];
             app.FsLabel = infoLabel(g, 'No file loaded', 'File name, sampling rate and duration');
-            app.FsLabel.Layout.Row = 3; app.FsLabel.Layout.Column = [1 2];
+            app.FsLabel.Layout.Row = 4; app.FsLabel.Layout.Column = [1 2];
 
             % --- 2 Filter / downsample ---
             [p, g, heights{2}] = stepCard(left, 2, 'Filter / downsample (optional)', {T.buttonHeight, 48});
@@ -154,16 +163,17 @@ classdef ProcessingLDFApp < handle
             app.AxSeg = uiaxes(gt);
             app.AxAvg = uiaxes(gt);
 
-            UIKit.emptyAxes(app.AxStim, 'Load a file to begin');
-            UIKit.emptyAxes(app.AxLDF, 'LDF signal appears here');
-            UIKit.emptyAxes(app.AxFreq, 'Apply a filter (step 2) to see its frequency response');
-            UIKit.emptyAxes(app.AxSeg, 'Segment trials (step 3) to see them here');
-            UIKit.emptyAxes(app.AxAvg, 'Average ± SD appears after segmentation');
+            % styleAxes first: it removes emptyAxes placeholders
             UIKit.styleAxes(app.AxStim, 'Stimulus');
             UIKit.styleAxes(app.AxLDF, 'LDF');
             UIKit.styleAxes(app.AxFreq, 'Filter frequency response');
             UIKit.styleAxes(app.AxSeg, 'Trials');
             UIKit.styleAxes(app.AxAvg, 'Average LDF');
+            UIKit.emptyAxes(app.AxStim, 'Load a cropped LDF file (or Try demo data) to begin');
+            UIKit.emptyAxes(app.AxLDF, 'LDF signal appears here');
+            UIKit.emptyAxes(app.AxFreq, 'Apply a filter (step 2) to see its frequency response');
+            UIKit.emptyAxes(app.AxSeg, 'Segment trials (step 3) to see them here');
+            UIKit.emptyAxes(app.AxAvg, 'Average ± SD appears after segmentation');
 
             UIKit.setStatus(app.StatusLabel, 'Step 1: load a cropped LDF file (from Extract LDF Data).', 'info');
             app.updateControls();
@@ -209,12 +219,7 @@ classdef ProcessingLDFApp < handle
             end
         end
 
-        %% loadData - Pick a .mat with stim, LDF, t, Fs and plot it
-        % -------------------------------------------------------------
-        % Validates required variables (as saved by Exporter.saveCropped).
-        % Keeps untouched Raw* copies so re-running processing never
-        % compounds, and clears results from a previous file.
-        % -------------------------------------------------------------
+        %% loadData - Pick a .mat with stim, LDF, t, Fs, then openFile(path)
         function loadData(app)
             UIKit.setStatus(app.StatusLabel, 'Choose a cropped LDF file...', 'busy');
             startDir = ProjectManager.getExportDir();
@@ -226,9 +231,23 @@ classdef ProcessingLDFApp < handle
                 UIKit.setStatus(app.StatusLabel, 'Load cancelled.', 'info');
                 return;
             end
+            app.openFile(fullfile(path, file));
+        end
+
+        %% openFile - Load a cropped LDF .mat by path (no dialog) and plot it
+        % -------------------------------------------------------------
+        % Validates required variables (as saved by Exporter.saveCropped).
+        % Keeps untouched Raw* copies so re-running processing never
+        % compounds, and clears results from a previous file. Returns
+        % true on success; on failure the previous data is kept.
+        % -------------------------------------------------------------
+        function ok = openFile(app, filePath)
+            ok = false;
+            [path, name, ext] = fileparts(filePath);
+            file = [name ext];
             dlg = UIKit.busy(app.UIFig, sprintf('Loading %s...', file));
             try
-                data = load(fullfile(path, file));
+                data = load(filePath);
             catch ME
                 UIKit.done(dlg);
                 UIKit.setStatus(app.StatusLabel, sprintf('Could not load %s.', file), 'error');
@@ -257,7 +276,7 @@ classdef ProcessingLDFApp < handle
             app.RawStim = app.Stim;
             app.tRaw    = data.t;
             app.RawFs   = data.Fs;
-            app.FilePath = fullfile(path, file);
+            app.FilePath = filePath;
             Exporter.setLastUsedPath(path);
             % Results from a previous file no longer apply
             app.ProcessingParams = [];
@@ -266,14 +285,55 @@ classdef ProcessingLDFApp < handle
             app.updateSamplingRateLabel();
 
             app.plotSignals(false);
-            UIKit.emptyAxes(app.AxFreq, 'Apply a filter (step 2) to see its frequency response');
             UIKit.styleAxes(app.AxFreq, 'Filter frequency response');
+            UIKit.emptyAxes(app.AxFreq, 'Apply a filter (step 2) to see its frequency response');
             app.clearTrialPlots();
             app.Tabs.SelectedTab = app.SignalsTab;
             app.updateControls();
+            ok = true;
             UIKit.setStatus(app.StatusLabel, sprintf(['Loaded %s (%g Hz, %s). Next: optionally filter (step 2), ' ...
                 'then check the threshold line and segment trials (step 3).'], ...
                 file, app.Fs, formatDuration(numel(app.LDF) / app.Fs)), 'success');
+        end
+
+        %% loadDemo - Load the synthetic cropped LDF (DemoData) and pre-fill step 3
+        % -------------------------------------------------------------
+        % 260 s at 1000 Hz, 9 stimuli (5 s, 5 V TTL) at 10, 40, ..., 250 s.
+        % Pre-fills threshold 2.5, pre 5 s, post 20 s, min interval 10 s so
+        % "Segment trials" is the next click. The last used folder is not
+        % changed by the demo.
+        % -------------------------------------------------------------
+        function loadDemo(app)
+            prevLast = Exporter.getLastUsedPath();
+            dlg = UIKit.busy(app.UIFig, 'Preparing demo data (first time only takes a few seconds)…');
+            try
+                p = DemoData.file('ldfCropped');
+                UIKit.done(dlg);
+                ok = app.openFile(p);
+                restoreLastPath(prevLast);
+                if ~ok, return; end
+                app.setSegmentParams(2.5, 5, 20, 10);
+                nStim = sum(diff([false; app.RawStim(:) > 2.5]) == 1);
+                UIKit.setStatus(app.StatusLabel, sprintf(['Demo loaded: %s cropped LDF with %d stimuli (5 s each). ' ...
+                    'Threshold 2.5, window -5 to +20 s pre-filled. Next: optionally filter (step 2), ' ...
+                    'then press "Segment trials".'], formatDuration(numel(app.LDF) / app.Fs), nStim), 'success');
+            catch ME
+                UIKit.done(dlg);
+                restoreLastPath(prevLast);
+                UIKit.setStatus(app.StatusLabel, sprintf('Could not load the demo data: %s', ME.message), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not load the demo data:\n%s', ME.message), 'Demo data', 'error');
+            end
+        end
+
+        %% setSegmentParams - Fill the step-3 fields programmatically
+        % Any argument may be [] to keep the current value. Redraws the
+        % threshold line; call segmentByOnsetsConfig() to segment.
+        function setSegmentParams(app, threshold, preSec, postSec, minISI)
+            if nargin >= 2 && ~isempty(threshold), app.ThresholdInput.Value = threshold; end
+            if nargin >= 3 && ~isempty(preSec),    app.PreInput.Value = preSec; end
+            if nargin >= 4 && ~isempty(postSec),   app.PostInput.Value = postSec; end
+            if nargin >= 5 && ~isempty(minISI),    app.ISIInput.Value = minISI; end
+            app.drawThreshold();
         end
 
         %% openProcessingSettings - Open LDFProcessingParamsApp for the raw Fs
@@ -292,9 +352,20 @@ classdef ProcessingLDFApp < handle
         end
 
         %% receiveProcessingParams - Callback from LDFProcessingParamsApp
-        % Applies params; if they fail validation the previous processing
-        % (if any) stays in place.
         function receiveProcessingParams(app, params)
+            app.applyProcessingParams(params);
+        end
+
+        %% applyProcessingParams - Apply processing params without the dialog
+        % -------------------------------------------------------------
+        % params (as LDFProcessingParamsApp returns): downsample (integer
+        % factor, 1 = none), filterType (1 none, 2 low-pass, 3 high-pass,
+        % 4 band-pass, 5 notch), designType (1 Butterworth, 2 Chebyshev I,
+        % 3 FIR), filterOrder, cutoffLow, cutoffHigh (Hz; NaN if unused).
+        % If they fail validation the previous processing (if any) stays in
+        % place and ok = false.
+        % -------------------------------------------------------------
+        function ok = applyProcessingParams(app, params)
             prev = app.ProcessingParams;
             app.ProcessingParams = params;
             ok = app.applyFilter();
@@ -435,8 +506,8 @@ classdef ProcessingLDFApp < handle
             app.SegmentedTime = [];
             app.updateSamplingRateLabel();
             app.plotSignals(false);
-            UIKit.emptyAxes(app.AxFreq, 'Apply a filter (step 2) to see its frequency response');
             UIKit.styleAxes(app.AxFreq, 'Filter frequency response');
+            UIKit.emptyAxes(app.AxFreq, 'Apply a filter (step 2) to see its frequency response');
             app.clearTrialPlots();
             app.updateControls();
             UIKit.setStatus(app.StatusLabel, 'Processing removed; using the loaded signal.', 'info');
@@ -643,8 +714,8 @@ classdef ProcessingLDFApp < handle
             app.AxFreq.XTickMode = 'auto'; app.AxFreq.YTickMode = 'auto';
             app.AxFreq.XLimMode = 'auto'; app.AxFreq.YLimMode = 'auto';
             if isempty(b)
-                UIKit.emptyAxes(app.AxFreq, 'No filter applied (downsampling only)');
                 UIKit.styleAxes(app.AxFreq, 'Filter frequency response');
+                UIKit.emptyAxes(app.AxFreq, 'No filter applied (downsampling only)');
                 return;
             end
             [h, f] = freqz(b, a, 1024, Fs);
@@ -701,38 +772,44 @@ classdef ProcessingLDFApp < handle
         %% clearTrialPlots - Placeholders on the Trials tab
         function clearTrialPlots(app)
             legend(app.AxAvg, 'off');
-            UIKit.emptyAxes(app.AxSeg, 'Segment trials (step 3) to see them here');
-            UIKit.emptyAxes(app.AxAvg, 'Average ± SD appears after segmentation');
             UIKit.styleAxes(app.AxSeg, 'Trials');
             UIKit.styleAxes(app.AxAvg, 'Average LDF');
+            UIKit.emptyAxes(app.AxSeg, 'Segment trials (step 3) to see them here');
+            UIKit.emptyAxes(app.AxAvg, 'Average ± SD appears after segmentation');
         end
 
         %% saveData - Save (or append to) segmented data .mat
         % -------------------------------------------------------------
         % Saves segmentedLDF, segmentedTime, Fs. If the chosen file already
         % holds segmentedLDF/segmentedTime, trials are appended when the
-        % time axes match (otherwise refused).
+        % time axes match (otherwise refused). With fullpath given, no
+        % dialog is shown (programmatic use).
         % -------------------------------------------------------------
-        function saveData(app)
+        function saveData(app, fullpath)
             if isempty(app.SegmentedLDF)
                 UIKit.alert(app.UIFig, 'No segmented data to save. Segment trials first (step 3).', ...
                     'Nothing to save', 'warning');
                 return;
             end
-            UIKit.setStatus(app.StatusLabel, 'Choose where to save the trials...', 'busy');
-            startDir = ProjectManager.getExportDir();
-            if isempty(startDir), startDir = Exporter.getLastUsedPath(); end
-            [~, base] = fileparts(app.FilePath);
-            defName = '*.mat';
-            if ~isempty(base), defName = [base '_segments.mat']; end
-            [file, path] = uiputfile(fullfile(startDir, defName), 'Save or Append Segmented Data As');
-            figure(app.UIFig);
-            if isequal(file, 0)
-                UIKit.setStatus(app.StatusLabel, 'Save cancelled.', 'info');
-                return;
+            if nargin < 2 || isempty(fullpath)
+                UIKit.setStatus(app.StatusLabel, 'Choose where to save the trials...', 'busy');
+                startDir = ProjectManager.getExportDir();
+                if isempty(startDir), startDir = Exporter.getLastUsedPath(); end
+                [~, base] = fileparts(app.FilePath);
+                defName = '*.mat';
+                if ~isempty(base), defName = [base '_segments.mat']; end
+                [file, path] = uiputfile(fullfile(startDir, defName), 'Save or Append Segmented Data As');
+                figure(app.UIFig);
+                if isequal(file, 0)
+                    UIKit.setStatus(app.StatusLabel, 'Save cancelled.', 'info');
+                    return;
+                end
+                fullpath = fullfile(path, file);
+            else
+                [path, name, ext] = fileparts(fullpath);
+                file = [name ext];
             end
 
-            fullpath = fullfile(path, file);
             segmentedLDF = app.SegmentedLDF;
             segmentedTime = app.SegmentedTime;
             Fs = app.Fs;
@@ -793,6 +870,15 @@ function s = describeParams(p, Fs)
     else
         s = strjoin(parts, '; ');
         s(1) = upper(s(1));
+    end
+end
+
+%% restoreLastPath - Put back the last used folder after loading demo data
+function restoreLastPath(prev)
+    if isempty(prev)
+        if ispref('NeuroAnalyzer', 'LastUsedPath'), rmpref('NeuroAnalyzer', 'LastUsedPath'); end
+    else
+        Exporter.setLastUsedPath(prev);
     end
 end
 

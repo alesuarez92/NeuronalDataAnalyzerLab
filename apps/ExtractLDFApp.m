@@ -12,6 +12,9 @@
 % saves them via Exporter.saveCropped(). updateButtonStates() enables
 % each action from the data state and makes the next step the primary
 % button. Header "? Help" opens HelpApp on the "LDF Extract" tab.
+% "Try demo data" (loadDemo) opens DemoData's synthetic export and
+% pre-fills the range 20-280 s. Programmatic use (no dialogs): openFile(path),
+% setRange(start, end), processData(), saveCroppedTo(path).
 % =========================================================================
 
 classdef ExtractLDFApp < handle
@@ -26,6 +29,7 @@ classdef ExtractLDFApp < handle
         HelpBtn         % Opens HelpApp('LDF Extract')
         StatusLabel     % Status bar label (UIKit.setStatus)
         LoadBtn         % Step 1: load LDF export .mat
+        DemoBtn         % Step 1: load synthetic demo export (DemoData)
         FileInfoLabel   % Step 1: file name, Fs, duration, samples
         StartInput      % Step 2: numeric start time (s)
         EndInput        % Step 2: numeric end time (s)
@@ -83,14 +87,18 @@ classdef ExtractLDFApp < handle
             heights = cell(1, 5);
 
             % --- 1 Load file ---
-            [p, g, heights{1}] = stepCard(left, 1, 'Load LDF export', {T.buttonHeight, 56});
+            [p, g, heights{1}] = stepCard(left, 1, 'Load LDF export', {T.buttonHeight, T.buttonHeight, 56});
             p.Layout.Row = 1;
             app.LoadBtn = UIKit.button(g, 'Load file...', @(~,~)app.loadFile(), 'primary', ...
                 'Load a .mat file in LDF export format (data, datastart, dataend); stimulus = channel 6, LDF = channel 8');
             app.LoadBtn.Layout.Row = 2; app.LoadBtn.Layout.Column = [1 2];
+            app.DemoBtn = UIKit.button(g, 'Try demo data', @(~,~)app.loadDemo(), 'secondary', ...
+                ['Load a synthetic 300 s LabChart export with known answers (9 stimuli of 5 s every 30 s ' ...
+                'on channel 6, LDF with a +30 PU response peaking 4 s after each onset on channel 8)']);
+            app.DemoBtn.Layout.Row = 3; app.DemoBtn.Layout.Column = [1 2];
             app.FileInfoLabel = infoLabel(g, 'No file loaded', ...
                 'File name, sampling rate, duration and number of samples');
-            app.FileInfoLabel.Layout.Row = 3; app.FileInfoLabel.Layout.Column = [1 2];
+            app.FileInfoLabel.Layout.Row = 4; app.FileInfoLabel.Layout.Column = [1 2];
 
             % --- 2 Time range ---
             [p, g, heights{2}] = stepCard(left, 2, 'Choose time range', ...
@@ -146,10 +154,11 @@ classdef ExtractLDFApp < handle
                 'Padding', [8 8 14 8], 'RowSpacing', 8, 'BackgroundColor', T.cardBg);
             app.AxStim = uiaxes(axGrid);
             app.AxLDF  = uiaxes(axGrid);
-            UIKit.emptyAxes(app.AxStim, 'Load a file to begin');
-            UIKit.emptyAxes(app.AxLDF, 'LDF signal appears here');
+            % styleAxes first: it removes emptyAxes placeholders
             UIKit.styleAxes(app.AxStim, 'Stimulus (channel 6)');
             UIKit.styleAxes(app.AxLDF, 'LDF (channel 8)');
+            UIKit.emptyAxes(app.AxStim, 'Load a file (or Try demo data) to begin');
+            UIKit.emptyAxes(app.AxLDF, 'LDF signal appears here');
 
             UIKit.setStatus(app.StatusLabel, 'Step 1: load an LDF export file.', 'info');
             app.updateButtonStates();
@@ -175,6 +184,7 @@ classdef ExtractLDFApp < handle
             app.ViewDropDown.Enable   = onoff(hasCropped && ~picking);
             app.SaveCroppedBtn.Enable = onoff(cropCurrent && ~picking);
             app.LoadBtn.Enable        = onoff(~picking);
+            app.DemoBtn.Enable        = onoff(~picking);
 
             if picking
                 app.SelectRangeBtn.Text = 'Cancel picking';
@@ -202,25 +212,18 @@ classdef ExtractLDFApp < handle
             end
         end
 
-        %% loadFile - Load .mat via DataLoader and update display
+        %% loadFile - Pick an LDF export .mat, then openFile(path)
         % -------------------------------------------------------------
-        % DataLoader.load(app.AppData) opens the file dialog; on cancel or
-        % error it returns AppData unchanged, so an unchanged FilePath +
-        % RawStim means nothing new was loaded (previous data and crop are
-        % kept). For a new file: drop the previous crop so Save cannot
-        % write stale data, reset Start/End to the full recording, store
-        % the folder as last used path, show file info and plot.
+        % On cancel nothing changes (previous data and crop are kept).
         % -------------------------------------------------------------
         function loadFile(app)
             app.cancelPick('');
             UIKit.setStatus(app.StatusLabel, 'Choose an LDF export file...', 'busy');
-            prevPath = app.AppData.FilePath;
-            prevStim = app.AppData.RawStim;
-            app.AppData = DataLoader.load(app.AppData);
+            initPath = ProjectManager.getImportDir();
+            if isempty(initPath), initPath = pwd; end
+            [file, path] = uigetfile(fullfile(initPath, '*.mat'));
             figure(app.UIFig);  % Bring app back to front
-            if isempty(app.AppData.RawStim) || ...
-                    (isequal(app.AppData.FilePath, prevPath) && isequal(app.AppData.RawStim, prevStim))
-                % Cancelled or failed: previous data (and crop) unchanged
+            if isequal(file, 0)
                 if isempty(app.AppData.RawStim)
                     UIKit.setStatus(app.StatusLabel, 'No file loaded. Click "Load file..." to choose an LDF export.', 'info');
                 else
@@ -228,6 +231,40 @@ classdef ExtractLDFApp < handle
                 end
                 return;
             end
+            app.openFile(fullfile(path, file));
+        end
+
+        %% openFile - Load an LDF export .mat by path (no dialog) and display it
+        % -------------------------------------------------------------
+        % load(path) -> DataLoader.load(AppData, 'FromStruct', d). If the
+        % file cannot be read or is not a valid export (DataLoader explains
+        % why), previous data and crop are kept and ok = false. For a new
+        % file: drop the previous crop so Save cannot write stale data,
+        % reset Start/End to the full recording, store the folder as last
+        % used path, show file info and plot.
+        % -------------------------------------------------------------
+        function ok = openFile(app, filePath)
+            ok = false;
+            app.cancelPick('');
+            [~, name, ext] = fileparts(filePath);
+            try
+                d = load(filePath);
+            catch ME
+                UIKit.setStatus(app.StatusLabel, sprintf('Could not load %s%s; previous data kept.', name, ext), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not load %s%s:\n%s', name, ext, ME.message), 'Load error', 'error');
+                return;
+            end
+            fresh = app.AppData;
+            fresh.RawStim = []; fresh.RawLDF = [];
+            loaded = DataLoader.load(fresh, 'FromStruct', d);
+            if isempty(loaded.RawStim)
+                % Invalid export (DataLoader showed why): previous data (and crop) unchanged
+                UIKit.setStatus(app.StatusLabel, sprintf('%s%s is not a valid LDF export; previous data kept.', ...
+                    name, ext), 'error');
+                return;
+            end
+            loaded.FilePath = filePath;
+            app.AppData = loaded;
             % New file: drop the previous crop so Save cannot write stale data
             app.AppData.ProcessedStim = [];
             app.AppData.ProcessedLDF  = [];
@@ -247,12 +284,12 @@ classdef ExtractLDFApp < handle
             app.EndInput.Value = dur;
             app.ViewDropDown.Value = 'Full recording';
 
-            [~, name, ext] = fileparts(app.AppData.FilePath);
             app.FileInfoLabel.Text = sprintf('%s%s\n%g Hz  ·  %s  ·  %d samples\nStimulus = ch 6, LDF = ch 8', ...
                 name, ext, Fs, formatDuration(dur), N);
             app.FileInfoLabel.FontColor = UITheme.sectionTitleColor;
             app.plotSignals();
             app.updateButtonStates();
+            ok = true;
             if isfield(app.AppData.Metadata, 'SampleRateRaw')
                 UIKit.setStatus(app.StatusLabel, sprintf('Loaded %s%s (%g Hz, %s). Next: choose the time range and click "Crop to range".', ...
                     name, ext, Fs, formatDuration(dur)), 'success');
@@ -260,6 +297,45 @@ classdef ExtractLDFApp < handle
                 UIKit.setStatus(app.StatusLabel, sprintf('Loaded %s%s, but the file has no sampling rate: assumed %g Hz.', ...
                     name, ext, Fs), 'warning');
             end
+        end
+
+        %% loadDemo - Load the synthetic LDF export (DemoData) and pre-fill the range
+        % -------------------------------------------------------------
+        % 300 s at 1000 Hz; 5 s stimuli every 30 s from 30 s (ch 6, 5 V);
+        % LDF on ch 8. Pre-fills Start/End = 20-280 s (as DemoData's
+        % ldfCropped), so "Crop to range" is the next click. The last used
+        % folder is not changed by the demo.
+        % -------------------------------------------------------------
+        function loadDemo(app)
+            app.cancelPick('');
+            prevLast = Exporter.getLastUsedPath();
+            dlg = UIKit.busy(app.UIFig, 'Preparing demo data (first time only takes a few seconds)…');
+            try
+                p = DemoData.file('ldfExport');
+                UIKit.done(dlg);
+                ok = app.openFile(p);
+                restoreLastPath(prevLast);
+                if ~ok, return; end
+                app.setRange(20, 280);
+                nStim = countOnsets(app.AppData.RawStim, 2.5);
+                UIKit.setStatus(app.StatusLabel, sprintf(['Demo loaded: 300 s LDF export with %d stimuli ' ...
+                    '(5 s each, every 30 s). Range 20-280 s pre-filled. Next: press "Crop to range".'], nStim), 'success');
+            catch ME
+                UIKit.done(dlg);
+                restoreLastPath(prevLast);
+                UIKit.setStatus(app.StatusLabel, sprintf('Could not load the demo data: %s', ME.message), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not load the demo data:\n%s', ME.message), 'Demo data', 'error');
+            end
+        end
+
+        %% setRange - Set Start/End (s) programmatically (as if typed)
+        % Values are clamped to the recording; shades the range on the plots.
+        function setRange(app, startS, endS)
+            if isempty(app.AppData.RawStim), return; end
+            lim = app.StartInput.Limits;
+            app.StartInput.Value = min(max(startS, lim(1)), lim(2));
+            app.EndInput.Value = min(max(endS, lim(1)), lim(2));
+            app.rangeChanged();
         end
 
         %% processData - Validate range, crop, show cropped signals
@@ -417,7 +493,7 @@ classdef ExtractLDFApp < handle
                 ax.XTickMode = 'auto'; ax.YTickMode = 'auto';
             end
             if isempty(app.AppData.RawStim)
-                UIKit.emptyAxes(app.AxStim, 'Load a file to begin');
+                UIKit.emptyAxes(app.AxStim, 'Load a file (or Try demo data) to begin');
                 UIKit.emptyAxes(app.AxLDF, 'LDF signal appears here');
                 return;
             end
@@ -504,6 +580,32 @@ classdef ExtractLDFApp < handle
                 UIKit.setStatus(app.StatusLabel, 'Cropped data not saved.', 'info');
             end
         end
+
+        %% saveCroppedTo - Save the crop to filePath without a dialog
+        % Same variables as Exporter.saveCropped (stim, LDF, t, Fs); the
+        % file opens in LDF Processing. Returns true on success.
+        function ok = saveCroppedTo(app, filePath)
+            ok = false;
+            if isempty(app.AppData.ProcessedStim)
+                UIKit.alert(app.UIFig, 'Crop the data first (step 3).', 'Nothing to save', 'warning');
+                return;
+            end
+            stim = app.AppData.ProcessedStim; %#ok<NASGU>
+            LDF = app.AppData.ProcessedLDF; %#ok<NASGU>
+            t = app.AppData.TimeVector; %#ok<NASGU>
+            Fs = app.AppData.SamplingRate; %#ok<NASGU>
+            try
+                save(filePath, 'stim', 'LDF', 't', 'Fs');
+            catch ME
+                UIKit.setStatus(app.StatusLabel, sprintf('Save failed: %s', ME.message), 'error');
+                UIKit.alert(app.UIFig, sprintf('Save failed:\n%s', ME.message), 'Save error', 'error');
+                return;
+            end
+            ok = true;
+            [~, name, ext] = fileparts(filePath);
+            UIKit.setStatus(app.StatusLabel, sprintf('Saved cropped data to %s%s. Open it in LDF Processing.', ...
+                name, ext), 'success');
+        end
     end
 end
 
@@ -565,6 +667,21 @@ function s = formatDuration(sec)
         s = sprintf('%d min %.1f s', floor(sec / 60), mod(sec, 60));
     else
         s = sprintf('%.1f s', sec);
+    end
+end
+
+%% countOnsets - Number of rising edges of x above threshold
+function n = countOnsets(x, threshold)
+    above = x(:) > threshold;
+    n = sum(diff([false; above]) == 1);
+end
+
+%% restoreLastPath - Put back the last used folder after loading demo data
+function restoreLastPath(prev)
+    if isempty(prev)
+        if ispref('NeuroAnalyzer', 'LastUsedPath'), rmpref('NeuroAnalyzer', 'LastUsedPath'); end
+    else
+        Exporter.setLastUsedPath(prev);
     end
 end
 

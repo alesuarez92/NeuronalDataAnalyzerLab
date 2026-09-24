@@ -17,6 +17,10 @@
 %   5 Export        - ERP (mean, SD, t, y = channel average) and CSD to .mat.
 % Tabs: Stimulus (with threshold and detected onsets), ERP overlay, ERP per
 % channel (mean ± SD), CSD map. Help button opens HelpApp on "LFP Analysis".
+% "Try demo data" (loadDemo) opens DemoData's synthetic LFP, selects all
+% channels and pre-fills CSD spacing 100 um / order 1..8. Programmatic use (no
+% dialogs): openFile(path), setChannels(idx), runERP(params),
+% computeCSD(spacingUm, order), exportResults(path).
 % =========================================================================
 
 classdef LFPAnalysisApp < handle
@@ -25,6 +29,7 @@ classdef LFPAnalysisApp < handle
         UIFig
         StatusLabel      % Status bar (UIKit.setStatus)
         LoadBtn
+        DemoBtn          % Load DemoData's synthetic LFP file
         FileLabel        % File name, Fs, duration, channel count
 
         ChannelList      % Multi-select listbox (ItemsData = LFP row index)
@@ -91,16 +96,19 @@ classdef LFPAnalysisApp < handle
             bh = T.buttonHeight;
             ch = T.controlHeight;
 
-            left = uigridlayout(W.Body, [5 1], 'RowHeight', {124, '1x', 112, 142, 78}, ...
+            left = uigridlayout(W.Body, [5 1], 'RowHeight', {124 + bh + 6, '1x', 112, 142, 78}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 10, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
             left.Layout.Row = 1; left.Layout.Column = 1;
 
             % --- 1 Load LFP file ---
-            g = cardGrid(left, {22, bh, '1x'});
+            g = cardGrid(left, {22, bh, bh, '1x'});
             UIKit.step(g, 1, 'Load LFP file');
             app.LoadBtn = UIKit.button(g, 'Load LFP file…', @(~,~)app.loadData(), 'primary', ...
                 'Open a .mat saved by Extract Ephys (Save LFP)');
+            app.DemoBtn = UIKit.button(g, 'Try demo data', @(~,~)app.loadDemo(), 'secondary', ...
+                ['Load a synthetic 30 s LFP with known answers: 8 channels 100 µm apart, 15 stimuli ' ...
+                '(every 2 s), an evoked potential (N1 at 15 ms, P2 at 40 ms) with its current sink at channel 4']);
             app.FileLabel = infoLabel(g, 'No file loaded');
 
             % --- 2 Channels ---
@@ -157,7 +165,7 @@ classdef LFPAnalysisApp < handle
             app.AxContainer = uipanel(tabGrid(app.TabChannels), 'BorderType', 'none', ...
                 'BackgroundColor', T.cardBg);
             app.AxCSD     = uiaxes(tabGrid(app.TabCSD));
-            UIKit.emptyAxes(app.AxStim, 'Load an LFP file to begin');
+            UIKit.emptyAxes(app.AxStim, 'Load an LFP file (or Try demo data) to begin');
             UIKit.emptyAxes(app.AxOverlay, 'Run the ERP analysis (step 3) to see the overlay');
             app.channelPlaceholder('Run the ERP analysis (step 3) to see each channel');
             UIKit.emptyAxes(app.AxCSD, 'Run the ERP, then Compute CSD (step 4)');
@@ -200,7 +208,7 @@ classdef LFPAnalysisApp < handle
             end
         end
 
-        %% loadData - Pick an LFP .mat, validate its variables, fill channel list
+        %% loadData - Pick an LFP .mat, then openFile(path)
         function loadData(app)
             startDir = ProjectManager.getImportDir();
             if isempty(startDir) || ~isfolder(startDir), startDir = pwd; end
@@ -210,11 +218,19 @@ classdef LFPAnalysisApp < handle
                 UIKit.setStatus(app.StatusLabel, 'Load cancelled.', 'info');
                 return;
             end
+            app.openFile(fullfile(path, file));
+        end
 
+        %% openFile - Load an LFP .mat by path (no dialog), validate, fill channel list
+        % Returns true on success; on failure the previous data is kept.
+        function ok = openFile(app, filePath)
+            ok = false;
+            [~, name, ext] = fileparts(filePath);
+            file = [name ext];
             UIKit.setStatus(app.StatusLabel, sprintf('Loading %s…', file), 'busy');
             dlg = UIKit.busy(app.UIFig, sprintf('Loading %s…', file));
             try
-                s = load(fullfile(path, file));
+                s = load(filePath);
             catch ME
                 UIKit.done(dlg);
                 UIKit.setStatus(app.StatusLabel, sprintf('Could not read %s: %s', file, ME.message), 'error');
@@ -267,7 +283,7 @@ classdef LFPAnalysisApp < handle
             durS = size(app.LFP, 2) / app.Fs_lfp;
             app.FileLabel.Text = sprintf('%s\nLFP %.2f Hz · %s · %d ch\nStim %.2f Hz', ...
                 file, app.Fs_lfp, fmtDuration(durS), nChan, app.Fs_stim);
-            app.FileLabel.Tooltip = fullfile(path, file);
+            app.FileLabel.Tooltip = filePath;
             app.ERPInfoLabel.Text = 'Not run yet';
 
             % Reset result views; show the stimulus so the threshold can be judged
@@ -280,8 +296,46 @@ classdef LFPAnalysisApp < handle
             app.Tabs.SelectedTab = app.TabStim;
 
             app.updateControls();
+            ok = true;
             UIKit.setStatus(app.StatusLabel, sprintf('Loaded %s (%d channels, %.2f Hz, %s). Next: Run ERP.', ...
                 file, nChan, app.Fs_lfp, fmtDuration(durS)), 'success');
+        end
+
+        %% loadDemo - Load DemoData's synthetic LFP; select all channels, pre-fill CSD
+        % 30 s, 8 channels 100 um apart at 1017.25 Hz; stimulus pulses
+        % (20 ms, amplitude 1) every 2 s from 1 s. Selects every channel and
+        % pre-fills CSD spacing 100 um and order 1..8, so Run ERP (default
+        % threshold 0.5) and Compute CSD just work; the sink is at ch 4.
+        function loadDemo(app)
+            dlg = UIKit.busy(app.UIFig, 'Preparing demo data (first time only takes a few seconds)…');
+            try
+                p = DemoData.file('lfp');
+                UIKit.done(dlg);
+                if ~app.openFile(p), return; end
+                nChan = size(app.LFP, 1);
+                app.setChannels(1:nChan);
+                app.SpacingEdit.Value = 100;
+                app.ChannelOrderEdit.Value = strjoin(arrayfun(@num2str, 1:nChan, 'UniformOutput', false), ' ');
+                stim = app.Stim(:) - mean(app.Stim);
+                nStim = sum(diff([false; stim > 0.5]) == 1);
+                UIKit.setStatus(app.StatusLabel, sprintf(['Demo loaded: %s LFP, %d channels 100 µm apart, ' ...
+                    '%d stimuli (20 ms, every 2 s). All channels selected, CSD spacing 100 µm. ' ...
+                    'Next: Run ERP (threshold 0.5), then Compute CSD: the sink is at ch 4.'], ...
+                    fmtDuration(size(app.LFP, 2) / app.Fs_lfp), nChan, nStim), 'success');
+            catch ME
+                UIKit.done(dlg);
+                UIKit.setStatus(app.StatusLabel, sprintf('Could not load the demo data: %s', ME.message), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not load the demo data:\n%s', ME.message), 'Demo data');
+            end
+        end
+
+        %% setChannels - Select LFP rows for the ERP programmatically
+        % idx: row indices (values outside 1..nChannels are ignored).
+        function setChannels(app, idx)
+            if isempty(app.LFP), return; end
+            idx = idx(ismember(idx, app.ChannelList.ItemsData));
+            app.ChannelList.Value = idx(:)';
+            app.onChannelsChanged();
         end
 
         %% onChannelsChanged - Selection changed: refresh enable state and status
@@ -305,22 +359,42 @@ classdef LFPAnalysisApp < handle
 
         %% openERPConfig - ERPConfigApp dialog, then computeERP on OK
         function openERPConfig(app)
+            app.runERP();
+        end
+
+        %% runERP - ERP on the selected channels; params skip the dialog
+        % -------------------------------------------------------------
+        % Without params the ERPConfigApp dialog asks for them (same as the
+        % Run ERP button). params: preTime, postTime (s), threshold
+        % (stimulus units, on the mean-subtracted stimulus), minISI (s);
+        % missing fields default to 0.1, 0.3, 0.5, 0.5.
+        % -------------------------------------------------------------
+        function runERP(app, params)
             sel = app.ChannelList.Value;
             if isempty(sel)
                 UIKit.alert(app.UIFig, 'Please select at least one channel for ERP analysis.', 'ERP Analysis');
                 return;
             end
 
-            cfg = ERPConfigApp(app.Fs_lfp);
-            uiwait(cfg.UIFig);
-            if isempty(cfg.Params)
-                UIKit.setStatus(app.StatusLabel, 'ERP analysis cancelled.', 'info');
-                return;
+            if nargin < 2 || isempty(params)
+                cfg = ERPConfigApp(app.Fs_lfp);
+                uiwait(cfg.UIFig);
+                if isempty(cfg.Params)
+                    UIKit.setStatus(app.StatusLabel, 'ERP analysis cancelled.', 'info');
+                    return;
+                end
+                params = cfg.Params;
+            else
+                defaults = struct('preTime', 0.1, 'postTime', 0.3, 'threshold', 0.5, 'minISI', 0.5);
+                f = fieldnames(defaults);
+                for k = 1:numel(f)
+                    if ~isfield(params, f{k}), params.(f{k}) = defaults.(f{k}); end
+                end
             end
             % Commit selection only once the dialog is confirmed, so a cancel
             % does not desync SelectedChannels from LastERP (used by CSD)
             app.SelectedChannels = sel(:)';
-            app.ERPParams = cfg.Params;
+            app.ERPParams = params;
 
             % Next: computeERP()
             app.computeERP();
@@ -417,10 +491,17 @@ classdef LFPAnalysisApp < handle
         end
 
         %% computeCSD - Validate spacing / channel order, second spatial derivative
-        function computeCSD(app)
+        % Optional spacingUm (um) and order (numeric vector or text) fill
+        % the step-4 fields first (programmatic use); [] keeps a field.
+        function computeCSD(app, spacingUm, order)
             if isempty(app.LastERP) || isempty(app.LastTime)
                 UIKit.alert(app.UIFig, 'No ERP data available. Run ERP analysis first.', 'CSD');
                 return;
+            end
+            if nargin >= 2 && ~isempty(spacingUm), app.SpacingEdit.Value = spacingUm; end
+            if nargin >= 3 && ~isempty(order)
+                if isnumeric(order), order = num2str(order(:)'); end
+                app.ChannelOrderEdit.Value = char(order);
             end
 
             spacing_um = app.SpacingEdit.Value * 1e-6;  % meters
@@ -486,20 +567,27 @@ classdef LFPAnalysisApp < handle
 
         %% exportResults - Save ERP (and CSD if computed) to .mat
         % t / y (mean over the ERP channels) are readable by Signal Characterization.
-        function exportResults(app)
+        % With filePath given, no dialog is shown (programmatic use).
+        function exportResults(app, filePath)
             if isempty(app.LastERP)
                 UIKit.alert(app.UIFig, 'No ERP data available. Run ERP analysis first.', 'Export');
                 return;
             end
-            d = ProjectManager.getExportDir();
-            if isempty(d) || ~isfolder(d), d = pwd; end
-            [~, base] = fileparts(app.FileName);
-            if isempty(base), base = 'lfp'; end
-            [file, path] = uiputfile('*.mat', 'Export ERP / CSD', fullfile(d, [base '_ERP.mat']));
-            figure(app.UIFig);
-            if isequal(file, 0)
-                UIKit.setStatus(app.StatusLabel, 'Export cancelled.', 'info');
-                return;
+            if nargin < 2 || isempty(filePath)
+                d = ProjectManager.getExportDir();
+                if isempty(d) || ~isfolder(d), d = pwd; end
+                [~, base] = fileparts(app.FileName);
+                if isempty(base), base = 'lfp'; end
+                [file, path] = uiputfile('*.mat', 'Export ERP / CSD', fullfile(d, [base '_ERP.mat']));
+                figure(app.UIFig);
+                if isequal(file, 0)
+                    UIKit.setStatus(app.StatusLabel, 'Export cancelled.', 'info');
+                    return;
+                end
+                filePath = fullfile(path, file);
+            else
+                [~, name, ext] = fileparts(filePath);
+                file = [name ext];
             end
 
             out = struct();
@@ -523,7 +611,7 @@ classdef LFPAnalysisApp < handle
             end
 
             try
-                save(fullfile(path, file), '-struct', 'out');
+                save(filePath, '-struct', 'out');
             catch ME
                 UIKit.setStatus(app.StatusLabel, sprintf('Export failed: %s', ME.message), 'error');
                 UIKit.alert(app.UIFig, sprintf('Export failed:\n%s', ME.message), 'Export');
