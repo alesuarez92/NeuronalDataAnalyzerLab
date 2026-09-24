@@ -54,13 +54,10 @@ Classification of the ongoing work: **EXISTING STRAND**.
 
 Status: all five areas are committed. `DemoData.file` knows the new kinds,
 Help and CHANGELOG cover the features, and CI run 38 was 161 passed / 1 failed
-(an Intan error-message bug); after the fix, run 39 at `eb57d46` is **green**. Left from the review of
-the walkthrough frames, all minor (not done):
-- MUA: the cluster listbox shows only 2 rows; the status bar after loading the demo is cut at the right edge; the PSTH y-axes go below 0; MUA plots say "a.u." where Help quotes µV.
-- ROI: the image title is clipped by the axes toolbar; detected cells are numbered in a different order from the Help's cells 1–3; "Detect: min correlation" shows 0 (automatic) while the status bar gives the threshold actually used; the "Area" column and the Load-stack info text are truncated.
-- LFP: the band-power status bar reports the ERP transient as the "largest change" (consider ignoring the first ~50 ms); the ERP overlay y-label has no unit.
-- Extract Ephys: LFP / RAW plots have no unit (V); a reopened NWB LFP is still labelled "RAW".
-- Signal Characterization: `exportFigure(path, fmt)` does not update the format dropdown; the "Assumptions" cell is truncated; frame x09 is taken after the values export, not the figure export.
+(an Intan error-message bug); after the fix, run 39 at `eb57d46` is **green**. The cosmetic items from the review of the walkthrough frames were fixed on
+2026-09-24 (units on ephys plots, MUA cluster list / PSTH / status, ROI title,
+cell numbering left to right, detection threshold label, LFP band-power status
+from 50 ms, Signal Characterization export dropdown and assumptions rows).
 
 ### Original wave-1 plan (for reference)
 
@@ -196,4 +193,9 @@ Hybrid, with one source of content:
 
 Answered on 2026-09-24: the help figures are the owner's (redraw them freely); the owner deploys the website on Cloudflare and will send the link; keep the pre-stimulus baseline default in Signal Characterization.
 
-1. When the strand is finished: open a PR into `main`, and should `ci/screenshots` stay?
+Also decided:
+- Open **one PR into `main` after wave 3** (Help/launcher updates). Before merging, delete `docs/dev/`; the owner uses **Squash and merge**.
+- **Delete the `ci/screenshots` branch** once the work is done and tested, and remove the "Publish screenshots branch" step from `.github/workflows/ci.yml` in the same change. The website keeps its own copies of the frames it needs.
+- Growth ideas live in `ROADMAP.md` (public, for collaborators), not on the website.
+
+No open questions right now.
