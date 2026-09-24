@@ -47,6 +47,7 @@ classdef ROIAnalysisApp < handle
         RemoveROIBtn
         DisplayDropdown      % First frame | Mean image | Correlation image
         DetectThresholdEdit  % Detection threshold on the correlation image (0 = automatic)
+        DetectThresholdLabel % Its label; shows the automatic threshold used by the last detection
         ExportBtn
         ExportLabel
         AxesImage
@@ -117,7 +118,7 @@ classdef ROIAnalysisApp < handle
             body.ColumnWidth = {310, '1x'};
 
             % === LEFT: numbered step cards ===
-            left = uigridlayout(body, [5 1], 'RowHeight', {146, 144, 154, 168, 88}, ...
+            left = uigridlayout(body, [5 1], 'RowHeight', {168, 144, 154, 168, 88}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 10, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
 
@@ -248,8 +249,8 @@ classdef ROIAnalysisApp < handle
             uilabel(rg, 'Text', 'ROIs (double-click a name to rename)', 'FontSize', T.fontSmall, ...
                 'FontWeight', 'bold', 'FontColor', T.sectionTitleColor, ...
                 'Tooltip', 'One row per ROI; # is shown in the colour of its outline and trace');
-            app.ROITable = uitable(rg, 'ColumnName', {'#', 'Name', 'Area (px)', 'Source'}, ...
-                'ColumnWidth', {26, 'auto', 62, 62}, 'ColumnEditable', [false true false false], ...
+            app.ROITable = uitable(rg, 'ColumnName', {'#', 'Name', 'Area px', 'Source'}, ...
+                'ColumnWidth', {26, 'auto', 70, 66}, 'ColumnEditable', [false true false false], ...
                 'RowName', {}, 'FontSize', T.fontSmall, 'Data', cell(0, 4), ...
                 'CellEditCallback', @(~, evt)app.onTableEdit(evt), ...
                 'CellSelectionCallback', @(~, evt)app.onTableSelect(evt));
@@ -266,7 +267,8 @@ classdef ROIAnalysisApp < handle
                 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
             app.DetectThresholdEdit = UIKit.field(f7, 'Detect: min correlation', 'numeric', 0, ...
                 ['Correlation threshold (0-1) for Detect cells. 0 = automatic: median + 4 robust SD ' ...
-                 'of the correlation image (at least 0.2).'], [0 1]);
+                 'of the correlation image (at least 0.2); the label then shows the value used.'], [0 1]);
+            app.DetectThresholdLabel = findobj(f7, 'Type', 'uilabel');
 
             plotCard = UIKit.card(right, 'Results');
             pg = uigridlayout(plotCard, [1 1], 'Padding', [6 6 6 6], 'BackgroundColor', T.cardBg);
@@ -677,6 +679,12 @@ classdef ROIAnalysisApp < handle
                 f = fieldnames(opts);
                 for k = 1:numel(f), o.(f{k}) = opts.(f{k}); end
                 [masks, ~, ~, thr] = detectCellsFromCorrelation(C, o);
+                % Number the cells left to right (by centroid column), so the numbering is predictable
+                if numel(masks) > 1
+                    cx = cellfun(@(m) mean(find(any(m, 1))), masks);
+                    [~, order] = sort(cx);
+                    masks = masks(order);
+                end
             catch ME
                 UIKit.done(dlg);
                 UIKit.setStatus(app.W.Status, 'Cell detection failed', 'error');
@@ -685,6 +693,9 @@ classdef ROIAnalysisApp < handle
             end
             UIKit.done(dlg);
             app.DetectThreshold = thr;
+            if app.DetectThresholdEdit.Value == 0 && ~isempty(app.DetectThresholdLabel)
+                app.DetectThresholdLabel.Text = sprintf('Detect: min corr. (auto %.2f)', thr);
+            end
             % Replace the previous detection, keep drawn / file ROIs
             old = strcmp({app.ROIs.Source}, 'detected');
             for k = find(old)
@@ -818,7 +829,9 @@ classdef ROIAnalysisApp < handle
                     hold(ax, 'off');
                 end
             end
-            title(ax, sprintf('%s (%s)', app.FileName, what), 'Interpreter', 'none', ...
+            % Short title (the file name is in step 1): a long one ran under the axes toolbar
+            what(1) = upper(what(1));
+            title(ax, what, 'Interpreter', 'none', ...
                 'FontWeight', 'bold', 'Color', T.sectionTitleColor, 'FontSize', T.fontSmall);
         end
 
@@ -1359,7 +1372,7 @@ classdef ROIAnalysisApp < handle
             else
                 tInfo = 'time = frame index';
             end
-            app.FileLabel.Text = sprintf('%s\n%d x %d px · %d frames · %s · %s%s', ...
+            app.FileLabel.Text = sprintf('%s\n%d x %d px · %d frames · %s\n%s%s', ...
                 fileName, sz(2), sz(1), nFr, kind, tInfo, maskInfo);
             app.DisplayDropdown.Value = 'First frame';
             app.showFrame();

@@ -1273,7 +1273,13 @@ classdef SignalCharacterizationApp < handle
             end
             rows(end + 1, :) = {'Robustness check', sprintf('%s: %s, %s = %.3g (%s)', r.check.test, ...
                 GroupStats.formatP(r.check.p), r.check.effectName, r.check.effect, agree)};
-            rows(end + 1, :) = {'Assumptions', r.assumptions};
+            % Table cells do not wrap: one sentence per row, so nothing is cut off
+            parts = strtrim(regexp(r.assumptions, '(?<=\.)\s+', 'split'));
+            parts = parts(~cellfun(@isempty, parts));
+            for i = 1:numel(parts)
+                if i == 1, q = 'Assumptions'; else, q = ''; end
+                rows(end + 1, :) = {q, parts{i}}; %#ok<AGROW>
+            end
             app.StatsTable.Data = rows;
             ph = r.comparisons;
             data = cell(numel(ph), 5);
@@ -1417,8 +1423,14 @@ classdef SignalCharacterizationApp < handle
                 end
             end
             isGroups = strcmpi(target, 'groups');
+            if isGroups, menu = app.FigFormatMenu; else, menu = app.SeriesFigFormatMenu; end
             if nargin < 3 || isempty(format)
-                if isGroups, format = app.FigFormatMenu.Value; else, format = app.SeriesFigFormatMenu.Value; end
+                format = menu.Value;
+            else
+                % Show the format actually written in the dropdown (scripts / CI pass it explicitly)
+                keys = cellfun(@FigureExport.formatKey, menu.Items, 'UniformOutput', false);
+                i = find(strcmpi(keys, FigureExport.formatKey(format)), 1);
+                if ~isempty(i), menu.Value = menu.Items{i}; end
             end
             if isGroups
                 if isempty(app.GroupResult)

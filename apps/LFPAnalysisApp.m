@@ -912,13 +912,16 @@ classdef LFPAnalysisApp < handle
             app.Tabs.SelectedTab = app.TabBandPower;
             app.updateControls();
             ok = true;
-            % Largest average change after the onset, to point at the result
-            post = r.t > 0;
+            % Largest average change from 50 ms after the onset: the evoked
+            % potential itself gives a brief, very large broadband change in
+            % the first tens of ms, which would otherwise always win
+            post = r.t >= 0.05;
+            if ~any(post), post = r.t > 0; end
             [pk, iPk] = max(abs(r.mean(:, post)), [], 2);
             [~, b] = max(pk);
             tPost = r.t(post);
             UIKit.setStatus(app.StatusLabel, sprintf(['Band power of Ch %d: %d bands, up to %d stimuli, ' ...
-                '%% change vs baseline %g to %g s. Largest change: %s %+.0f%% at %.2f s.'], ch, numel(names), ...
+                '%% change vs baseline %g to %g s. Largest change after 50 ms: %s %+.0f%% at %.2f s.'], ch, numel(names), ...
                 max(r.nTrials), baseline(1), baseline(2), names{b}, r.mean(b, find(post, 1) - 1 + iPk(b)), ...
                 tPost(iPk(b))), 'success');
         end
@@ -1310,7 +1313,7 @@ classdef LFPAnalysisApp < handle
             xline(ax, 0, '--', 'Color', T.stimColor, 'LineWidth', 1, 'DisplayName', 'Stimulus onset');
             hold(ax, 'off');
             axis(ax, 'tight');
-            UIKit.styleAxes(ax, sprintf('ERP overlay (%d epochs)', nValid), 'Time (s)', 'Amplitude');
+            UIKit.styleAxes(ax, sprintf('ERP overlay (%d epochs)', nValid), 'Time (s)', 'Amplitude (V)');
             lg = legend(ax); lg.Location = 'eastoutside'; lg.Box = 'off';
         end
 
@@ -1336,7 +1339,7 @@ classdef LFPAnalysisApp < handle
             tl.Title.FontWeight = 'bold';
             tl.Title.Color = T.sectionTitleColor;
             tl.XLabel.String = 'Time (s)';
-            tl.YLabel.String = 'Amplitude';
+            tl.YLabel.String = 'Amplitude (V)';
         end
 
         %% channelPlaceholder - Empty tile with a hint in the per-channel tab

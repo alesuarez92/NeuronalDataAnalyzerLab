@@ -500,6 +500,16 @@ classdef ExtractEphysApp < handle
         end
 
 %% ------------------------------------------------------------------------------------------
+        %% recordedKind - 'LFP' when the loaded NWB series is an LFP (e.g. our own export), else 'RAW'
+        function k = recordedKind(app)
+            k = 'RAW';
+            try
+                p = app.Data.info.seriesPath;
+                if strcmp(app.SourceFormat, 'nwb') && ~isempty(regexpi(p, 'lfp', 'once')), k = 'LFP'; end
+            catch
+            end
+        end
+
         %% plotRAWData - Plot stimulus and the selected RAW channels
         function plotRAWData(app)
             if ~app.readSelection(), return; end
@@ -510,10 +520,11 @@ classdef ExtractEphysApp < handle
                 raw = double(app.Data.streams.xRAW.data(app.RAWChannels, :));
                 raw_fs = app.Data.streams.xRAW.fs;
                 t_raw = (0:size(raw,2)-1)/raw_fs;
+                kind = app.recordedKind();   % 'RAW', or 'LFP' for an LFP series read from NWB
                 layer = struct('data', {num2cell(raw, 2)'}, 'color', T.plotColors(1,:), ...
-                    'width', 0.5, 'name', 'RAW', 'center', true);
-                app.drawChannels(sprintf('RAW signals (%.2f Hz)', raw_fs), t_raw, layer, ...
-                    app.RAWChannels, 'RAW', app.StimChannel);
+                    'width', 0.5, 'name', kind, 'center', true);
+                app.drawChannels(sprintf('%s signals (%.2f Hz)', kind, raw_fs), t_raw, layer, ...
+                    app.RAWChannels, kind, app.StimChannel);
                 UIKit.done(dlg);
                 UIKit.setStatus(app.StatusLabel, sprintf('Plotted %d RAW channel(s).', ...
                     numel(app.RAWChannels)), 'success');
@@ -1011,9 +1022,9 @@ classdef ExtractEphysApp < handle
                     end
                     hold(ax, 'off');
                     if i == nCh
-                        UIKit.styleAxes(ax, '', 'Time (s)', sprintf('%s Ch %d', prefix, chans(i)));
+                        UIKit.styleAxes(ax, '', 'Time (s)', sprintf('%s Ch %d (V)', prefix, chans(i)));
                     else
-                        UIKit.styleAxes(ax, '', '', sprintf('%s Ch %d', prefix, chans(i)));
+                        UIKit.styleAxes(ax, '', '', sprintf('%s Ch %d (V)', prefix, chans(i)));
                         ax.XTickLabel = [];
                     end
                     if i == 1 && numel(layers) > 1
@@ -1045,7 +1056,7 @@ classdef ExtractEphysApp < handle
                     end
                 end
                 hold(ax, 'off');
-                UIKit.styleAxes(ax, sprintf('%d channels, offset %.3g per channel', nCh, spacing), ...
+                UIKit.styleAxes(ax, sprintf('%d channels (V), offset %.3g V per channel', nCh, spacing), ...
                     'Time (s)', '');
                 [ticks, order] = sort(offsets);
                 ax.YTick = ticks;

@@ -125,10 +125,10 @@ function testGroupsAndStatistics(tests)
         tests.verifyTrue(logical(app.exportFigure(fullfile(out, 'group_stats'), fmt{1}, 'groups')), fmt{1});
         verifyFile(tests, app.LastExportPath);
     end
+    shot(tests, app, 'SignalCharacterizationApp_x09_figure_exported', {G, 'Plot'});
     tests.verifyTrue(logical(app.exportGroupResults(fullfile(out, 'group_values.csv'))));
     verifyFile(tests, fullfile(out, 'group_values.csv'));
     verifyFile(tests, fullfile(out, 'group_values_report.txt'));
-    shot(tests, app, 'SignalCharacterizationApp_x09_figure_exported', {G, 'Plot'});
 end
 
 function testSingleFileFigureExport(tests)

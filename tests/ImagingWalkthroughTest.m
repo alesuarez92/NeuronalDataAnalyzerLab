@@ -79,6 +79,7 @@ function testROIAdvancedDemo(tests)
     n = app.detectCells();
     tests.verifyEqual(n, 3);
     cents = roiCentres(app);
+    tests.verifyTrue(issorted(cents(:, 1)), 'detected cells are numbered left to right');
     for i = 1:3
         tests.verifyLessThan(min(vecnorm(cents - tr.cellCenters(i, :), 2, 2)), 3, sprintf('cell %d', i));
     end

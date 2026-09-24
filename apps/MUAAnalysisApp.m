@@ -204,7 +204,7 @@ classdef MUAAnalysisApp < handle
             app.RunBtn.Layout.Row = 3; app.RunBtn.Layout.Column = 2;
 
             % --- 4 Clusters ---
-            g = stepCard(left, 4, 'Clusters', {'1x', T.buttonHeight, T.buttonHeight, 'fit'}, {'1x', '1x'});
+            g = stepCard(left, 4, 'Clusters', {96, T.buttonHeight, T.buttonHeight, 'fit'}, {'1x', '1x'});   % list: ~5 rows
             app.ClusterSelectMenu = uilistbox(g, 'Items', {}, 'Multiselect', 'on', ...
                 'FontSize', T.fontBody, 'Tooltip', ...
                 'Clusters shown in the plots. Ctrl/Shift-click to select several. Cluster 0 is noise (unclustered spikes).', ...
@@ -525,10 +525,8 @@ classdef MUAAnalysisApp < handle
             app.updateParamsLabel();
             app.plotSignal();
             app.updateControls();
-            UIKit.setStatus(app.StatusLabel, ['Demo loaded: 30 s of synthetic MUA (ch 3-5), stimulus every 2 s; ' ...
-                'ch 4 holds two units (~90 and ~50 µV), ch 5 a third (~110 µV). Channel 4 selected - ' ...
-                'click Run (step 3): expect units 1 and 2 (plus unit 3, seen weaker from ch 5) whose rate ' ...
-                'rises 5-55 ms after each stimulus (see Raster & PSTH).'], 'success');
+            UIKit.setStatus(app.StatusLabel, ['Demo loaded (ch 4: units of ~90 and ~50 µV). ' ...
+                'Click Run: expect 2-3 units firing 5-55 ms after each stimulus.'], 'success');
             ok = true;
         end
 
@@ -774,7 +772,7 @@ classdef MUAAnalysisApp < handle
             end
             xl = 'Time (s)';
             if relTime, xl = 'Time from segment start (s)'; end
-            UIKit.styleAxes(ax, ttl, xl, 'Amplitude (a.u.)');
+            UIKit.styleAxes(ax, ttl, xl, 'Amplitude (V)');
         end
 
         %% configureSpikeSorting - Settings dialog; Run saves and sorts
@@ -1514,6 +1512,8 @@ classdef MUAAnalysisApp < handle
                 xline(ax2, 0, '-', 'Color', T.stimColor, 'LineWidth', 1.5);
                 hold(ax2, 'off');
                 xlim(ax2, win * 1000);
+                yl = ylim(ax2);
+                ylim(ax2, [0, max(yl(2), 1)]);   % rates are >= 0; SEM bars must not push the axis below 0
                 [~, iPk] = max(p.rate);
                 UIKit.styleAxes(ax2, sprintf('PSTH  ·  peak at %.0f ms', p.centers(iPk) * 1000), ...
                     'Time from stimulus (ms)', 'Rate (spikes/s)');
@@ -1653,7 +1653,7 @@ classdef MUAAnalysisApp < handle
                 xlim(ax, [tMs(1) tMs(end)]);
                 ttl = sprintf('%s  ·  n = %d  ·  SNR %.1f', clusterName(q.id), q.n, q.snr);
                 if q.rejected, ttl = sprintf('%s  ·  rejected', ttl); end
-                UIKit.styleAxes(ax, ttl, 'Time (ms)', 'Amplitude (a.u.)');
+                UIKit.styleAxes(ax, ttl, 'Time (ms)', 'Amplitude (V)');
                 if q.rejected, ax.Title.Color = T.danger; end
             end
             if numel(app.selectedClusterPos()) > maxTiles
@@ -1844,7 +1844,7 @@ classdef MUAAnalysisApp < handle
             plot(ax, tAxis, rawWaves(1:N,:)', 'Color', [T.stimColor 0.3]);
             plot(ax, tAxis, mean(rawWaves(1:N,:), 1, 'omitnan'), 'Color', T.sectionTitleColor, 'LineWidth', 2);
             hold(ax, 'off');
-            UIKit.styleAxes(ax, sprintf('Before alignment (%d spikes)', N), 'Time (ms)', 'Amplitude (a.u.)');
+            UIKit.styleAxes(ax, sprintf('Before alignment (%d spikes)', N), 'Time (ms)', 'Amplitude (V)');
 
             ax = app.AxAlignAfter;
             resetAxes(ax);
@@ -1852,7 +1852,7 @@ classdef MUAAnalysisApp < handle
             plot(ax, tAxis, alignedWaves(1:N,:)', 'Color', [T.plotColors(1,:) 0.3]);
             plot(ax, tAxis, mean(alignedWaves(1:N,:), 1), 'Color', T.plotColors(1,:), 'LineWidth', 2);
             hold(ax, 'off');
-            UIKit.styleAxes(ax, 'After alignment (on peak)', 'Time (ms)', 'Amplitude (a.u.)');
+            UIKit.styleAxes(ax, 'After alignment (on peak)', 'Time (ms)', 'Amplitude (V)');
             linkaxes([app.AxAlignBefore, app.AxAlignAfter], 'y');
         end
 

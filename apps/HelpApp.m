@@ -706,7 +706,7 @@ classdef HelpApp < handle
                 '* **Spectrum**: 1/f background with a clear **peak at ~6 Hz** (theta) and a small bump near **40 Hz**.'
                 '* **Spectrogram** (2–80 Hz): a steady band at 6 Hz, and short 40 Hz patches just after each dashed stimulus line.'
                 '* **ERSP / ITPC** (2–80 Hz, 7 cycles, baseline −0.4 to −0.1 s): about **+10 to +12 dB at 36–44 Hz between 50 and 250 ms**, ITPC ≈ **0.97** there, and ≈ 0 dB before the stimulus and after ~0.3 s. The ERP itself (N1 / P2) adds a brief broadband increase with high ITPC in the first ~50 ms. On channel 8 (no gamma) there is no 40 Hz increase. 14 of the 15 stimuli are used (the last epoch would run past the end of the recording), and 13 at the lowest frequencies.'
-                '* **Band power** (channel 4): the ERP itself (N1 / P2) gives a very large, brief increase in the first ~50 ms in every band, so the status bar''s "largest change" points there and the y-axis is scaled to it; the **gamma burst** (roughly **+350 to +600 %**) is the plateau at 0.05–0.25 s. Theta also swings around the ERP. On **channel 8** (far from the ERP, no gamma) **theta stays flat** (~0 %): theta is not modulated by the stimuli.'};
+                '* **Band power** (channel 4): the ERP itself (N1 / P2) gives a very large, brief increase in the first ~50 ms in every band, so the y-axis is scaled to it (the status bar''s "largest change" therefore looks from 50 ms on); the **gamma burst** (roughly **+350 to +600 %**) is the plateau at 0.05–0.25 s. Theta also swings around the ERP. On **channel 8** (far from the ERP, no gamma) **theta stays flat** (~0 %): theta is not modulated by the stimuli.'};
             t.inputs = {'LFP `.mat` from Extract Ephys: `lfp_data`, `stim_data`, `t_lfp`, `t_stim`, `lfp_fs`, `stim_fs` (all required)'};
             t.outputs = {
                 'Tabs: Stimulus (threshold and detected onsets), ERP overlay, ERP per channel (mean ± SD), CSD map'
@@ -831,7 +831,7 @@ classdef HelpApp < handle
                 '## Advanced'
                 '* **Motion correction (rigid)**: every frame is aligned to the mean image by FFT phase correlation with a sub-pixel peak fit (two passes), then shifted back (bilinear). Translation only.'
                 '* **Multiple ROIs**: every ROI method gives one trace per ROI; the ROI table shows number (in the trace colour), name, area and source (file, drawn, detected, added).'
-                '* **Detect cells**: local correlation image (mean correlation of each pixel with its 8 neighbours), threshold (automatic: median + 4 robust SD, at least 0.2), connected components of 20–1000 px that are not elongated, holes filled.'
+                '* **Detect cells**: local correlation image (mean correlation of each pixel with its 8 neighbours), threshold (automatic: median + 4 robust SD, at least 0.2; the field''s label then shows the value used), connected components of 20–1000 px that are not elongated, holes filled. Detected cells are numbered from left to right.'
                 '* **Robust diameter**: background from the line ends and vessel core from a low percentile (both as running medians over 7 frames), outermost half-level crossings, then a Hampel filter (7 frames, 3 robust SD) replaces remaining spikes. Walls are located to sub-pixel precision in all modes.'};
             t.trouble = {
                 '"Could not draw a rectangle / line"', 'drawrectangle / drawline need the Image Processing Toolbox. Without it, save a logical `roiMask` in the .mat for ROI methods.'
