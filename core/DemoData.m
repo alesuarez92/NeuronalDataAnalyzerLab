@@ -176,12 +176,14 @@ classdef DemoData
             dsF = 100; Fs = c.Fs / dsF;
             pre = 5; post = 20;
             segT = -pre:1/Fs:post;
-            nT = numel(c.truth.onsets);
-            seg = zeros(nT, numel(segT));
-            for k = 1:nT
-                idx = round((c.truth.onsets(k) + segT) * c.Fs) + 1;
+            % Only trials whose whole window lies inside the recording
+            ons = c.truth.onsets(c.truth.onsets - pre >= 0 & c.truth.onsets + post <= c.t(end));
+            seg = zeros(numel(ons), numel(segT));
+            for k = 1:numel(ons)
+                idx = round((ons(k) + segT) * c.Fs) + 1;
                 seg(k, :) = c.LDF(idx);
             end
+            c.truth.onsets = ons;
             s.segmentedLDF = seg;
             s.segmentedTime = segT;
             s.Fs = Fs;
@@ -333,7 +335,7 @@ classdef DemoData
             % --- MUA: three units, higher rate for 50 ms after each stimulus ---
             wlen = round(1.2e-3 * fsR);
             tw = (0:wlen-1) / fsR;
-            shapes = { -80e-6 * sin(pi * tw / tw(end)) .* exp(-tw / 3e-4) + 25e-6 * (tw > 4e-4) .* exp(-(tw - 4e-4) / 3e-4), ...
+            shapes = { -90e-6 * exp(-(tw - 2.5e-4).^2 / (2 * 0.7e-4^2)) + 35e-6 * exp(-(tw - 6e-4).^2 / (2 * 2.5e-4^2)), ...
                        -50e-6 * exp(-(tw - 2e-4).^2 / (2 * 1e-4^2)) + 30e-6 * exp(-(tw - 6e-4).^2 / (2 * 2e-4^2)), ...
                        -110e-6 * exp(-(tw - 3e-4).^2 / (2 * 0.8e-4^2)) + 20e-6 * exp(-(tw - 8e-4).^2 / (2 * 2e-4^2)) };
             baseRate = [6 10 3]; evokedRate = [80 40 120];

@@ -58,9 +58,10 @@ function testMuaHasSpikesAboveNoise(tests)
     verifyEqual(tests, size(s.mua_data, 1), 3);
     x = s.mua_data(2, :);   % channel 4, home of units 1 and 2
     noise = median(abs(x)) / 0.6745;
-    nCross = sum(diff(x < -5 * noise) == 1);
+    nCross = sum(diff(x < -4 * noise) == 1);
     nTrue = numel(s.truth.units(1).spikeTimes) + numel(s.truth.units(2).spikeTimes);
-    verifyGreaterThan(tests, nCross, 0.5 * nTrue);
+    verifyGreaterThan(tests, nCross, 0.6 * nTrue);
+    verifyLessThan(tests, nCross, 1.5 * nTrue);
 end
 
 function testImagingGroundTruth(tests)
