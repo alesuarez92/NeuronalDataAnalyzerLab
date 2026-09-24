@@ -153,9 +153,9 @@ Each area also adds `core/demo/*.m` generators and
     - Intan RHD2000 data file format documentation
     - Open Ephys binary format documentation
     - Rübel et al. 2022, eLife 11:e78362 (NWB)
-  - The figures in `docs/*.png` are schematic illustrations of unknown origin. **Ask the owner** whether they authored them. Until then, credit them as "illustration from the NeuroAnalyzer help figures".
-  - The ERP schematic (`docs/LFPAnalysisPrinciple.png`) labels "P2" twice; the first negative peak should be N1. Tell the owner and suggest a fix.
-- **Publishing:** the owner hasn't decided yet between an artifact preview, publishing it themselves on Cloudflare Pages, or GitHub Pages. Build the site to work from any static host with relative links only.
+  - The figures in `docs/*.png` were **made by the owner** (with AI help). Credit them as the owner's own figures. The owner welcomes **redrawing them to improve them**; keep the same file names so Help and the website pick them up.
+  - The ERP schematic (`docs/LFPAnalysisPrinciple.png`) labels "P2" twice; the first negative peak should be N1. Fix it when redrawing.
+- **Publishing (decided):** the owner deploys `website/` on **Cloudflare Pages** themselves and will share the link later. Build it to work from any static host with relative links only; once the link exists, use it for Help's "Learn more ↗" links.
 
 ### 4b. In-app Help vs website (decision proposed to the owner, 2026-09-24)
 
@@ -194,7 +194,6 @@ Hybrid, with one source of content:
 
 ## 6. Open questions for the owner
 
-1. Where do the `docs/*.png` help figures come from? This affects how the website credits them.
-2. Publish the website as an artifact preview first, or hand over the `website/` folder for Cloudflare?
-3. Signal Characterization now defaults the baseline to the pre-stimulus period when trials start before t0. Keep that, or restore the old 0–0.05 s default?
-4. When the strand is finished: open a PR into `main`, and should `ci/screenshots` stay?
+Answered on 2026-09-24: the help figures are the owner's (redraw them freely); the owner deploys the website on Cloudflare and will send the link; keep the pre-stimulus baseline default in Signal Characterization.
+
+1. When the strand is finished: open a PR into `main`, and should `ci/screenshots` stay?
