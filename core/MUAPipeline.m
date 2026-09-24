@@ -538,7 +538,7 @@ classdef MUAPipeline
                 end
 
                 % Report to console
-                fprintf('[SNR] Cluster %d: %.2f (P2P=%.3f, noise=%.3f)\n', ...
+                fprintf('[SNR] Cluster %d: %.2f (P2P=%.3g, noise=%.3g)\n', ...
                     k, snr, ampP2P, noiseSD);
                 % Optional rejection
                 if snr < SNRThresh && k ~= 0
