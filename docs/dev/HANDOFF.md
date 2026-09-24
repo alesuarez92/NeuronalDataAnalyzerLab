@@ -43,7 +43,7 @@ Classification of the ongoing work: **EXISTING STRAND**.
 - **LDF:** peak about 4 s after onset, about +30 PU.
 - **LFP:** N1 at about 15 ms, deepest on channel 4; CSD sink on channel 4.
 - **Imaging:** ΔF/F peaks at 3, 7 and 11 s; vessel diameter 9–15 px with a 5 s period; red blood cell at 2 px/frame.
-- **MUA:** sorting over-split channel 4 into 4 clusters. Wave 1 fixes this.
+- **MUA:** sorting over-split channel 4 into 4 clusters. Fixed in wave 1 (auto-merge: 3 units, r = 0.98).
 
 ### Preview page
 
@@ -54,7 +54,7 @@ Classification of the ongoing work: **EXISTING STRAND**.
 
 Status: all five areas are committed. `DemoData.file` knows the new kinds,
 Help and CHANGELOG cover the features, and CI run 38 was 161 passed / 1 failed
-(an Intan error-message bug, fixed in the next push). Left from the review of
+(an Intan error-message bug); after the fix, run 39 at `eb57d46` is **green**. Left from the review of
 the walkthrough frames, all minor (not done):
 - MUA: the cluster listbox shows only 2 rows; the status bar after loading the demo is cut at the right edge; the PSTH y-axes go below 0; MUA plots say "a.u." where Help quotes µV.
 - ROI: the image title is clipped by the axes toolbar; detected cells are numbered in a different order from the Help's cells 1–3; "Detect: min correlation" shows 0 (automatic) while the status bar gives the threshold actually used; the "Area" column and the Load-stack info text are truncated.
