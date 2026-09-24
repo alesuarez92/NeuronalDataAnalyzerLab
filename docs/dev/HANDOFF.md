@@ -140,6 +140,12 @@ Each area also adds `core/demo/*.m` generators and
 
 ## 5. How to work cheaply
 
+- **CI budget (owner's rule: spend nothing on GitHub).** The repo is public, so Actions on standard runners and MathWorks' MATLAB actions are free, and the account's default spending limit is $0. Still, keep runs low:
+  - batch fixes into one push instead of many;
+  - leave the workflow's `concurrency` (cancel superseded runs) and `paths-ignore` (docs/website) settings as they are;
+  - never add scheduled or cron workflows or larger runners;
+  - if the repo is ever made private, CI minutes become metered, so check with the owner first.
+
 - Delegate large edits to background agents using `docs/dev/AGENT_RULES.md`. Give them disjoint file sets, and have them commit their own files and write reports to `docs/dev/reports/`.
 - Octave is available after `apt-get install -y octave`, for parse checks and quick numeric checks. Real verification is CI.
 - Keep status messages to the owner short, and send screenshots from `ci/screenshots` with SendUserFile.
