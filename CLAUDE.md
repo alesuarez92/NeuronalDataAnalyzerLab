@@ -29,3 +29,20 @@ Before any meaningful work, announce one of:
 ## After every checkpoint
 
 - Commit with a clear message describing the change.
+
+## Context budget
+
+A project hook (`.claude/hooks/context-handoff.sh`, wired in `.claude/settings.json`) fires once per session when the conversation reaches **30% of the context window**. When it fires, do these steps in this order, before any other work:
+
+1. Finish the current small step or park it cleanly. Don't leave half-edited files: commit finished work and revert or stash anything unfinished.
+2. Update `docs/dev/HANDOFF.md`:
+   - what is done;
+   - what is in flight, including any background agents and where they report;
+   - the next steps;
+   - open questions for the owner.
+3. Commit and push the handoff. No AI attribution.
+4. Post the ready-to-paste prompt for the next session in chat, so the owner has it even if step 5 fails:
+   > Continue the NeuroAnalyzer work on branch `<branch>`. Read `CLAUDE.md` and `docs/dev/HANDOFF.md` first and follow them. Next: <first task>. Keep CI runs to a minimum.
+5. Only then create the new session on the same repo and branch with that same prompt (`mcp__Claude_Code_Remote__create_session`). Tell the owner it's ready and that this session can be left.
+
+Don't start new work in the old session after the handoff.
