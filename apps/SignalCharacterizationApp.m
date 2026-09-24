@@ -7,13 +7,27 @@
 % onset delay, FWHM, AUC+, AUC-, rise/decay time, peak amplitude,
 % stimulation-response integration). Results in a table; export to CSV or .mat.
 %
-% Layout (UIKit.window): numbered step cards on the left
+% Layout (UIKit.window): two tabs that act as a mode switch.
+%  "Single file": numbered step cards on the left
 %   1 Load data   2 Parameters   3 Features + Extract   4 Export
-% and on the right the selected series (with t0, baseline and extracted
-% peak / half-maximum marked) above the results table. One updateControls()
-% sets every enable state from the current data.
+%  and on the right the selected series (with t0, baseline and extracted
+%  peak / half-maximum marked; "Export figure…" above it) and the results table.
+%  "Groups & statistics": compare one feature between groups/conditions
+%   1 Files and groups (several files per group, e.g. one per animal)
+%   2 Feature (one value per subject: feature of each file's mean trace,
+%     mean of its per-series values, or every series as a subject)
+%   3 Statistical test (paired / unpaired / one-way ANOVA; parametric or
+%     rank-based; GroupStats) -> Results tab (statistic, df, p, effect
+%     size, CI, n, assumptions) and Plot tab (subjects, pairs, mean ± SEM
+%     or box, significance brackets)
+%   4 Export (publication figure via FigureExport; values + report)
+% One updateControls() sets every enable state from the current data.
 % Scriptable (CI walkthroughs, no dialogs): openFile(path), loadDemo(),
-% extract() (= extractFeatures()).
+% extract() (= extractFeatures()), addGroupFiles(paths, groupName),
+% removeGroupFile(idx), moveGroupFile(idx, delta), clearGroups(),
+% loadGroupDemo(), runGroupStats(feature, design, method, pair),
+% setGroupPlotStyle(style), exportFigure(path, format, target),
+% exportGroupResults(path).
 % =========================================================================
 
 classdef SignalCharacterizationApp < handle
@@ -45,6 +59,59 @@ classdef SignalCharacterizationApp < handle
         SeriesNames        % Cell of names ('Trial k'), same order
         HasResults = false % True once features were extracted for SeriesT/Y
         NFeatures = 0      % Number of features in the current results
+        SeriesFigFormatMenu % Format for the single-series figure export
+        SeriesExportFigBtn  % "Export figure…" above the series plot
+
+        % --- Mode tabs ---
+        ModeTabs           % uitabgroup: Single file | Groups & statistics
+        SingleTab
+        GroupsTab
+        % --- Groups & statistics: controls ---
+        GroupNameMenu      % Editable dropdown: group the next files go to
+        AddGroupFilesBtn
+        GroupDemoBtn
+        GroupInfoLabel     % "24 files · 3 groups: ..."
+        GroupFeatureMenu   % Feature compared between groups
+        SubjectMenu        % What one subject (one value) is
+        GroupT0Edit
+        GroupBaseStartEdit
+        GroupBaseEndEdit
+        GroupDirectionMenu
+        DesignMenu         % Paired / Unpaired / ANOVA
+        MethodMenu         % Parametric / Nonparametric
+        GroupAMenu         % Reference group (two-group designs)
+        GroupBMenu         % Compared group (two-group designs)
+        DesignHint         % How the design pairs / compares subjects
+        RunStatsBtn
+        FigFormatMenu      % Format for the group figure export
+        ExportFigBtn
+        ExportValuesBtn
+        % --- Groups & statistics: views ---
+        GroupTabs          % uitabgroup: Files | Results | Plot
+        FilesTab
+        ResultsTab
+        PlotTab
+        GroupTable         % #, File, Group, Series, Value
+        MoveUpBtn
+        MoveDownBtn
+        RemoveGroupFileBtn
+        ClearGroupsBtn
+        StatsTable         % Quantity | Value
+        PostHocTable       % Pairwise comparisons
+        ReportText         % Copy-ready summary + assumptions
+        PlotStyleMenu      % Mean ± SEM | Box plot
+        StatsAxes
+        StatsSummaryLabel
+        % --- Groups & statistics: data ---
+        GroupFiles = struct('path', {}, 'name', {}, 'group', {}, 'dataType', {}, ...
+            'T', {}, 'Y', {}, 'nSeries', {}, 'value', {})   % one entry per file (column)
+        GroupOrder = {}    % Group names in the order they were created (plot / table order)
+        GroupResult = []   % GroupStats.compare output + feature, labels, ...
+        GroupStale = false % Settings changed since the last test
+        GroupSelectedRow = []   % Row selected in the Files table
+        GroupBaselineAuto = true % Baseline window follows the data until edited
+        GroupDemo = []     % demoGroups() output (with .truth) after loadGroupDemo
+        LastExportPath = '' % File written by the last exportFigure
     end
 
     properties(Constant, Access = private)
@@ -54,6 +121,13 @@ classdef SignalCharacterizationApp < handle
         DataTypes = {'LDF segments (segmentedLDF, segmentedTime)', ...
             'ERP / average response (t, y or lfp_data)', ...
             'Time series (t, y)'}
+        SubjectModes = {'File (mean trace)', 'File (mean of series)', 'Each series'}
+        SubjectKeys = {'meantrace', 'meanvalues', 'series'}
+        Designs = {'Paired (same animals)', 'Unpaired (independent)', 'ANOVA (2+ groups)'}
+        DesignKeys = {'paired', 'unpaired', 'anova'}
+        Methods = {'Parametric', 'Nonparametric (ranks)'}
+        MethodKeys = {'parametric', 'nonparametric'}
+        PlotStyles = {'Mean ± SEM', 'Box plot (median, IQR)'}
     end
 
     methods
@@ -66,15 +140,22 @@ classdef SignalCharacterizationApp < handle
         function buildUI(app)
             T = UITheme;
             app.W = UIKit.window('Signal Characterization', ...
-                'Extract response features (latency, FWHM, AUC, rise/decay) from processed data', ...
-                'Signal Characterization', [1200 860]);
+                'Extract response features (latency, FWHM, AUC, rise/decay) and compare groups with statistics', ...
+                'Signal Characterization', [1240 900]);
             app.UIFig = app.W.Fig;
             body = app.W.Body;
             body.RowHeight = {'1x'};
-            body.ColumnWidth = {320, '1x'};
+            body.ColumnWidth = {'1x'};
+
+            % Mode switch: one file (per-series features) or groups + statistics
+            app.ModeTabs = uitabgroup(body, 'SelectionChangedFcn', @(~,~)app.onModeChanged());
+            app.SingleTab = uitab(app.ModeTabs, 'Title', 'Single file', 'BackgroundColor', T.bgGray);
+            app.GroupsTab = uitab(app.ModeTabs, 'Title', 'Groups & statistics', 'BackgroundColor', T.bgGray);
+            singleGrid = uigridlayout(app.SingleTab, [1 2], 'ColumnWidth', {320, '1x'}, 'RowHeight', {'1x'}, ...
+                'Padding', [8 8 8 8], 'ColumnSpacing', 10, 'BackgroundColor', T.bgGray);
 
             % === LEFT: numbered step cards ===
-            left = uigridlayout(body, [4 1], 'RowHeight', {150, 172, '1x', 100}, ...
+            left = uigridlayout(singleGrid, [4 1], 'RowHeight', {150, 172, '1x', 100}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 10, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
 
@@ -150,11 +231,11 @@ classdef SignalCharacterizationApp < handle
                 'FontColor', T.mutedColor, 'WordWrap', 'on');
 
             % === RIGHT: plot (with series selector) above results table ===
-            right = uigridlayout(body, [2 1], 'RowHeight', {'1.3x', '1x'}, ...
+            right = uigridlayout(singleGrid, [2 1], 'RowHeight', {'1.3x', '1x'}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 10, 'BackgroundColor', T.bgGray);
             plotCard = UIKit.card(right, 'Selected series');
-            pg = uigridlayout(plotCard, [2 3], 'RowHeight', {T.controlHeight, '1x'}, ...
-                'ColumnWidth', {'fit', 200, '1x'}, 'Padding', [10 6 10 6], ...
+            pg = uigridlayout(plotCard, [2 5], 'RowHeight', {T.controlHeight, '1x'}, ...
+                'ColumnWidth', {'fit', 200, '1x', 120, 120}, 'Padding', [10 6 10 6], ...
                 'BackgroundColor', T.cardBg);
             uilabel(pg, 'Text', 'Show:', 'FontSize', T.fontBody, 'FontColor', T.sectionTitleColor);
             app.SeriesMenu = uidropdown(pg, 'Items', {'-'}, 'Value', '-', ...
@@ -162,8 +243,16 @@ classdef SignalCharacterizationApp < handle
                 'ValueChangedFcn', @(~,~)app.plotSelected());
             uilabel(pg, 'Text', 'Dashed: t0 · shaded: baseline window · o: peak · bar: FWHM', ...
                 'FontSize', T.fontSmall, 'FontColor', T.mutedColor, 'HorizontalAlignment', 'right');
+            fmts = FigureExport.formats();
+            app.SeriesFigFormatMenu = uidropdown(pg, 'Items', fmts, 'Value', fmts{1}, ...
+                'Tooltip', ['File format for Export figure: PDF / SVG / EPS are vector (editable in ' ...
+                'Illustrator or Inkscape); PNG / TIFF are images at 300 or 600 dpi']);
+            app.SeriesExportFigBtn = UIKit.button(pg, ['Export figure' char(8230)], ...
+                @(~,~)app.exportFigureDialog('series'), 'secondary', ...
+                ['Save this plot as a publication figure (8.5 cm wide, 8 pt Helvetica, white ' ...
+                 'background, no grid). The window itself is not changed.']);
             app.Axes = uiaxes(pg);
-            app.Axes.Layout.Row = 2; app.Axes.Layout.Column = [1 3];
+            app.Axes.Layout.Row = 2; app.Axes.Layout.Column = [1 5];
             UIKit.emptyAxes(app.Axes, 'Load a file (or Try demo data) to begin');
 
             tableCard = UIKit.card(right, 'Results (one row per series; NaN = not computed or not found)');
@@ -174,7 +263,203 @@ classdef SignalCharacterizationApp < handle
                 'Tooltip', 'Click a row to plot that series', ...
                 'CellSelectionCallback', @(~,evt)app.onTableSelect(evt));
 
-            UIKit.setStatus(app.W.Status, 'Load a .mat file (or Try demo data) to begin (step 1).', 'info');
+            app.buildGroupsUI();
+            UIKit.setStatus(app.W.Status, ['Load a .mat file (or Try demo data) to begin (step 1). ' ...
+                'To compare animals or conditions, open the Groups & statistics tab.'], 'info');
+        end
+
+        %% buildGroupsUI - "Groups & statistics" tab: step cards | Files, Results, Plot
+        function buildGroupsUI(app)
+            T = UITheme;
+            g = uigridlayout(app.GroupsTab, [1 2], 'ColumnWidth', {320, '1x'}, 'RowHeight', {'1x'}, ...
+                'Padding', [8 8 8 8], 'ColumnSpacing', 10, 'BackgroundColor', T.bgGray);
+            left = uigridlayout(g, [4 1], 'RowHeight', {146, 198, 206, 112}, ...
+                'Padding', [0 0 0 0], 'RowSpacing', 8, 'BackgroundColor', T.bgGray, ...
+                'Scrollable', 'on');
+
+            % --- 1 Files and groups ---
+            c1 = uigridlayout(UIKit.card(left), [4 1], ...
+                'RowHeight', {'fit', T.controlHeight, T.buttonHeight, '1x'}, ...
+                'Padding', [10 8 10 10], 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
+            UIKit.step(c1, 1, 'Files and groups');
+            f1 = uigridlayout(c1, [1 2], 'ColumnWidth', {85, '1x'}, 'RowHeight', {'1x'}, ...
+                'Padding', [0 0 0 0], 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            app.GroupNameMenu = UIKit.field(f1, 'Group', 'dropdown', ...
+                {{'Control', 'Stimulated'}, 'Control'}, ...
+                ['Group / condition for the next files you add. Pick one or type a new name ' ...
+                 '(e.g. Drug). You can also change a file''s group in the Files table.']);
+            app.GroupNameMenu.Editable = 'on';
+            b1 = uigridlayout(c1, [1 2], 'ColumnWidth', {'1x', '1x'}, 'Padding', [0 0 0 0], ...
+                'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            app.AddGroupFilesBtn = UIKit.button(b1, ['Add files' char(8230)], ...
+                @(~,~)app.addGroupFilesDialog(), 'primary', ...
+                ['Pick one or more .mat files (typically one per animal) for the group above. ' ...
+                 'Same formats as the Single file tab (LDF segments, LFP / ERP, t + y).']);
+            app.GroupDemoBtn = UIKit.button(b1, 'Try group demo', @(~,~)app.loadGroupDemo(), 'secondary', ...
+                ['Synthetic LDF trials, 3 conditions x 8 animals (the same animals in each): ' ...
+                 'peak hyperemia Control ~18, Stimulated ~30, Drug ~24 PU']);
+            app.GroupInfoLabel = uilabel(c1, 'Text', 'No files yet: add files to at least two groups.', ...
+                'FontSize', T.fontSmall, 'FontColor', T.mutedColor, 'WordWrap', 'on', 'Interpreter', 'none');
+
+            % --- 2 Feature ---
+            c2 = uigridlayout(UIKit.card(left), [2 1], ...
+                'RowHeight', {'fit', 5 * T.controlHeight + 4 * 6}, ...
+                'Padding', [10 8 10 10], 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
+            UIKit.step(c2, 2, 'Feature (one value per subject)');
+            f2 = uigridlayout(c2, [5 2], 'RowHeight', repmat({T.controlHeight}, 1, 5), ...
+                'ColumnWidth', {85, '1x'}, 'Padding', [0 0 0 0], 'RowSpacing', 6, ...
+                'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            app.GroupFeatureMenu = UIKit.field(f2, 'Feature', 'dropdown', ...
+                {app.FeatureItems, 'Peak amplitude'}, ...
+                ['Response feature compared between groups (same definitions as the Single file tab; ' ...
+                 'latency, FWHM, rise and decay in s; amplitude in signal units; AUC in signal x s)']);
+            app.SubjectMenu = UIKit.field(f2, 'Value per', 'dropdown', ...
+                {app.SubjectModes, app.SubjectModes{1}}, ...
+                ['What one subject is. File (mean trace): the feature of the average of the file''s ' ...
+                 'trials (recommended: one animal = one file, less noise). File (mean of series): the ' ...
+                 'mean of the per-trial features. Each series: every trial/channel is a subject.']);
+            app.GroupT0Edit = UIKit.field(f2, 'Onset t0 (s)', 'numeric', 0, ...
+                'Stimulus onset in each trace (s). Features are measured after t0 (0 for segmented LDF).', ...
+                [-1e6 1e6]);
+            uilabel(f2, 'Text', 'Baseline (s)', 'FontSize', T.fontBody, 'FontColor', T.sectionTitleColor, ...
+                'Tooltip', 'Baseline window start and end (s); its mean is the reference level');
+            bl = uigridlayout(f2, [1 2], 'ColumnWidth', {'1x', '1x'}, 'RowHeight', {'1x'}, ...
+                'Padding', [0 0 0 0], 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            app.GroupBaseStartEdit = uieditfield(bl, 'numeric', 'Value', 0, 'Limits', [-1e6 1e6], ...
+                'Tooltip', ['Baseline window start (s). Set automatically to the pre-stimulus part ' ...
+                'when the traces start before t0, until you edit it.']);
+            app.GroupBaseEndEdit = uieditfield(bl, 'numeric', 'Value', 0.05, 'Limits', [-1e6 1e6], ...
+                'Tooltip', 'Baseline window end (s). End <= start: first 0.05 s of each trace.');
+            app.GroupDirectionMenu = UIKit.field(f2, 'Direction', 'dropdown', ...
+                {{'Auto', 'Positive', 'Negative'}, 'Auto'}, ...
+                'Response polarity: Positive (peaks), Negative (troughs) or Auto (larger deflection)');
+            for c = {app.GroupFeatureMenu, app.SubjectMenu, app.GroupDirectionMenu}
+                c{1}.ValueChangedFcn = @(~,~)app.onGroupSettingsChanged();
+            end
+            app.GroupT0Edit.ValueChangedFcn = @(~,~)app.onGroupT0Changed();
+            app.GroupBaseStartEdit.ValueChangedFcn = @(~,~)app.onGroupBaselineEdited();
+            app.GroupBaseEndEdit.ValueChangedFcn = @(~,~)app.onGroupBaselineEdited();
+
+            % --- 3 Statistical test ---
+            c3 = uigridlayout(UIKit.card(left), [4 1], ...
+                'RowHeight', {'fit', 3 * T.controlHeight + 2 * 6, '1x', T.buttonHeight}, ...
+                'Padding', [10 8 10 10], 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
+            UIKit.step(c3, 3, 'Statistical test');
+            f3 = uigridlayout(c3, [3 2], 'RowHeight', repmat({T.controlHeight}, 1, 3), ...
+                'ColumnWidth', {60, '1x'}, 'Padding', [0 0 0 0], 'RowSpacing', 6, ...
+                'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            app.DesignMenu = UIKit.field(f3, 'Design', 'dropdown', {app.Designs, app.Designs{1}}, ...
+                ['Paired: the same animals measured in two conditions (paired t-test / Wilcoxon ' ...
+                 'signed-rank). Unpaired: two independent groups (Welch t-test / Mann-Whitney U). ' ...
+                 'ANOVA: all groups at once (one-way ANOVA + Tukey-Kramer / Kruskal-Wallis).']);
+            app.MethodMenu = UIKit.field(f3, 'Method', 'dropdown', {app.Methods, app.Methods{1}}, ...
+                ['Parametric: t-tests / ANOVA on the values (compare means; assume roughly normal data). ' ...
+                 'Nonparametric: rank-based tests (no normality assumption). The other family is ' ...
+                 'always run too, as a robustness check.']);
+            uilabel(f3, 'Text', 'Compare', 'FontSize', T.fontBody, 'FontColor', T.sectionTitleColor, ...
+                'Tooltip', 'Two-group designs: reference group (A) and compared group (B); difference = B - A');
+            ab = uigridlayout(f3, [1 3], 'ColumnWidth', {'1x', 'fit', '1x'}, 'RowHeight', {'1x'}, ...
+                'Padding', [0 0 0 0], 'ColumnSpacing', 4, 'BackgroundColor', T.cardBg);
+            app.GroupAMenu = uidropdown(ab, 'Items', {'-'}, 'Value', '-', ...
+                'Tooltip', 'Reference group A (e.g. Control); differences are B - A');
+            uilabel(ab, 'Text', 'vs', 'FontSize', T.fontSmall, 'FontColor', T.mutedColor);
+            app.GroupBMenu = uidropdown(ab, 'Items', {'-'}, 'Value', '-', ...
+                'Tooltip', 'Compared group B (e.g. Stimulated)');
+            for c = {app.DesignMenu, app.MethodMenu, app.GroupAMenu, app.GroupBMenu}
+                c{1}.ValueChangedFcn = @(~,~)app.onGroupSettingsChanged();
+            end
+            app.DesignHint = uilabel(c3, 'Text', '', 'FontSize', T.fontSmall, 'FontColor', T.info, ...
+                'WordWrap', 'on', 'VerticalAlignment', 'top');
+            app.RunStatsBtn = UIKit.button(c3, 'Run test', @(~,~)app.runGroupStats(), 'primary', ...
+                ['Compute the feature for every file, run the test and show the Results and Plot tabs ' ...
+                 '(statistic, df, p, effect size, 95% CI, n per group, assumptions)']);
+
+            % --- 4 Export ---
+            c4 = uigridlayout(UIKit.card(left), [3 1], ...
+                'RowHeight', {'fit', T.buttonHeight, T.buttonHeight}, 'Padding', [10 8 10 10], ...
+                'RowSpacing', 6, 'BackgroundColor', T.cardBg);
+            UIKit.step(c4, 4, 'Export');
+            e4 = uigridlayout(c4, [1 2], 'ColumnWidth', {'1x', '1x'}, 'RowHeight', {'1x'}, ...
+                'Padding', [0 0 0 0], 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            fmts = FigureExport.formats();
+            app.FigFormatMenu = uidropdown(e4, 'Items', fmts, 'Value', fmts{1}, ...
+                'Tooltip', ['PDF / SVG / EPS: vector (journals, Illustrator, Inkscape). ' ...
+                'PNG / TIFF: images at 300 or 600 dpi']);
+            app.ExportFigBtn = UIKit.button(e4, ['Export figure' char(8230)], ...
+                @(~,~)app.exportFigureDialog('groups'), 'secondary', ...
+                ['Save the statistics plot as a publication figure (8.5 cm wide, 8 pt Helvetica, ' ...
+                 'white background, no grid). The window itself is not changed.']);
+            app.ExportValuesBtn = UIKit.button(c4, ['Export values & report' char(8230)], ...
+                @(~,~)app.exportGroupResultsDialog(), 'secondary', ...
+                ['.csv: one row per subject (group, subject, value) plus a _report.txt with the ' ...
+                 'test results; .mat: the full result struct']);
+
+            % === RIGHT: Files | Results | Plot ===
+            app.GroupTabs = uitabgroup(g);
+            app.FilesTab = uitab(app.GroupTabs, 'Title', 'Files', 'BackgroundColor', T.cardBg);
+            ft = uigridlayout(app.FilesTab, [2 1], 'RowHeight', {T.buttonHeight, '1x'}, ...
+                'Padding', [8 8 8 8], 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
+            tb = uigridlayout(ft, [1 5], 'ColumnWidth', {110, 110, 90, '1x', 90}, 'RowHeight', {'1x'}, ...
+                'Padding', [0 0 0 0], 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            app.MoveUpBtn = UIKit.button(tb, [char(9650) ' Move up'], ...
+                @(~,~)app.moveGroupFile(app.GroupSelectedRow, -1), 'secondary', ...
+                ['Move the selected file one place up within its group. In paired designs the ' ...
+                 'k-th file of each group is the same animal, so the order sets the pairing.']);
+            app.MoveDownBtn = UIKit.button(tb, [char(9660) ' Move down'], ...
+                @(~,~)app.moveGroupFile(app.GroupSelectedRow, 1), 'secondary', ...
+                'Move the selected file one place down within its group (changes the pairing)');
+            app.RemoveGroupFileBtn = UIKit.button(tb, 'Remove', ...
+                @(~,~)app.removeGroupFile(app.GroupSelectedRow), 'secondary', ...
+                'Remove the selected file from its group');
+            uilabel(tb, 'Text', ['# = subject number within the group. Paired designs match ' ...
+                'subjects by this number (1st with 1st, 2nd with 2nd, ...).'], ...
+                'FontSize', T.fontSmall, 'FontColor', T.mutedColor, 'WordWrap', 'on');
+            app.ClearGroupsBtn = UIKit.button(tb, 'Clear all', @(~,~)app.clearGroups(), 'danger', ...
+                'Remove every file from every group');
+            app.GroupTable = uitable(ft, 'ColumnName', {'#', 'File', 'Group', 'Series', 'Value'}, ...
+                'RowName', {}, 'ColumnEditable', [false false true false false], ...
+                'ColumnWidth', {40, 'auto', 140, 60, 110}, 'FontSize', T.fontBody, ...
+                'Tooltip', ['Click a row to select it (Move / Remove). Double-click a Group cell to ' ...
+                'move the file to another group. Value: the subject value from the last test.'], ...
+                'CellEditCallback', @(~,evt)app.onGroupTableEdit(evt), ...
+                'CellSelectionCallback', @(~,evt)app.onGroupTableSelect(evt));
+
+            app.ResultsTab = uitab(app.GroupTabs, 'Title', 'Results', 'BackgroundColor', T.cardBg);
+            rt = uigridlayout(app.ResultsTab, [4 1], 'RowHeight', {'1x', 'fit', 110, 96}, ...
+                'Padding', [8 8 8 8], 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
+            app.StatsTable = uitable(rt, 'ColumnName', {'Quantity', 'Value'}, 'RowName', {}, ...
+                'ColumnWidth', {170, 'auto'}, 'FontSize', T.fontBody, ...
+                'Tooltip', 'Result of the last test (two-sided p-values; differences are B - A)');
+            uilabel(rt, 'Text', 'Pairwise comparisons', 'FontSize', T.fontBody, 'FontWeight', 'bold', ...
+                'FontColor', T.sectionTitleColor);
+            app.PostHocTable = uitable(rt, 'ColumnName', {'Comparison', 'Difference', '95% CI', 'p', 'Method'}, ...
+                'RowName', {}, 'ColumnWidth', {180, 90, 150, 110, 'auto'}, 'FontSize', T.fontBody, ...
+                'Tooltip', ['Two groups: the tested difference. ANOVA: every pair (Tukey-Kramer p and ' ...
+                'family-wise 95% CI); Kruskal-Wallis: Holm-corrected Mann-Whitney p (median differences)']);
+            app.ReportText = uitextarea(rt, 'Editable', 'off', 'FontSize', T.fontSmall, ...
+                'Value', {'Run a test (step 3) to see a copy-ready summary and the assumptions here.'}, ...
+                'Tooltip', 'Copy-ready summary, assumptions and (paired designs) the list of pairs');
+
+            app.PlotTab = uitab(app.GroupTabs, 'Title', 'Plot', 'BackgroundColor', T.cardBg);
+            pt = uigridlayout(app.PlotTab, [3 3], 'RowHeight', {T.controlHeight, '1x', 'fit'}, ...
+                'ColumnWidth', {'fit', 190, '1x'}, 'Padding', [8 8 8 8], 'RowSpacing', 6, ...
+                'BackgroundColor', T.cardBg);
+            uilabel(pt, 'Text', 'Style:', 'FontSize', T.fontBody, 'FontColor', T.sectionTitleColor);
+            app.PlotStyleMenu = uidropdown(pt, 'Items', app.PlotStyles, 'Value', app.PlotStyles{1}, ...
+                'Tooltip', ['Mean ± SEM (bar and whiskers) or box plot (median, quartiles, whiskers to ' ...
+                'the most extreme value within 1.5 IQR); every subject is always shown'], ...
+                'ValueChangedFcn', @(~,~)app.plotGroupStats());
+            uilabel(pt, 'Text', ['Dots: subjects · grey lines: pairs · brackets: tested differences ' ...
+                '(* p<0.05, ** p<0.01, *** p<0.001)'], 'FontSize', T.fontSmall, ...
+                'FontColor', T.mutedColor, 'HorizontalAlignment', 'right');
+            app.StatsAxes = uiaxes(pt);
+            app.StatsAxes.Layout.Row = 2; app.StatsAxes.Layout.Column = [1 3];
+            UIKit.emptyAxes(app.StatsAxes, 'Add files to two or more groups (or Try group demo), then Run test');
+            app.StatsSummaryLabel = uilabel(pt, 'Text', '', 'FontSize', T.fontSmall, ...
+                'FontColor', T.sectionTitleColor, 'WordWrap', 'on', 'Interpreter', 'none');
+            app.StatsSummaryLabel.Layout.Row = 3; app.StatsSummaryLabel.Layout.Column = [1 3];
+
+            app.refreshGroups();
         end
 
         %% updateControls - Enable state of every control from the current data
@@ -201,6 +486,46 @@ classdef SignalCharacterizationApp < handle
             else
                 app.ResultsLabel.Text = 'No results yet';
             end
+            app.SeriesFigFormatMenu.Enable = onOff{hasSeries + 1};
+            app.SeriesExportFigBtn.Enable = onOff{hasSeries + 1};
+
+            % --- Groups & statistics ---
+            names = app.groupNames();
+            hasGF = ~isempty(app.GroupFiles);
+            isAnova = strcmp(app.designKey(), 'anova');
+            twoOk = numel(names) >= 2 && ~strcmp(app.GroupAMenu.Value, app.GroupBMenu.Value);
+            canRun = numel(names) >= 2 && (isAnova || twoOk);
+            hasGR = ~isempty(app.GroupResult);
+            row = app.GroupSelectedRow;
+            hasSel = hasGF && ~isempty(row) && row >= 1 && row <= numel(app.GroupFiles);
+            for c = {app.GroupFeatureMenu, app.SubjectMenu, app.GroupT0Edit, app.GroupBaseStartEdit, ...
+                    app.GroupBaseEndEdit, app.GroupDirectionMenu, app.DesignMenu, app.MethodMenu}
+                c{1}.Enable = onOff{hasGF + 1};
+            end
+            app.GroupAMenu.Enable = onOff{(~isAnova && numel(names) >= 2) + 1};
+            app.GroupBMenu.Enable = app.GroupAMenu.Enable;
+            app.RunStatsBtn.Enable = onOff{canRun + 1};
+            app.ClearGroupsBtn.Enable = onOff{hasGF + 1};
+            app.RemoveGroupFileBtn.Enable = onOff{hasSel + 1};
+            app.MoveUpBtn.Enable = onOff{(hasSel && ~isempty(app.neighbourInGroup(row, -1))) + 1};
+            app.MoveDownBtn.Enable = onOff{(hasSel && ~isempty(app.neighbourInGroup(row, 1))) + 1};
+            app.FigFormatMenu.Enable = onOff{hasGR + 1};
+            app.ExportFigBtn.Enable = onOff{hasGR + 1};
+            app.ExportValuesBtn.Enable = onOff{hasGR + 1};
+            % Primary style follows the recommended next action
+            styleBtn(app.AddGroupFilesBtn, numel(names) < 2);
+            styleBtn(app.RunStatsBtn, canRun && (~hasGR || app.GroupStale));
+            styleBtn(app.ExportFigBtn, hasGR && ~app.GroupStale);
+            if ~hasGF
+                app.GroupInfoLabel.Text = 'No files yet: add files to at least two groups.';
+            else
+                counts = cellfun(@(nm) sum(strcmp({app.GroupFiles.group}, nm)), names);
+                parts = arrayfun(@(i) sprintf('%s %d', names{i}, counts(i)), 1:numel(names), ...
+                    'UniformOutput', false);
+                app.GroupInfoLabel.Text = sprintf('%d file(s) in %d group(s): %s', ...
+                    numel(app.GroupFiles), numel(names), strjoin(parts, ', '));
+            end
+            app.DesignHint.Text = app.designHintText();
         end
 
         %% loadData - Pick a .mat, detect its format, parse series and plot the first
@@ -407,18 +732,10 @@ classdef SignalCharacterizationApp < handle
             dlg = UIKit.busy(app.UIFig, sprintf('Extracting features from %d series...', numel(tCell)));
             UIKit.setStatus(app.W.Status, 'Extracting features', 'busy');
 
-            % Compute features for each series
+            % Compute the selected features for each series (NaN = not selected)
             nSkipped = 0;
             names = {};
-            peakLat = [];
-            onsetD = [];
-            fwhm_ = [];
-            aucP = [];
-            aucN = [];
-            riseT = [];
-            decT = [];
-            peakA = [];
-            integral_ = [];
+            rows = zeros(0, numel(app.FeatureItems));
 
             try
                 for k = 1:numel(tCell)
@@ -432,37 +749,13 @@ classdef SignalCharacterizationApp < handle
                     baseVal = seriesBaseline(t, y, baseline, app.T0);
                     dirn = seriesDirection(t, y, baseVal, app.T0, app.DirectionMenu.Value);
                     names{end+1} = app.SeriesNames{k}; %#ok<AGROW>
-
-                    if ismember('Peak latency', selected)
-                        [lat, ~] = SignalFeatures.peakLatency(t, y, app.T0, dirn);
-                        peakLat(end+1) = lat; %#ok<AGROW>
-                    else, peakLat(end+1) = NaN; end %#ok<AGROW>
-                    if ismember('Onset delay (50%)', selected)
-                        onsetD(end+1) = SignalFeatures.onsetDelay(t, y, app.T0, 0.5, dirn, baseVal); %#ok<AGROW>
-                    else, onsetD(end+1) = NaN; end %#ok<AGROW>
-                    if ismember('FWHM', selected)
-                        fwhm_(end+1) = SignalFeatures.fwhm(t, y, app.T0, dirn, baseVal); %#ok<AGROW>
-                    else, fwhm_(end+1) = NaN; end %#ok<AGROW>
-                    if ismember('AUC positive', selected)
-                        aucP(end+1) = SignalFeatures.aucPositive(t, y, baseVal); %#ok<AGROW>
-                    else, aucP(end+1) = NaN; end %#ok<AGROW>
-                    if ismember('AUC negative', selected)
-                        aucN(end+1) = SignalFeatures.aucNegative(t, y, baseVal); %#ok<AGROW>
-                    else, aucN(end+1) = NaN; end %#ok<AGROW>
-                    if ismember('Rise time', selected)
-                        riseT(end+1) = SignalFeatures.riseTime(t, y, app.T0, dirn, baseVal); %#ok<AGROW>
-                    else, riseT(end+1) = NaN; end %#ok<AGROW>
-                    if ismember('Decay time', selected)
-                        decT(end+1) = SignalFeatures.decayTime(t, y, app.T0, dirn, baseVal); %#ok<AGROW>
-                    else, decT(end+1) = NaN; end %#ok<AGROW>
-                    if ismember('Peak amplitude', selected)
-                        [amp, ~] = SignalFeatures.peakAmplitude(t, y, app.T0, dirn, baseVal);
-                        peakA(end+1) = amp; %#ok<AGROW>
-                    else, peakA(end+1) = NaN; end %#ok<AGROW>
-                    if ismember('Stim–response integral', selected)
-                        stim = zeros(size(y)); stim(t >= app.T0) = 1;
-                        integral_(end+1) = SignalFeatures.stimResponseIntegration(t, stim, y, app.T0); %#ok<AGROW>
-                    else, integral_(end+1) = NaN; end %#ok<AGROW>
+                    vals = NaN(1, numel(app.FeatureItems));
+                    for f = 1:numel(app.FeatureItems)
+                        if ismember(app.FeatureItems{f}, selected)
+                            vals(f) = computeFeature(app.FeatureItems{f}, t, y, app.T0, baseVal, dirn);
+                        end
+                    end
+                    rows(end+1, :) = vals; %#ok<AGROW>
                 end
             catch ME
                 UIKit.done(dlg);
@@ -472,9 +765,8 @@ classdef SignalCharacterizationApp < handle
             end
             UIKit.done(dlg);
 
-            app.ResultsTable.Data = [names(:), num2cell(peakLat(:)), num2cell(onsetD(:)), ...
-                num2cell(fwhm_(:)), num2cell(aucP(:)), num2cell(aucN(:)), ...
-                num2cell(riseT(:)), num2cell(decT(:)), num2cell(peakA(:)), num2cell(integral_(:))];
+            % Columns in FeatureItems order: Trial_Channel, PeakLatency_s, ..., Integral
+            app.ResultsTable.Data = [names(:), num2cell(rows)];
             app.HasResults = ~isempty(names);
             app.NFeatures = numel(selected);
             app.plotSelected();
@@ -554,43 +846,7 @@ classdef SignalCharacterizationApp < handle
         end
 
         function [tCell, yCell] = getTimeSeriesFromData(app, dt)
-            tCell = {};
-            yCell = {};
-            s = app.Data;
-            if contains(dt, 'LDF segments')
-                if ~isfield(s, 'segmentedLDF') || ~isfield(s, 'segmentedTime')
-                    return;
-                end
-                seg = s.segmentedLDF;
-                t = s.segmentedTime(1,:);
-                for i = 1:size(seg, 1)
-                    tCell{end+1} = t; %#ok<AGROW>
-                    yCell{end+1} = seg(i,:); %#ok<AGROW>
-                end
-            elseif contains(dt, 'ERP') || contains(dt, 'average')
-                % ExtractEphysApp saves the LFP time vector as 't_lfp'
-                if isfield(s, 't'), tv = s.t; elseif isfield(s, 't_lfp'), tv = s.t_lfp; else, tv = []; end
-                if ~isempty(tv) && isfield(s, 'lfp_data')
-                    y = mean(s.lfp_data, 1);
-                    tCell = {tv(:)'};
-                    yCell = {y(:)'};
-                elseif isfield(s, 't') && isfield(s, 'y')
-                    tCell = {s.t(:)'};
-                    yCell = {s.y(:)'};
-                else
-                    return;
-                end
-            else
-                if isfield(s, 't') && isfield(s, 'y')
-                    tCell = {s.t(:)'};
-                    yCell = {s.y(:)'};
-                elseif isfield(s, 't') && isfield(s, 'LDF')
-                    tCell = {s.t(:)'};
-                    yCell = {s.LDF(:)'};
-                else
-                    return;
-                end
-            end
+            [tCell, yCell] = parseSeriesStruct(app.Data, dt);
         end
 
         function exportResults(app)
@@ -620,6 +876,803 @@ classdef SignalCharacterizationApp < handle
                 UIKit.setStatus(app.W.Status, 'Export failed', 'error');
                 UIKit.alert(app.UIFig, sprintf('Export failed: %s', ME.message), 'Export');
             end
+        end
+
+        %% ================= Groups & statistics ==========================
+
+        %% onModeChanged - Tab switched: say what to do next in that mode
+        function onModeChanged(app)
+            if app.ModeTabs.SelectedTab == app.GroupsTab
+                if isempty(app.GroupFiles)
+                    UIKit.setStatus(app.W.Status, ['Groups & statistics: choose a group name and click ' ...
+                        'Add files (step 1), or click Try group demo.'], 'info');
+                elseif numel(app.groupNames()) < 2
+                    UIKit.setStatus(app.W.Status, 'Add files to a second group (type its name in step 1).', 'info');
+                elseif isempty(app.GroupResult) || app.GroupStale
+                    UIKit.setStatus(app.W.Status, 'Choose the feature and the design, then click Run test (step 3).', 'info');
+                end
+            end
+            app.updateControls();
+        end
+
+        %% addGroupFilesDialog - Pick .mat files for the group named in step 1
+        function addGroupFilesDialog(app)
+            groupName = strtrim(char(app.GroupNameMenu.Value));
+            if isempty(groupName)
+                UIKit.alert(app.UIFig, 'Type or choose a group name first (step 1).', 'Group name', 'warning');
+                return;
+            end
+            startDir = ProjectManager.getImportDir();
+            if isempty(startDir), startDir = ProjectManager.getExportDir(); end
+            if isempty(startDir), startDir = pwd; end
+            [file, path] = uigetfile(fullfile(startDir, '*.mat'), ...
+                sprintf('Files for group "%s" (e.g. one per animal)', groupName), 'MultiSelect', 'on');
+            figure(app.UIFig);
+            if isequal(file, 0), return; end
+            % Alphabetical order (animal01, animal02, ...) sets the subject numbers
+            file = sort(cellstr(file));
+            app.addGroupFiles(fullfile(path, file), groupName);
+        end
+
+        %% addGroupFiles - Add .mat files to a group without dialogs; true if any was added
+        % paths: char, string or cell array of paths; groupName: text (default:
+        % the Group field). Files are read as in the Single file tab (same
+        % formats); files that cannot be read are listed and skipped. The
+        % order of paths sets the subject numbers used to pair files.
+        function ok = addGroupFiles(app, paths, groupName)
+            ok = false;
+            if nargin < 3 || isempty(groupName), groupName = app.GroupNameMenu.Value; end
+            groupName = strtrim(char(groupName));
+            if isempty(groupName)
+                UIKit.alert(app.UIFig, 'Type or choose a group name first (step 1).', 'Group name', 'warning');
+                return;
+            end
+            paths = cellstr(paths);
+            nAdded = 0;
+            failed = {};
+            UIKit.setStatus(app.W.Status, sprintf('Reading %d file(s) for %s', numel(paths), groupName), 'busy');
+            dlg = UIKit.busy(app.UIFig, sprintf('Reading %d file(s) for %s%s', numel(paths), groupName, char(8230)));
+            for i = 1:numel(paths)
+                [~, nm, ext] = fileparts(paths{i});
+                try
+                    s = load(paths{i});
+                    dt = detectDataType(s);
+                    if isempty(dt)
+                        error('NeuroAnalyzer:SignalCharacterization:format', ...
+                            'no supported variables (found: %s)', strjoin(fieldnames(s), ', '));
+                    end
+                    [tc, yc] = parseSeriesStruct(s, dt);
+                    if isempty(tc)
+                        error('NeuroAnalyzer:SignalCharacterization:format', 'no series found');
+                    end
+                catch ME
+                    failed{end + 1} = sprintf('%s: %s', [nm ext], ME.message); %#ok<AGROW>
+                    continue;
+                end
+                entry = struct('path', paths{i}, 'name', [nm ext], 'group', groupName, ...
+                    'dataType', dt, 'T', {tc}, 'Y', {yc}, 'nSeries', numel(tc), 'value', NaN);
+                app.GroupFiles(end + 1, 1) = entry;
+                nAdded = nAdded + 1;
+            end
+            UIKit.done(dlg);
+            if nAdded > 0 && ~any(strcmp(app.GroupOrder, groupName))
+                app.GroupOrder{end + 1} = groupName;
+            end
+            if nAdded > 0
+                app.markGroupStale();
+                app.applyGroupBaselineDefault();
+                app.refreshGroups();
+                app.GroupNameMenu.Value = groupName;
+                app.ModeTabs.SelectedTab = app.GroupsTab;
+                app.GroupTabs.SelectedTab = app.FilesTab;
+                if numel(app.groupNames()) < 2
+                    msg = sprintf(['Added %d file(s) to %s. Add files to a second group ' ...
+                        '(type its name in step 1).'], nAdded, groupName);
+                else
+                    msg = sprintf(['Added %d file(s) to %s. Choose the feature and the design, ' ...
+                        'then click Run test (step 3).'], nAdded, groupName);
+                end
+                if isempty(failed)
+                    UIKit.setStatus(app.W.Status, msg, 'success');
+                else
+                    UIKit.setStatus(app.W.Status, sprintf('%s %d file(s) skipped.', msg, numel(failed)), 'warning');
+                end
+                ok = true;
+            else
+                UIKit.setStatus(app.W.Status, 'No file added: none could be read', 'error');
+            end
+            if ~isempty(failed)
+                UIKit.alert(app.UIFig, sprintf(['These files were skipped (expected segmentedLDF + ' ...
+                    'segmentedTime, lfp_data + t_lfp, or t + y):\n%s'], strjoin(failed, newline)), ...
+                    'Add files', 'warning');
+            end
+        end
+
+        %% removeGroupFile - Remove file idx (row of the Files table); true on success
+        function ok = removeGroupFile(app, idx)
+            ok = false;
+            if isempty(idx) || idx < 1 || idx > numel(app.GroupFiles), return; end
+            name = app.GroupFiles(idx).name;
+            app.GroupFiles(idx) = [];
+            app.GroupSelectedRow = [];
+            app.markGroupStale();
+            app.refreshGroups();
+            UIKit.setStatus(app.W.Status, sprintf('Removed %s.', name), 'info');
+            ok = true;
+        end
+
+        %% moveGroupFile - Swap file idx with the previous (-1) or next (+1) file of its group
+        % Changes the subject numbers, i.e. the pairing in paired designs.
+        function ok = moveGroupFile(app, idx, delta)
+            ok = false;
+            j = app.neighbourInGroup(idx, delta);
+            if isempty(j), return; end
+            moved = app.GroupFiles(idx);
+            app.GroupFiles(idx) = app.GroupFiles(j);
+            app.GroupFiles(j) = moved;
+            app.GroupSelectedRow = j;
+            app.markGroupStale();
+            app.refreshGroups();
+            k = sum(strcmp({app.GroupFiles(1:j).group}, moved.group));
+            UIKit.setStatus(app.W.Status, sprintf('%s is now subject %d of %s.', moved.name, k, moved.group), 'info');
+            ok = true;
+        end
+
+        %% neighbourInGroup - Index of the previous/next file of the same group ([] if none)
+        function j = neighbourInGroup(app, idx, delta)
+            j = [];
+            if isempty(idx) || idx < 1 || idx > numel(app.GroupFiles), return; end
+            same = find(strcmp({app.GroupFiles.group}, app.GroupFiles(idx).group));
+            k = find(same == idx, 1) + delta;
+            if k >= 1 && k <= numel(same), j = same(k); end
+        end
+
+        %% clearGroups - Remove every group file and the last result
+        function clearGroups(app)
+            app.GroupFiles = app.GroupFiles([]);
+            app.GroupOrder = {};
+            app.GroupResult = [];
+            app.GroupStale = false;
+            app.GroupSelectedRow = [];
+            app.GroupBaselineAuto = true;
+            app.GroupDemo = [];
+            app.refreshGroups();
+            app.showGroupResults();
+            app.plotGroupStats();
+            UIKit.setStatus(app.W.Status, 'Groups cleared. Add files (step 1) or click Try group demo.', 'info');
+        end
+
+        %% loadGroupDemo - Demo files for 3 conditions x 8 animals; paired test preselected
+        % core/demo/demoGroups: the same 8 animals in Control, Stimulated and
+        % Drug (true peak hyperemia 18, 30 and 24 PU). Sets feature Peak
+        % amplitude (file mean trace), t0 = 0, baseline -5..0 s, design
+        % Paired, Control vs Stimulated. Returns true on success.
+        function ok = loadGroupDemo(app)
+            ok = false;
+            dlg = UIKit.busy(app.UIFig, sprintf('Writing demo group files (3 conditions x 8 animals)%s', char(8230)));
+            UIKit.setStatus(app.W.Status, 'Preparing group demo data', 'busy');
+            try
+                ensureDemoPath();
+                demo = demoGroups();
+            catch ME
+                UIKit.done(dlg);
+                UIKit.setStatus(app.W.Status, sprintf('Group demo failed: %s', ME.message), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not create the group demo data: %s', ME.message), 'Group demo');
+                return;
+            end
+            UIKit.done(dlg);
+            app.clearGroups();
+            app.GroupFeatureMenu.Value = 'Peak amplitude';
+            app.SubjectMenu.Value = app.SubjectModes{1};
+            app.GroupT0Edit.Value = 0;
+            app.GroupDirectionMenu.Value = 'Auto';
+            app.DesignMenu.Value = app.Designs{1};
+            app.MethodMenu.Value = app.Methods{1};
+            for c = 1:numel(demo.conditions)
+                if ~app.addGroupFiles(demo.paths{c}, demo.conditions{c}), return; end
+            end
+            app.GroupDemo = demo;
+            app.GroupAMenu.Value = demo.conditions{1};
+            app.GroupBMenu.Value = demo.conditions{2};
+            app.updateControls();
+            app.ModeTabs.SelectedTab = app.GroupsTab;
+            app.GroupTabs.SelectedTab = app.FilesTab;
+            UIKit.setStatus(app.W.Status, sprintf(['Group demo loaded: %d animals x 3 conditions, the same ' ...
+                'animals in each (true peak hyperemia Control 18, Stimulated 30, Drug 24 PU). Click Run test: ' ...
+                'paired Stimulated vs Control should give about +12 PU with p < 0.001.'], ...
+                demo.truth.nAnimals), 'success');
+            ok = true;
+        end
+
+        %% runGroupStats - Compute the feature per subject and run the test (no dialogs)
+        % All arguments optional (default: the current fields):
+        %   feature  one of the feature names, e.g. 'Peak amplitude'
+        %   design   'paired' | 'unpaired' | 'anova' (or a Design menu item)
+        %   method   'parametric' | 'nonparametric' (or a Method menu item)
+        %   pair     {groupA, groupB} for two-group designs (difference B - A)
+        % Result in app.GroupResult (GroupStats.compare output plus feature,
+        % labels, settings). Returns true when the test ran.
+        function ok = runGroupStats(app, feature, design, method, pair)
+            ok = false;
+            try
+                if nargin >= 2 && ~isempty(feature)
+                    app.GroupFeatureMenu.Value = pickItem(feature, app.FeatureItems, app.FeatureItems, 'feature');
+                end
+                if nargin >= 3 && ~isempty(design)
+                    app.DesignMenu.Value = pickItem(design, app.Designs, app.DesignKeys, 'design');
+                end
+                if nargin >= 4 && ~isempty(method)
+                    app.MethodMenu.Value = pickItem(method, app.Methods, app.MethodKeys, 'method');
+                end
+                names = app.groupNames();
+                if nargin >= 5 && ~isempty(pair)
+                    pair = cellstr(pair);
+                    app.GroupAMenu.Value = pickItem(pair{1}, names, names, 'group');
+                    app.GroupBMenu.Value = pickItem(pair{2}, names, names, 'group');
+                end
+            catch ME
+                UIKit.setStatus(app.W.Status, ME.message, 'error');
+                UIKit.alert(app.UIFig, ME.message, 'Group statistics');
+                return;
+            end
+            app.updateControls();
+            names = app.groupNames();
+            if numel(names) < 2
+                UIKit.setStatus(app.W.Status, 'Add files to at least two groups first (step 1).', 'error');
+                UIKit.alert(app.UIFig, 'Add files to at least two groups first (step 1), or click Try group demo.', ...
+                    'Group statistics');
+                return;
+            end
+            dkey = app.designKey();
+            if strcmp(dkey, 'anova')
+                use = names;
+            else
+                use = {app.GroupAMenu.Value, app.GroupBMenu.Value};
+                if strcmp(use{1}, use{2})
+                    UIKit.alert(app.UIFig, 'Choose two different groups to compare (step 3).', 'Group statistics');
+                    return;
+                end
+            end
+            feature = app.GroupFeatureMenu.Value;
+            dlg = UIKit.busy(app.UIFig, sprintf('Computing %s for %d file(s) and running the test%s', ...
+                lower(feature), numel(app.GroupFiles), char(8230)));
+            UIKit.setStatus(app.W.Status, 'Running group statistics', 'busy');
+            try
+                [vals, labels] = app.computeGroupValues(feature, use);
+                res = GroupStats.compare(vals, use, dkey, app.methodKey());
+            catch ME
+                UIKit.done(dlg);
+                app.refreshGroups();
+                UIKit.setStatus(app.W.Status, sprintf('Test not run: %s', ME.message), 'error');
+                UIKit.alert(app.UIFig, ME.message, 'Group statistics');
+                return;
+            end
+            UIKit.done(dlg);
+            % Labels of the subjects actually analysed (same exclusions as compare)
+            if strcmp(dkey, 'paired')
+                keep = isfinite(vals{1}) & isfinite(vals{2});
+                labels = {labels{1}(keep), labels{2}(keep)};
+            else
+                labels = cellfun(@(l, v) l(isfinite(v)), labels, vals, 'UniformOutput', false);
+            end
+            res.labels = labels;
+            res.feature = feature;
+            res.subjectMode = app.SubjectMenu.Value;
+            res.designLabel = app.DesignMenu.Value;
+            res.unit = app.groupUnit();
+            res.settings = struct('t0', app.GroupT0Edit.Value, ...
+                'baseline', [app.GroupBaseStartEdit.Value, app.GroupBaseEndEdit.Value], ...
+                'direction', app.GroupDirectionMenu.Value);
+            app.GroupResult = res;
+            app.GroupStale = false;
+            app.refreshGroups();
+            app.showGroupResults();
+            app.plotGroupStats();
+            app.ModeTabs.SelectedTab = app.GroupsTab;
+            app.GroupTabs.SelectedTab = app.PlotTab;
+            app.updateControls();
+            UIKit.setStatus(app.W.Status, [res.summary ' Next: Export figure (step 4).'], 'success');
+            ok = true;
+        end
+
+        %% computeGroupValues - One value per subject for the groups in groupList
+        % vals / labels: cell per group (column vectors / cellstr). Also stores
+        % each file's value (file modes) for the Files table.
+        function [vals, labels] = computeGroupValues(app, feature, groupList)
+            t0 = app.GroupT0Edit.Value;
+            bl = [app.GroupBaseStartEdit.Value, app.GroupBaseEndEdit.Value];
+            if bl(2) <= bl(1), bl = []; end
+            dirChoice = app.GroupDirectionMenu.Value;
+            subjMode = app.subjectModeKey();
+            nF = numel(app.GroupFiles);
+            perFile = cell(nF, 1);
+            perLbl = cell(nF, 1);
+            for i = 1:nF
+                gf = app.GroupFiles(i);
+                fileVal = NaN;
+                handled = false;
+                if strcmp(subjMode, 'meantrace')
+                    [tm, ym, same] = meanTrace(gf.T, gf.Y);
+                    if same
+                        fileVal = seriesFeature(feature, tm, ym, t0, bl, dirChoice);
+                        handled = true;
+                    end
+                end
+                if ~handled
+                    v = NaN(gf.nSeries, 1);
+                    for k = 1:gf.nSeries
+                        v(k) = seriesFeature(feature, gf.T{k}, gf.Y{k}, t0, bl, dirChoice);
+                    end
+                    if strcmp(subjMode, 'series')
+                        perFile{i} = v;
+                        perLbl{i} = arrayfun(@(k) sprintf('%s #%d', gf.name, k), (1:gf.nSeries)', ...
+                            'UniformOutput', false);
+                        app.GroupFiles(i).value = NaN;
+                        continue;
+                    end
+                    fin = v(isfinite(v));
+                    if ~isempty(fin), fileVal = mean(fin); end
+                end
+                perFile{i} = fileVal;
+                perLbl{i} = {gf.name};
+                app.GroupFiles(i).value = fileVal;
+            end
+            groups = {app.GroupFiles.group};
+            vals = cell(1, numel(groupList));
+            labels = cell(1, numel(groupList));
+            for g = 1:numel(groupList)
+                idx = find(strcmp(groups, groupList{g}));
+                vals{g} = vertcat(perFile{idx});
+                labels{g} = vertcat(perLbl{idx});
+            end
+        end
+
+        %% showGroupResults - Fill the Results tab from GroupResult
+        function showGroupResults(app)
+            r = app.GroupResult;
+            if isempty(r)
+                app.StatsTable.Data = {};
+                app.PostHocTable.Data = {};
+                app.ReportText.Value = {'Run a test (step 3) to see a copy-ready summary and the assumptions here.'};
+                return;
+            end
+            m = r.main;
+            names = r.groupNames;
+            per = @(f) strjoin(arrayfun(@(i) f(i), 1:numel(names), 'UniformOutput', false), '  ·  ');
+            nTxt = per(@(i) sprintf('%s %d', names{i}, r.desc(i).n));
+            if strcmp(r.design, 'paired'), nTxt = sprintf('%s  (%d pairs)', nTxt, r.desc(1).n); end
+            if numel(m.df) == 2
+                dfTxt = sprintf('%g, %g', m.df(1), m.df(2));
+            elseif isnan(m.df)
+                dfTxt = char(8212);
+            else
+                dfTxt = sprintf('%.4g', m.df);
+            end
+            effTxt = sprintf('%s = %.3g', m.effectName, m.effect);
+            if ~isempty(m.effect2Name), effTxt = sprintf('%s;  %s = %.3g', effTxt, m.effect2Name, m.effect2); end
+            if r.checkAgrees, agree = 'consistent'; else, agree = 'DISAGREES: interpret with care'; end
+            rows = {
+                'Test', sprintf('%s (%s)', m.test, m.method)
+                'Design', r.designLabel
+                'Feature', sprintf('%s (%s), value per %s', r.feature, r.unit, lower(r.subjectMode))
+                'n per group', nTxt
+                'Mean ± SD', per(@(i) sprintf('%s %.4g ± %.3g', names{i}, r.desc(i).mean, r.desc(i).sd))
+                'Mean ± SEM', per(@(i) sprintf('%s %.4g ± %.3g', names{i}, r.desc(i).mean, r.desc(i).sem))
+                'Median [IQR]', per(@(i) sprintf('%s %.4g [%.4g, %.4g]', names{i}, r.desc(i).median, r.desc(i).q1, r.desc(i).q3))
+                'Statistic', GroupStats.statText(m)
+                'df', dfTxt
+                'p (two-sided)', sprintf('%.4g   %s', m.p, GroupStats.stars(m.p))
+                'Effect size', effTxt};
+            if ~strcmp(r.design, 'anova')
+                c = r.comparisons(1);
+                if all(isfinite(c.ci))
+                    rows(end + 1, :) = {'Difference [95% CI]', sprintf('%s = %.4g [%.4g, %.4g]', c.label, c.diff, c.ci(1), c.ci(2))};
+                else
+                    rows(end + 1, :) = {'Median difference', sprintf('%s = %.4g', c.label, c.diff)};
+                end
+            end
+            rows(end + 1, :) = {'Robustness check', sprintf('%s: %s, %s = %.3g (%s)', r.check.test, ...
+                GroupStats.formatP(r.check.p), r.check.effectName, r.check.effect, agree)};
+            rows(end + 1, :) = {'Assumptions', r.assumptions};
+            app.StatsTable.Data = rows;
+            ph = r.comparisons;
+            data = cell(numel(ph), 5);
+            for i = 1:numel(ph)
+                if all(isfinite(ph(i).ci))
+                    ciTxt = sprintf('[%.4g, %.4g]', ph(i).ci(1), ph(i).ci(2));
+                else
+                    ciTxt = char(8212);
+                end
+                data(i, :) = {ph(i).label, sprintf('%.4g', ph(i).diff), ciTxt, ...
+                    sprintf('%.4g  %s', ph(i).p, GroupStats.stars(ph(i).p)), ph(i).method};
+            end
+            app.PostHocTable.Data = data;
+            app.ReportText.Value = app.reportLines();
+        end
+
+        %% reportLines - Copy-ready summary, assumptions, settings and pairs
+        function lines = reportLines(app)
+            r = app.GroupResult;
+            if isempty(r), lines = {}; return; end
+            s = r.settings;
+            if r.checkAgrees, agree = 'consistent with the main test'; else, agree = 'disagrees with the main test'; end
+            lines = {r.summary; ''; ['Assumptions: ' r.assumptions]; ''; ...
+                sprintf('Robustness check: %s, %s (%s).', r.check.test, GroupStats.formatP(r.check.p), agree); ''; ...
+                sprintf('Feature: %s (%s), value per %s; t0 = %g s; baseline %g to %g s; direction %s.', ...
+                r.feature, r.unit, lower(r.subjectMode), s.t0, s.baseline(1), s.baseline(2), s.direction)};
+            if strcmp(r.design, 'paired')
+                lines{end + 1, 1} = '';
+                lines{end + 1, 1} = sprintf('Pairs (matched by subject number): %s  %s  %s', ...
+                    r.groupNames{1}, char(8596), r.groupNames{2});
+                for j = 1:numel(r.labels{1})
+                    lines{end + 1, 1} = sprintf('  %d: %s  %s  %s', j, r.labels{1}{j}, char(8596), r.labels{2}{j}); %#ok<AGROW>
+                end
+            end
+        end
+
+        %% plotGroupStats - Subjects, pairs, mean ± SEM or box, significance brackets
+        function plotGroupStats(app)
+            T = UITheme;
+            ax = app.StatsAxes;
+            r = app.GroupResult;
+            if isempty(r)
+                UIKit.emptyAxes(ax, 'Add files to two or more groups (or Try group demo), then Run test');
+                app.StatsSummaryLabel.Text = '';
+                return;
+            end
+            cla(ax, 'reset');
+            hold(ax, 'on');
+            k = numel(r.groupNames);
+            isBox = strncmpi(app.PlotStyleMenu.Value, 'Box', 3);
+            allv = vertcat(r.values{:});
+            lo = min(allv); hi = max(allv);
+            span = hi - lo;
+            if ~(span > 0), span = max(abs(hi), 1); end
+            dark = T.sectionTitleColor;
+            offs = cellfun(@(v) jitterOffsets(numel(v)), r.values, 'UniformOutput', false);
+            % Paired lines under the points (subject j of A with subject j of B)
+            if strcmp(r.design, 'paired')
+                a = r.values{1}; b = r.values{2};
+                for j = 1:numel(a)
+                    plot(ax, [1 2] + offs{1}(j), [a(j) b(j)], '-', 'Color', [0.74 0.76 0.80], 'LineWidth', 0.8);
+                end
+            end
+            for i = 1:k
+                v = r.values{i};
+                d = r.desc(i);
+                c = T.plotColors(mod(i - 1, size(T.plotColors, 1)) + 1, :);
+                if isBox && d.n >= 1
+                    patch(ax, i + [-0.22 0.22 0.22 -0.22], [d.q1 d.q1 d.q3 d.q3], 0.25 * c + 0.75, ...
+                        'EdgeColor', c, 'LineWidth', 1);
+                    plot(ax, i + [-0.22 0.22], [d.median d.median], '-', 'Color', 0.7 * c, 'LineWidth', 2);
+                    wLo = min(v(v >= d.q1 - 1.5 * d.iqr));
+                    wHi = max(v(v <= d.q3 + 1.5 * d.iqr));
+                    plot(ax, [i i NaN i i], [d.q3 wHi NaN d.q1 wLo], '-', 'Color', c, 'LineWidth', 1);
+                    plot(ax, [i - 0.08, i + 0.08, NaN, i - 0.08, i + 0.08], [wHi wHi NaN wLo wLo], '-', ...
+                        'Color', c, 'LineWidth', 1);
+                end
+                if ~isempty(v)
+                    scatter(ax, i + offs{i}, v, 40, c, 'filled', 'MarkerEdgeColor', [1 1 1], 'LineWidth', 0.5);
+                end
+                if ~isBox && isfinite(d.mean)
+                    plot(ax, i + [-0.26 0.26], [d.mean d.mean], '-', 'Color', dark, 'LineWidth', 2);
+                    if isfinite(d.sem)
+                        errorbar(ax, i, d.mean, d.sem, 'Color', dark, 'LineWidth', 1.5, 'CapSize', 10);
+                    end
+                end
+            end
+            % Significance brackets: the tested difference, or significant post-hoc pairs
+            comps = r.comparisons;
+            if strcmp(r.design, 'anova'), comps = comps([comps.p] < 0.05); end
+            base = hi + 0.08 * span;
+            gap = 0.11 * span;
+            for m = 1:numel(comps)
+                ia = find(strcmp(r.groupNames, comps(m).a), 1);
+                ib = find(strcmp(r.groupNames, comps(m).b), 1);
+                y = base + (m - 1) * gap;
+                plot(ax, [ia ia ib ib], y + [-0.025 0 0 -0.025] * span, '-', 'Color', dark, 'LineWidth', 1);
+                text(ax, (ia + ib) / 2, y + 0.01 * span, sprintf('%s   %s', GroupStats.stars(comps(m).p), ...
+                    GroupStats.formatP(comps(m).p)), 'HorizontalAlignment', 'center', ...
+                    'VerticalAlignment', 'bottom', 'FontSize', T.fontSmall, 'Color', dark, 'Interpreter', 'none');
+            end
+            hold(ax, 'off');
+            top = base + max(numel(comps), 0.2) * gap + 0.03 * span;
+            ylim(ax, [lo - 0.08 * span, top]);
+            UIKit.styleAxes(ax, sprintf('%s: %s, %s', r.main.test, GroupStats.statText(r.main), ...
+                GroupStats.formatP(r.main.p)), '', featureAxisLabel(r.feature, r.unit));
+            ax.XTick = 1:k;
+            ax.XTickLabel = r.groupNames;
+            ax.TickLabelInterpreter = 'none';
+            ax.XLim = [0.4, k + 0.6];
+            ax.XGrid = 'off';
+            app.StatsSummaryLabel.Text = r.summary;
+        end
+
+        %% setGroupPlotStyle - 'mean' (mean ± SEM) or 'box' (box plot); redraws
+        function setGroupPlotStyle(app, style)
+            if strncmpi(style, 'box', 3)
+                app.PlotStyleMenu.Value = app.PlotStyles{2};
+            else
+                app.PlotStyleMenu.Value = app.PlotStyles{1};
+            end
+            app.plotGroupStats();
+        end
+
+        %% exportFigure - Save a plot as a publication figure (no dialogs)
+        % format: 'pdf' | 'svg' | 'eps' | 'png300' | 'png600' | 'tif' or a
+        % dropdown label (default: the format dropdown). target: 'groups'
+        % (statistics plot), 'series' (Single file plot) or 'auto' (the
+        % visible mode). The window is unchanged (FigureExport styles a
+        % temporary copy). Returns true on success; the written file is in
+        % app.LastExportPath.
+        function ok = exportFigure(app, filePath, format, target)
+            ok = false;
+            if nargin < 4 || isempty(target), target = 'auto'; end
+            if strcmpi(target, 'auto')
+                onGroups = app.ModeTabs.SelectedTab == app.GroupsTab;
+                if ~isempty(app.GroupResult) && (onGroups || isempty(app.SeriesT))
+                    target = 'groups';
+                else
+                    target = 'series';
+                end
+            end
+            isGroups = strcmpi(target, 'groups');
+            if nargin < 3 || isempty(format)
+                if isGroups, format = app.FigFormatMenu.Value; else, format = app.SeriesFigFormatMenu.Value; end
+            end
+            if isGroups
+                if isempty(app.GroupResult)
+                    UIKit.alert(app.UIFig, 'Run a test first (Groups & statistics, step 3).', 'Export figure');
+                    return;
+                end
+                src = app.StatsAxes;
+            else
+                if isempty(app.SeriesT)
+                    UIKit.alert(app.UIFig, 'Load a file first (Single file, step 1).', 'Export figure');
+                    return;
+                end
+                src = app.Axes;
+            end
+            UIKit.setStatus(app.W.Status, 'Exporting figure', 'busy');
+            dlg = UIKit.busy(app.UIFig, sprintf('Writing the publication figure%s', char(8230)));
+            try
+                out = FigureExport.export(src, filePath, FigureExport.formatKey(format));
+                UIKit.done(dlg);
+            catch ME
+                UIKit.done(dlg);
+                UIKit.setStatus(app.W.Status, 'Figure export failed', 'error');
+                UIKit.alert(app.UIFig, sprintf('Figure export failed: %s', ME.message), 'Export figure');
+                return;
+            end
+            app.LastExportPath = out;
+            [~, nm, ext] = fileparts(out);
+            UIKit.setStatus(app.W.Status, sprintf(['Figure saved: %s (publication style: 8 pt ' ...
+                'Helvetica, white background; the window is unchanged).'], [nm ext]), 'success');
+            ok = true;
+        end
+
+        %% exportFigureDialog - Ask for a file name, then exportFigure
+        function exportFigureDialog(app, target)
+            if strcmp(target, 'groups')
+                if isempty(app.GroupResult)
+                    UIKit.alert(app.UIFig, 'Run a test first (step 3).', 'Export figure'); return;
+                end
+                fmtLabel = app.FigFormatMenu.Value;
+                base = ['group_' matlab.lang.makeValidName(app.GroupResult.feature)];
+            else
+                fmtLabel = app.SeriesFigFormatMenu.Value;
+                base = ['series_' matlab.lang.makeValidName(app.SeriesMenu.Value)];
+            end
+            [~, ext] = FigureExport.parseFormat(fmtLabel);
+            startDir = ProjectManager.getExportDir();
+            if isempty(startDir), startDir = pwd; end
+            [file, path] = uiputfile({['*' ext], fmtLabel}, 'Export figure', fullfile(startDir, [base ext]));
+            figure(app.UIFig);
+            if isequal(file, 0), return; end
+            app.exportFigure(fullfile(path, file), FigureExport.formatKey(fmtLabel), target);
+        end
+
+        %% exportGroupResults - Values and report (.csv + _report.txt) or result struct (.mat)
+        function ok = exportGroupResults(app, filePath)
+            ok = false;
+            r = app.GroupResult;
+            if isempty(r)
+                UIKit.alert(app.UIFig, 'Run a test first (step 3).', 'Export'); return;
+            end
+            [folder, name, ext] = fileparts(filePath);
+            try
+                if strcmpi(ext, '.mat')
+                    result = r; %#ok<NASGU>
+                    save(filePath, 'result');
+                    written = [name ext];
+                else
+                    csvPath = fullfile(folder, [name '.csv']);
+                    G = {}; S = {}; V = [];
+                    for g = 1:numel(r.groupNames)
+                        n = numel(r.values{g});
+                        G = [G; repmat(r.groupNames(g), n, 1)]; %#ok<AGROW>
+                        S = [S; r.labels{g}(:)]; %#ok<AGROW>
+                        V = [V; r.values{g}(:)]; %#ok<AGROW>
+                    end
+                    tbl = table(G, S, V, 'VariableNames', ...
+                        {'Group', 'Subject', matlab.lang.makeValidName(r.feature)});
+                    writetable(tbl, csvPath);
+                    rep = fullfile(folder, [name '_report.txt']);
+                    fid = fopen(rep, 'w', 'n', 'UTF-8');
+                    if fid < 0
+                        error('NeuroAnalyzer:SignalCharacterization:write', 'Cannot write %s', rep);
+                    end
+                    lines = app.reportLines();
+                    fprintf(fid, '%s\n', lines{:});
+                    fclose(fid);
+                    written = sprintf('%s.csv and %s_report.txt', name, name);
+                end
+            catch ME
+                UIKit.setStatus(app.W.Status, 'Export failed', 'error');
+                UIKit.alert(app.UIFig, sprintf('Export failed: %s', ME.message), 'Export');
+                return;
+            end
+            UIKit.setStatus(app.W.Status, sprintf('Exported %s', written), 'success');
+            ok = true;
+        end
+
+        %% exportGroupResultsDialog - Ask for a file name, then exportGroupResults
+        function exportGroupResultsDialog(app)
+            if isempty(app.GroupResult)
+                UIKit.alert(app.UIFig, 'Run a test first (step 3).', 'Export'); return;
+            end
+            startDir = ProjectManager.getExportDir();
+            if isempty(startDir), startDir = pwd; end
+            [file, path] = uiputfile({'*.csv', 'Values + report (*.csv, *_report.txt)'; ...
+                '*.mat', 'Result struct (*.mat)'}, 'Export values & report', ...
+                fullfile(startDir, ['group_' matlab.lang.makeValidName(app.GroupResult.feature) '.csv']));
+            figure(app.UIFig);
+            if isequal(file, 0), return; end
+            app.exportGroupResults(fullfile(path, file));
+        end
+
+        %% refreshGroups - Files table, group dropdowns and enable states
+        function refreshGroups(app)
+            names = app.groupNames();
+            gf = app.GroupFiles;
+            groups = {gf.group};
+            data = cell(numel(gf), 5);
+            for i = 1:numel(gf)
+                if isfinite(gf(i).value), v = sprintf('%.4g', gf(i).value); else, v = ''; end
+                data(i, :) = {sum(strcmp(groups(1:i), groups{i})), gf(i).name, gf(i).group, gf(i).nSeries, v};
+            end
+            app.GroupTable.Data = data;
+            items = names;
+            if isempty(items), items = {'-'}; end
+            oldA = app.GroupAMenu.Value;
+            oldB = app.GroupBMenu.Value;
+            app.GroupAMenu.Items = items;
+            app.GroupBMenu.Items = items;
+            if ismember(oldA, items), app.GroupAMenu.Value = oldA; else, app.GroupAMenu.Value = items{1}; end
+            if ismember(oldB, items) && ~strcmp(oldB, app.GroupAMenu.Value)
+                app.GroupBMenu.Value = oldB;
+            else
+                others = items(~strcmp(items, app.GroupAMenu.Value));
+                if isempty(others), app.GroupBMenu.Value = items{1}; else, app.GroupBMenu.Value = others{1}; end
+            end
+            % Group field: the usual names plus every existing group
+            val = app.GroupNameMenu.Value;
+            known = {'Control', 'Stimulated'};
+            app.GroupNameMenu.Items = [known, names(~ismember(names, known))];
+            app.GroupNameMenu.Value = val;
+            app.updateControls();
+        end
+
+        %% groupNames - Groups that have files, in the order they were created
+        function names = groupNames(app)
+            groups = {app.GroupFiles.group};
+            names = app.GroupOrder(ismember(app.GroupOrder, groups));
+            for i = 1:numel(groups)
+                if ~any(strcmp(names, groups{i}))
+                    names{end + 1} = groups{i}; %#ok<AGROW>
+                end
+            end
+        end
+
+        %% groupUnit - 'PU' when every file is LDF, else 'signal units'
+        function u = groupUnit(app)
+            if ~isempty(app.GroupFiles) && all(strncmp({app.GroupFiles.dataType}, 'LDF', 3))
+                u = 'PU';
+            else
+                u = 'signal units';
+            end
+        end
+
+        function k = designKey(app)
+            k = app.DesignKeys{find(strcmp(app.Designs, app.DesignMenu.Value), 1)};
+        end
+
+        function k = methodKey(app)
+            k = app.MethodKeys{find(strcmp(app.Methods, app.MethodMenu.Value), 1)};
+        end
+
+        function k = subjectModeKey(app)
+            k = app.SubjectKeys{find(strcmp(app.SubjectModes, app.SubjectMenu.Value), 1)};
+        end
+
+        %% designHintText - One line on how the chosen design compares subjects
+        function s = designHintText(app)
+            switch app.designKey()
+                case 'paired'
+                    s = 'Pairs by subject number: #1 of A with #1 of B, and so on (see the Files tab).';
+                case 'unpaired'
+                    s = 'Independent animals; group sizes may differ. Welch test: unequal SDs allowed.';
+                otherwise
+                    s = 'All groups at once (independent animals), then every pair (Tukey-Kramer).';
+            end
+        end
+
+        %% markGroupStale - Files or settings changed after a test
+        function markGroupStale(app)
+            if ~isempty(app.GroupResult) && ~app.GroupStale
+                app.GroupStale = true;
+                UIKit.setStatus(app.W.Status, 'Files or settings changed: click Run test again (step 3).', 'info');
+            end
+        end
+
+        function onGroupSettingsChanged(app)
+            app.markGroupStale();
+            app.updateControls();
+        end
+
+        function onGroupT0Changed(app)
+            app.applyGroupBaselineDefault();
+            app.markGroupStale();
+            app.updateControls();
+        end
+
+        function onGroupBaselineEdited(app)
+            app.GroupBaselineAuto = false;
+            app.markGroupStale();
+            app.updateControls();
+        end
+
+        %% applyGroupBaselineDefault - Pre-stimulus baseline while the user has not edited it
+        function applyGroupBaselineDefault(app)
+            if ~app.GroupBaselineAuto || isempty(app.GroupFiles), return; end
+            t0 = app.GroupT0Edit.Value;
+            tFirst = Inf;
+            for i = 1:numel(app.GroupFiles)
+                t = app.GroupFiles(i).T{1};
+                if ~isempty(t), tFirst = min(tFirst, t(1)); end
+            end
+            if tFirst < t0
+                app.GroupBaseStartEdit.Value = tFirst;
+                app.GroupBaseEndEdit.Value = t0;
+            end
+        end
+
+        function onGroupTableSelect(app, evt)
+            if isempty(evt.Indices), return; end
+            app.GroupSelectedRow = evt.Indices(1, 1);
+            app.updateControls();
+        end
+
+        %% onGroupTableEdit - Group cell edited: move the file to that group
+        function onGroupTableEdit(app, evt)
+            r = evt.Indices(1);
+            if evt.Indices(2) ~= 3 || r > numel(app.GroupFiles)
+                app.refreshGroups();
+                return;
+            end
+            newName = strtrim(char(evt.NewData));
+            if isempty(newName)
+                app.refreshGroups();
+                UIKit.setStatus(app.W.Status, 'A group name cannot be empty.', 'warning');
+                return;
+            end
+            old = app.GroupFiles(r).group;
+            app.GroupFiles(r).group = newName;
+            if ~any(strcmp(app.GroupOrder, newName)), app.GroupOrder{end + 1} = newName; end
+            app.markGroupStale();
+            app.refreshGroups();
+            UIKit.setStatus(app.W.Status, sprintf('%s moved from %s to %s.', app.GroupFiles(r).name, ...
+                old, newName), 'info');
         end
     end
 end
@@ -700,5 +1753,138 @@ function styleBtn(b, isPrimary)
         b.BackgroundColor = T.accent; b.FontColor = [1 1 1]; b.FontWeight = 'bold';
     else
         b.BackgroundColor = T.secondaryBg; b.FontColor = T.secondaryFg; b.FontWeight = 'normal';
+    end
+end
+
+%% parseSeriesStruct - Time vectors and signals (row vectors) for data type dt
+% LDF segments: one series per trial; ERP / average: the mean over LFP
+% channels (or t, y); time series: t + y, or t + LDF. Empty if absent.
+function [tCell, yCell] = parseSeriesStruct(s, dt)
+    tCell = {};
+    yCell = {};
+    if contains(dt, 'LDF segments')
+        if ~isfield(s, 'segmentedLDF') || ~isfield(s, 'segmentedTime')
+            return;
+        end
+        seg = s.segmentedLDF;
+        t = s.segmentedTime(1,:);
+        for i = 1:size(seg, 1)
+            tCell{end+1} = t; %#ok<AGROW>
+            yCell{end+1} = seg(i,:); %#ok<AGROW>
+        end
+    elseif contains(dt, 'ERP') || contains(dt, 'average')
+        % ExtractEphysApp saves the LFP time vector as 't_lfp'
+        if isfield(s, 't'), tv = s.t; elseif isfield(s, 't_lfp'), tv = s.t_lfp; else, tv = []; end
+        if ~isempty(tv) && isfield(s, 'lfp_data')
+            y = mean(s.lfp_data, 1);
+            tCell = {tv(:)'};
+            yCell = {y(:)'};
+        elseif isfield(s, 't') && isfield(s, 'y')
+            tCell = {s.t(:)'};
+            yCell = {s.y(:)'};
+        else
+            return;
+        end
+    else
+        if isfield(s, 't') && isfield(s, 'y')
+            tCell = {s.t(:)'};
+            yCell = {s.y(:)'};
+        elseif isfield(s, 't') && isfield(s, 'LDF')
+            tCell = {s.t(:)'};
+            yCell = {s.LDF(:)'};
+        else
+            return;
+        end
+    end
+end
+
+%% computeFeature - One feature of one series (the SignalFeatures call behind each column)
+function v = computeFeature(name, t, y, t0, baseVal, dirn)
+    switch name
+        case 'Peak latency'
+            v = SignalFeatures.peakLatency(t, y, t0, dirn);
+        case 'Onset delay (50%)'
+            v = SignalFeatures.onsetDelay(t, y, t0, 0.5, dirn, baseVal);
+        case 'FWHM'
+            v = SignalFeatures.fwhm(t, y, t0, dirn, baseVal);
+        case 'AUC positive'
+            v = SignalFeatures.aucPositive(t, y, baseVal);
+        case 'AUC negative'
+            v = SignalFeatures.aucNegative(t, y, baseVal);
+        case 'Rise time'
+            v = SignalFeatures.riseTime(t, y, t0, dirn, baseVal);
+        case 'Decay time'
+            v = SignalFeatures.decayTime(t, y, t0, dirn, baseVal);
+        case 'Peak amplitude'
+            v = SignalFeatures.peakAmplitude(t, y, t0, dirn, baseVal);
+        case 'Stim–response integral'
+            stim = zeros(size(y)); stim(t >= t0) = 1;
+            v = SignalFeatures.stimResponseIntegration(t, stim, y, t0);
+        otherwise
+            v = NaN;
+    end
+end
+
+%% seriesFeature - Feature of one series with baseline / direction resolved as in the table
+function v = seriesFeature(name, t, y, t0, bl, dirChoice)
+    t = t(:); y = y(:);
+    if isempty(t) || numel(t) ~= numel(y), v = NaN; return; end
+    baseVal = seriesBaseline(t, y, bl, t0);
+    dirn = seriesDirection(t, y, baseVal, t0, dirChoice);
+    v = computeFeature(name, t, y, t0, baseVal, dirn);
+end
+
+%% meanTrace - Average of series that share one time base (same = false otherwise)
+function [t, y, same] = meanTrace(T, Y)
+    t = T{1}(:)';
+    y = [];
+    same = ~isempty(t);
+    tol = 1e-9 * max(1, max(abs(t)));
+    for i = 1:numel(T)
+        if numel(T{i}) ~= numel(t) || numel(Y{i}) ~= numel(t) || any(abs(T{i}(:)' - t) > tol)
+            same = false;
+            return;
+        end
+    end
+    rows = cellfun(@(v) v(:)', Y(:), 'UniformOutput', false);
+    y = mean(vertcat(rows{:}), 1, 'omitnan');
+end
+
+%% jitterOffsets - Deterministic horizontal spread of n points (column)
+function o = jitterOffsets(n)
+    if n <= 1
+        o = zeros(n, 1);
+    else
+        o = ((1:n)' - (n + 1) / 2) / (n - 1) * 0.24;
+    end
+end
+
+%% featureAxisLabel - y label with the feature's unit
+function s = featureAxisLabel(name, unit)
+    switch name
+        case {'Peak latency', 'Onset delay (50%)', 'FWHM', 'Rise time', 'Decay time'}
+            s = [name ' (s)'];
+        case {'AUC positive', 'AUC negative', 'Stim–response integral'}
+            s = sprintf('%s (%s × s)', name, unit);
+        otherwise
+            s = sprintf('%s (%s)', name, unit);
+    end
+end
+
+%% pickItem - Menu item for a key or item text (case-insensitive); error if unknown
+function item = pickItem(value, items, keys, what)
+    value = char(value);
+    i = find(strcmpi(keys, value) | strcmpi(items, value), 1);
+    if isempty(i)
+        error('NeuroAnalyzer:SignalCharacterization:option', 'Unknown %s ''%s'' (use: %s).', ...
+            what, value, strjoin(keys, ', '));
+    end
+    item = items{i};
+end
+
+%% ensureDemoPath - Put core/demo (demo generators) on the path if needed
+function ensureDemoPath()
+    if exist('demoGroups', 'file') ~= 2
+        addpath(fullfile(fileparts(which('DemoData')), 'demo'));
     end
 end
