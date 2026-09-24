@@ -168,7 +168,7 @@ function h = readHeader(fid, file)
     h.version = double(fread(fid, 2, 'int16=>double'))';
     if h.version(1) < 1 || h.version(1) > 3
         error('NeuroAnalyzer:io:unsupportedVersion', ...
-            '%s: RHD file format version %d.%d is not supported (1.0-3.x).', file, h.version);
+            '%s: RHD file format version %d.%d is not supported (1.0-3.x).', file, h.version(1), h.version(2));
     end
     h.sampleRate = fread(fid, 1, 'float32=>double');
     h.dspEnabled = fread(fid, 1, 'int16=>double');

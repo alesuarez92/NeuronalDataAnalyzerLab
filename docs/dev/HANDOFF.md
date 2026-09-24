@@ -12,7 +12,7 @@ Classification of the ongoing work: **EXISTING STRAND**.
 ## 0. First steps for the next session
 
 - **Merging to `main`:** use "Squash and merge", which gives one commit signed by GitHub under the owner's name.
-- **Pending question for the owner:** `docs/dev/` contains working notes written in the first person by delegated agents. Propose rewording them neutrally as "development notes" now, and removing them before merging to `main`.
+- **`docs/dev/` (decided by the owner, 2026-09-24):** these are development notes, worded neutrally. **Delete `docs/dev/` before merging to `main`.**
 
 ## 1. What exists now
 
