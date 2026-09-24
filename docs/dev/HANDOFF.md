@@ -91,7 +91,14 @@ Each area also adds `core/demo/*.m` generators and
    - update the launcher (`core/Main.m`) if needed;
    - add CHANGELOG entries.
 
-## 3. WAVE 2 (not started)
+## 3. WAVE 2 — in flight (started 2026-09-24)
+
+Two background agents, disjoint files, **not committing** (the lead reviews, integrates and pushes once):
+- **Batch:** `core/LDFPipeline.m` (extracted from ProcessingLDFApp, identical results), `core/Batch.m`, `apps/BatchApp.m`, launcher card in `core/Main.m`, BatchApp in AppSmokeTest; tests `LDFPipelineTest`, `BatchFeaturesTest`, `BatchWalkthroughTest`; report `docs/dev/reports/batch.md`.
+- **Sessions and reports:** `core/Session.m`, `core/Report.m`, UIKit helpers, hooks in 7 analysis windows (not ProcessingLDFApp: the lead adds it from the report); tests `SessionFeaturesTest`, `SessionWalkthroughTest`; report `docs/dev/reports/session-report.md`.
+If this session ends before they finish, check `git status` for their uncommitted files; if the working tree is lost, relaunch both areas with this description.
+
+### Original wave-2 plan
 
 1. **Batch processing.**
    - A new `core/Batch.m` plus a `BatchApp` window and a launcher card.
