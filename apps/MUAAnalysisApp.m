@@ -10,20 +10,29 @@
 %   2 Channel & segments - channel dropdown; optional segmentation by
 %                          stimulation onsets (parameters in a UIKit.dialog)
 %   3 Spike sorting      - Configure... (UIKit.dialog: detection threshold
-%                          and polarity, features, clustering, drift
-%                          correction) and Run
+%                          and polarity, features, clustering, auto-merge
+%                          of over-split clusters, drift correction) and Run
 %   4 Clusters           - cluster listbox (multi-select), Select all /
-%                          Clear, quality summary
+%                          Clear / Undo, Merge selected / Split selected,
+%                          quality summary
 %   5 Export             - save spike times, cluster IDs and QC to .mat
 % Right side: tabs 'Signal & spikes', 'Waveforms', 'Clusters',
-% 'Spike rate' and 'Quality' (QC table, ISI histograms, alignment check).
+% 'Spike rate', 'Raster & PSTH' (per unit, locked to stimulus onsets),
+% 'Correlograms' (auto / cross, up to 4 units) and 'Quality' (QC table,
+% ISI histograms, alignment check). Raster and correlogram tabs are
+% redrawn when shown (refreshLazyTabs).
 % One updateControls() enables controls from the data state and marks the
 % next recommended action as primary. Help button opens HelpApp on the
 % "MUA Analysis" tab. Analysis: runSpikeSorting (wrapper with busy dialog)
-% -> doSpikeSorting (detection, alignment, features, clustering, QC);
-% cluster merging helpers for drift correction are unchanged.
+% -> doSpikeSorting -> MUAPipeline.sort (headless detection, alignment,
+% features, clustering, auto-merge, QC). Cluster edits use ClusterTools and
+% are undoable (EditHistory); rasters / PSTHs / correlograms use
+% SpikeTrains. The drift-correction merging helpers live in MUAPipeline
+% (the app methods of the same name delegate to it).
 % Scriptable (CI walkthroughs, no dialogs): openFile(path), loadDemo(),
-% runSorting(params).
+% runSorting(params), autoMergeClusters(opts), mergeClusters(ids),
+% splitCluster(id), undoClusterEdit(), showRasterPSTH(unitIds, window,
+% bin), showCorrelograms(unitIds, maxLagMs, binMs).
 % =========================================================================
 
 classdef MUAAnalysisApp < handle
@@ -55,6 +64,9 @@ classdef MUAAnalysisApp < handle
                             % in unique(SpikeResults.clusterIdx)
         SelectAllBtn        % Select every unit (noise excluded)
         ClearBtn            % Clear the cluster selection
+        UndoBtn             % Undo the last merge / split / auto-merge
+        MergeBtn            % Merge the selected units into one
+        SplitBtn            % Split the selected unit in two
         QualityLabel        % Units / rejected / noise summary
         % Step 5 - Export
         SaveBtn             % Save results to .mat
@@ -67,6 +79,17 @@ classdef MUAAnalysisApp < handle
         AxRate              % Spike rate over time
         RateBinField        % Rate bin width (s)
         RateRelativeCheck   % Plot rate as fraction of spikes per bin
+        RasterTab           % 'Raster & PSTH' tab
+        RasterPanel         % uipanel holding the raster / PSTH tiledlayout
+        RasterFromField     % Window start relative to onset (s)
+        RasterToField       % Window end relative to onset (s)
+        RasterBinField      % PSTH bin width (ms)
+        RasterInfoLabel     % Trials / onset detection summary
+        CorrTab             % 'Correlograms' tab
+        CorrPanel           % uipanel holding the correlogram grid
+        CorrLagField        % Maximum lag (ms)
+        CorrBinField        % Correlogram bin width (ms)
+        CorrInfoLabel       % How to read the grid
         QualityTable        % uitable: per-cluster QC metrics
         AxISI               % ISI histograms of the selected clusters
         AxAlignBefore       % Waveforms before peak alignment
@@ -85,6 +108,15 @@ classdef MUAAnalysisApp < handle
         ThreshLines         % Detection thresholds on the MUA scale
         ClusterQC           % Struct array: id, n, snr, isiPct, isiMs, rejected, reason
         DisplayPCs          % [nSpikes x 2] waveform PCA scores (for plotting)
+        SpikeWaves          % [nSpikes x samples] aligned waveform per spike
+                            % (same order as SpikeResults.clusterIdx)
+        EditHistory         % Struct array (labels, description, edits): the
+                            % cluster labels before each merge / split / auto-merge
+        ClusterEdits        % Cellstr: edits applied since the sort (saved in info)
+        RasterDirty = true  % Raster & PSTH tab needs a redraw when shown
+        CorrDirty = true    % Correlograms tab needs a redraw when shown
+        RasterOutcome = struct('ok', false, 'msg', '')  % Result of the last raster draw
+        CorrOutcome = struct('ok', false, 'msg', '')    % Result of the last correlogram draw
         BusyDlg             % uiprogressdlg while sorting
     end
 
@@ -95,6 +127,8 @@ classdef MUAAnalysisApp < handle
         % -------------------------------------------------------------
         function app = MUAAnalysisApp()
             app.SpikeSortParams = defaultSortParams();
+            app.EditHistory = emptyHistory();
+            app.ClusterEdits = {};
             app.buildUI();
         end
 
@@ -104,7 +138,7 @@ classdef MUAAnalysisApp < handle
             T = UITheme;
             W = UIKit.window('MUA Analysis', ...
                 'Detect and sort spikes from multi-unit activity, then check quality and firing rate', ...
-                'MUA Analysis', [1280 880]);
+                'MUA Analysis', [1280 920]);
             app.UIFig = W.Fig;
             app.StatusLabel = W.Status;
             W.Body.RowHeight = {'1x'};
@@ -170,21 +204,33 @@ classdef MUAAnalysisApp < handle
             app.RunBtn.Layout.Row = 3; app.RunBtn.Layout.Column = 2;
 
             % --- 4 Clusters ---
-            g = stepCard(left, 4, 'Clusters', {'1x', T.buttonHeight, 'fit'}, {'1x', '1x'});
+            g = stepCard(left, 4, 'Clusters', {'1x', T.buttonHeight, T.buttonHeight, 'fit'}, {'1x', '1x'});
             app.ClusterSelectMenu = uilistbox(g, 'Items', {}, 'Multiselect', 'on', ...
                 'FontSize', T.fontBody, 'Tooltip', ...
                 'Clusters shown in the plots. Ctrl/Shift-click to select several. Cluster 0 is noise (unclustered spikes).', ...
                 'ValueChangedFcn', @(~,~)app.updateClusterScatter());
             app.ClusterSelectMenu.Layout.Row = 2; app.ClusterSelectMenu.Layout.Column = [1 2];
-            app.SelectAllBtn = UIKit.button(g, 'Select all', @(~,~)app.selectAllClusters(), ...
+            selRow = uigridlayout(g, [1 3], 'ColumnWidth', {'1x', '1x', '1x'}, 'RowHeight', {'1x'}, ...
+                'Padding', [0 0 0 0], 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            selRow.Layout.Row = 3; selRow.Layout.Column = [1 2];
+            app.SelectAllBtn = UIKit.button(selRow, 'Select all', @(~,~)app.selectAllClusters(), ...
                 'secondary', 'Select every unit (noise cluster 0 excluded)');
-            app.SelectAllBtn.Layout.Row = 3; app.SelectAllBtn.Layout.Column = 1;
-            app.ClearBtn = UIKit.button(g, 'Clear', @(~,~)app.clearClusterSelection(), ...
+            app.ClearBtn = UIKit.button(selRow, 'Clear', @(~,~)app.clearClusterSelection(), ...
                 'secondary', 'Deselect all clusters');
-            app.ClearBtn.Layout.Row = 3; app.ClearBtn.Layout.Column = 2;
+            app.UndoBtn = UIKit.button(selRow, 'Undo', @(~,~)app.undoClusterEdit(), 'secondary', ...
+                ['Undo last change: restore the clusters as they were before the last merge, ' ...
+                 'split or auto-merge (repeat to go further back)']);
+            app.MergeBtn = UIKit.button(g, 'Merge selected', @(~,~)app.mergeClusters(), 'secondary', ...
+                ['Merge the selected units into one (the lowest cluster number is kept). Use it when ' ...
+                 'two clusters have the same waveform: one neuron split in two.']);
+            app.MergeBtn.Layout.Row = 4; app.MergeBtn.Layout.Column = 1;
+            app.SplitBtn = UIKit.button(g, 'Split selected', @(~,~)app.splitCluster(), 'secondary', ...
+                ['Split the selected unit in two (k-means on its waveform PCA). Use it when a cluster ' ...
+                 'mixes two waveforms or has many ISI violations.']);
+            app.SplitBtn.Layout.Row = 4; app.SplitBtn.Layout.Column = 2;
             app.QualityLabel = uilabel(g, 'Text', 'Run spike sorting to see clusters', ...
                 'FontSize', T.fontSmall, 'FontColor', T.mutedColor, 'WordWrap', 'on');
-            app.QualityLabel.Layout.Row = 4; app.QualityLabel.Layout.Column = [1 2];
+            app.QualityLabel.Layout.Row = 5; app.QualityLabel.Layout.Column = [1 2];
 
             % --- 5 Export ---
             g = stepCard(left, 5, 'Export', {T.buttonHeight});
@@ -224,6 +270,45 @@ classdef MUAAnalysisApp < handle
                 'Tooltip', 'Off: firing rate in Hz. On: each bin as a fraction of that cluster''s spikes.', ...
                 'ValueChangedFcn', @(~,~)app.plotSpikeRateOverTime());
             app.AxRate = uiaxes(tg);
+
+            % Raster & PSTH: window / bin controls, then one column per unit
+            app.RasterTab = uitab(app.TabGroup, 'Title', 'Raster & PSTH', 'BackgroundColor', T.cardBg);
+            tg = uigridlayout(app.RasterTab, [2 1], 'RowHeight', {T.controlHeight, '1x'}, ...
+                'ColumnWidth', {'1x'}, 'Padding', [8 8 8 8], 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
+            bar = uigridlayout(tg, [1 7], 'ColumnWidth', {70, 64, 50, 64, 64, 56, '1x'}, ...
+                'Padding', [0 0 0 0], 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            barLabel(bar, 'From (s)');
+            app.RasterFromField = uieditfield(bar, 'numeric', 'Value', -0.1, 'Limits', [-60 60], ...
+                'Tooltip', 'Start of the window around each stimulus onset (s); negative = before the stimulus', ...
+                'ValueChangedFcn', @(~,~)app.plotRasterPSTH());
+            barLabel(bar, 'To (s)');
+            app.RasterToField = uieditfield(bar, 'numeric', 'Value', 0.3, 'Limits', [-60 60], ...
+                'Tooltip', 'End of the window around each stimulus onset (s after the onset)', ...
+                'ValueChangedFcn', @(~,~)app.plotRasterPSTH());
+            barLabel(bar, 'Bin (ms)');
+            app.RasterBinField = uieditfield(bar, 'numeric', 'Value', 5, 'Limits', [0.1 10000], ...
+                'Tooltip', 'Width of each PSTH bin (ms)', 'ValueChangedFcn', @(~,~)app.plotRasterPSTH());
+            app.RasterInfoLabel = uilabel(bar, 'Text', '', 'FontSize', T.fontSmall, ...
+                'FontColor', T.mutedColor, 'WordWrap', 'on');
+            app.RasterPanel = uipanel(tg, 'BorderType', 'none', 'BackgroundColor', T.cardBg);
+
+            % Correlograms: lag / bin controls, then an n x n grid
+            app.CorrTab = uitab(app.TabGroup, 'Title', 'Correlograms', 'BackgroundColor', T.cardBg);
+            tg = uigridlayout(app.CorrTab, [2 1], 'RowHeight', {T.controlHeight, '1x'}, ...
+                'ColumnWidth', {'1x'}, 'Padding', [8 8 8 8], 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
+            bar = uigridlayout(tg, [1 5], 'ColumnWidth', {86, 64, 56, 64, '1x'}, ...
+                'Padding', [0 0 0 0], 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            barLabel(bar, 'Max lag (ms)');
+            app.CorrLagField = uieditfield(bar, 'numeric', 'Value', 50, 'Limits', [0.5 10000], ...
+                'Tooltip', 'Largest time difference between two spikes shown (ms), both directions', ...
+                'ValueChangedFcn', @(~,~)app.plotCorrelograms());
+            barLabel(bar, 'Bin (ms)');
+            app.CorrBinField = uieditfield(bar, 'numeric', 'Value', 1, 'Limits', [0.05 1000], ...
+                'Tooltip', 'Width of each correlogram bin (ms)', 'ValueChangedFcn', @(~,~)app.plotCorrelograms());
+            app.CorrInfoLabel = uilabel(bar, 'Text', '', 'FontSize', T.fontSmall, ...
+                'FontColor', T.mutedColor, 'WordWrap', 'on');
+            app.CorrPanel = uipanel(tg, 'BorderType', 'none', 'BackgroundColor', T.cardBg);
+            app.TabGroup.SelectionChangedFcn = @(~,~)app.refreshLazyTabs();
 
             tab = uitab(app.TabGroup, 'Title', 'Quality', 'BackgroundColor', T.cardBg);
             tg = uigridlayout(tab, [3 1], 'RowHeight', {36, '1x', '1.4x'}, 'ColumnWidth', {'1x'}, ...
@@ -269,6 +354,13 @@ classdef MUAAnalysisApp < handle
             app.SaveBtn.Enable = onOff(hasRes);
             app.RateBinField.Enable = onOff(hasRes);
             app.RateRelativeCheck.Enable = onOff(hasRes);
+            selIds = app.selectedClusterIds();
+            nSelUnits = sum(selIds > 0);
+            app.MergeBtn.Enable = onOff(hasRes && nSelUnits >= 2);
+            app.SplitBtn.Enable = onOff(hasRes && nSelUnits == 1);
+            app.UndoBtn.Enable = onOff(hasRes && ~isempty(app.EditHistory));
+            set([app.RasterFromField, app.RasterToField, app.RasterBinField, ...
+                app.CorrLagField, app.CorrBinField], 'Enable', onOff(hasRes));
 
             setButtonStyle(app.LoadBtn, ~hasData);
             setButtonStyle(app.RunBtn, hasData && ~isCurrent);
@@ -435,7 +527,8 @@ classdef MUAAnalysisApp < handle
             app.updateControls();
             UIKit.setStatus(app.StatusLabel, ['Demo loaded: 30 s of synthetic MUA (ch 3-5), stimulus every 2 s; ' ...
                 'ch 4 holds two units (~90 and ~50 uV), ch 5 a third (~110 uV). Channel 4 selected - ' ...
-                'click Run (step 3): expect 2 units whose rate rises 5-55 ms after each stimulus.'], 'success');
+                'click Run (step 3): expect units 1 and 2 (plus unit 3, seen weaker from ch 5) whose rate ' ...
+                'rises 5-55 ms after each stimulus (see Raster & PSTH).'], 'success');
             ok = true;
         end
 
@@ -487,12 +580,9 @@ classdef MUAAnalysisApp < handle
                 threshold = answer.threshold;
                 preTime = answer.preTime;
                 postTime = answer.postTime;
-                stim = app.StimData.signal;
-                t = app.StimData.time;
-                aboveThresh = stim > threshold;
-                onsetIdx = find(diff([0; aboveThresh(:)]) == 1);
-                onsetTimes = t(onsetIdx(:));
-                onsetTimes = onsetTimes(:);
+                % All rising crossings of the threshold (minISI applied below)
+                onsetTimes = SpikeTrains.stimulusOnsets(app.StimData.signal, app.StimData.time, ...
+                    threshold, -Inf);
                 if isempty(onsetTimes)
                     app.Segments = [];
                     app.SegmentCheckbox.Value = 0;
@@ -517,6 +607,9 @@ classdef MUAAnalysisApp < handle
                 app.SegmentInfoLabel.Text = sprintf('%d segment%s: %.2f s before to %.2f s after each onset', ...
                     size(segs,1), plural(size(segs,1)), preTime, postTime);
                 app.updateMUAPlot();
+                % The Raster & PSTH tab uses the same onset threshold / minimum ISI
+                app.RasterDirty = true;
+                app.refreshLazyTabs();
                 UIKit.setStatus(app.StatusLabel, sprintf('Found %d stimulus onset%s - pick a segment, then Run spike sorting', ...
                     size(segs,1), plural(size(segs,1))), 'success');
             else
@@ -535,7 +628,7 @@ classdef MUAAnalysisApp < handle
             answer = [];
             prev = app.SegmentParams;
             if isempty(prev)
-                prev = struct('minISI', 1, 'threshold', 0.5, 'preTime', 0.5, 'postTime', 1.0);
+                prev = defaultSegmentParams();
             end
             D = UIKit.dialog('Stimulation onsets', 'Split the recording into trials', 'MUA Analysis', [420 330]);
             D.Body.RowHeight = repmat({UITheme.controlHeight}, 1, 4);
@@ -697,12 +790,12 @@ classdef MUAAnalysisApp < handle
                 return;
             end
             T = UITheme;
-            p = app.SpikeSortParams;
+            p = MUAPipeline.completeParams(app.SpikeSortParams);
             D = UIKit.dialog('Spike sorting settings', 'Detection, features, clustering and drift', ...
-                'MUA Analysis', [520 800]);
-            nRows = 21;
+                'MUA Analysis', [520 860]);
+            nRows = 23;
             D.Body.RowHeight = repmat({T.controlHeight}, 1, nRows);
-            D.Body.RowHeight([1 10 17]) = {22};
+            D.Body.RowHeight([1 10 19]) = {22};
             D.Body.RowSpacing = 6;
             D.Body.ColumnWidth = {'1.25x', '1x'};
 
@@ -767,26 +860,36 @@ classdef MUAAnalysisApp < handle
             minSpikesBox = placeField(D.Body, 16, 'Minimum spikes per cluster', 'numeric', p.minSpikesPerCluster, ...
                 'Clusters with fewer spikes are not accepted (or become noise after drift merging)', [1 Inf]);
             minSpikesBox.RoundFractionalValues = 'on';
+            autoMergeCheck = placeField(D.Body, 17, 'Auto-merge similar clusters', 'checkbox', ...
+                logical(p.autoMerge), ...
+                sprintf(['After clustering, merge clusters that are one neuron split in two: mean waveforms ' ...
+                 'with the same shape (correlation at or above the threshold, allowing a 0.2 ms shift) and ' ...
+                 'similar size (amplitude ratio at least %g). Undo in step 4 restores the clusters.'], ...
+                 p.mergeMinAmpRatio));
+            mergeThrBox = placeField(D.Body, 18, 'Merge threshold (correlation)', 'numeric', p.mergeThreshold, ...
+                ['Minimum correlation (0.5-1, no unit) between two clusters'' mean waveforms for them to be ' ...
+                 'merged. Higher = merge less. Default 0.95.'], [0.5 1]);
 
             % --- Drift correction ---
-            sectionLabel(D.Body, 17, 'Drift correction');
-            driftCheck = placeField(D.Body, 18, 'Correct for drift', 'checkbox', ...
+            sectionLabel(D.Body, 19, 'Drift correction');
+            driftCheck = placeField(D.Body, 20, 'Correct for drift', 'checkbox', ...
                 logical(p.enableDriftCorrection), ...
                 'Compensate for slow changes in spike shape over long recordings');
             driftOpts = {'Time Binning', 'Dynamic Clustering'};
-            driftMethodPopup = placeField(D.Body, 19, 'Drift method', 'dropdown', ...
+            driftMethodPopup = placeField(D.Body, 21, 'Drift method', 'dropdown', ...
                 {driftOpts, pickItem(driftOpts, p.driftMethod)}, ...
                 ['Time Binning: cluster each time bin separately, then join matching units ' ...
                  'across bins. Dynamic Clustering: add time as an extra feature.']);
-            driftBinBox = placeField(D.Body, 20, 'Bin width (s)', 'numeric', p.driftBinWidth, ...
+            driftBinBox = placeField(D.Body, 22, 'Bin width (s)', 'numeric', p.driftBinWidth, ...
                 'Length of each time bin for Time Binning (s)', [0 Inf]);
             driftBinBox.LowerLimitInclusive = 'off';
-            GridSearchCheck = placeField(D.Body, 21, 'Optimize merge thresholds (grid search)', 'checkbox', ...
+            GridSearchCheck = placeField(D.Body, 23, 'Optimize merge thresholds (grid search)', 'checkbox', ...
                 logical(p.enableGridSearchCheck), ...
                 'Try several merge thresholds and keep the one with the best silhouette (slower)');
 
             filterCheckbox.ValueChangedFcn = @(~,~)updateDialogEnable();
             clusterPopup.ValueChangedFcn = @(~,~)updateDialogEnable();
+            autoMergeCheck.ValueChangedFcn = @(~,~)updateDialogEnable();
             driftCheck.ValueChangedFcn = @(~,~)updateDialogEnable();
             driftMethodPopup.ValueChangedFcn = @(~,~)updateDialogEnable();
             updateDialogEnable();
@@ -801,6 +904,7 @@ classdef MUAAnalysisApp < handle
             function updateDialogEnable()
                 set([bandpassLow, bandpassHigh], 'Enable', onOff(filterCheckbox.Value));
                 dbscanEpsBox.Enable = onOff(strcmp(clusterPopup.Value, 'DBSCAN'));
+                mergeThrBox.Enable = onOff(autoMergeCheck.Value);
                 driftMethodPopup.Enable = onOff(driftCheck.Value);
                 isBinning = driftCheck.Value && strcmp(driftMethodPopup.Value, 'Time Binning');
                 driftBinBox.Enable = onOff(isBinning);
@@ -831,6 +935,9 @@ classdef MUAAnalysisApp < handle
                 else
                     params.dbscanEpsilon = dbscanEpsBox.Value;
                 end
+                params.autoMerge = double(autoMergeCheck.Value);
+                params.mergeThreshold = mergeThrBox.Value;
+                params.mergeMinAmpRatio = p.mergeMinAmpRatio;  % not in the dialog; kept
                 disp(params);
                 delete(D.Fig);
                 app.SpikeSortParams = params;
@@ -841,9 +948,10 @@ classdef MUAAnalysisApp < handle
 
         %% updateParamsLabel - One-line summary of the sorting settings
         function updateParamsLabel(app)
-            p = app.SpikeSortParams;
+            p = MUAPipeline.completeParams(app.SpikeSortParams);
             s = sprintf('%s, k = %g, %s polarity  ·  %s + %s', p.detectMethod, p.threshold, ...
                 p.polarity, p.featureMethod, p.clusterMethod);
+            if p.autoMerge, s = sprintf('%s  ·  auto-merge r %s %g', s, char(8805), p.mergeThreshold); end
             if p.filter, s = sprintf('%s  ·  %g-%g Hz', s, p.bpLow, p.bpHigh); end
             if p.enableDriftCorrection, s = sprintf('%s  ·  drift: %s', s, p.driftMethod); end
             app.ParamsLabel.Text = s;
@@ -897,10 +1005,14 @@ classdef MUAAnalysisApp < handle
                 qc = app.ClusterQC;
                 nUnits = sum([qc.id] > 0);
                 nRej = sum([qc.rejected]);
+                mergeNote = '';
+                if ~isempty(app.ClusterEdits)
+                    mergeNote = sprintf('  ·  %s (Undo in step 4 keeps them apart)', app.ClusterEdits{end});
+                end
                 UIKit.setStatus(app.StatusLabel, sprintf(['Sorted %d spikes into %d unit%s (%d rejected) on %s ' ...
-                    'in %.1f s - review the tabs, then Save results (step 5)'], ...
+                    'in %.1f s%s - review the tabs, then Save results (step 5)'], ...
                     numel(app.SpikeResults.spikeTimes), nUnits, plural(nUnits), nRej, ...
-                    app.SortContext.label, toc(tStart)), 'success');
+                    app.SortContext.label, toc(tStart), mergeNote), 'success');
             end
         end
 
@@ -933,6 +1045,9 @@ classdef MUAAnalysisApp < handle
             app.ThreshLines = [];
             app.ClusterQC = [];
             app.DisplayPCs = [];
+            app.SpikeWaves = [];
+            app.EditHistory = emptyHistory();
+            app.ClusterEdits = {};
             app.ClusterSelectMenu.Items = {};
             app.ClusterSelectMenu.ItemsData = [];
             app.QualityLabel.Text = 'Run spike sorting to see clusters';
@@ -940,10 +1055,15 @@ classdef MUAAnalysisApp < handle
 
         %% doSpikeSorting - Detection, alignment, features, clustering, QC
         % -------------------------------------------------------------
-        % Returns true on success. Failures call failSort and return false.
+        % Cuts the selected channel (and segment) and runs MUAPipeline.sort
+        % (the headless sorting shared with scripts / batch runs), then
+        % stores the results and display state. Auto-merges become the
+        % first undoable edit. Returns true on success; pipeline failures
+        % call failSort and return false.
         % -------------------------------------------------------------
         function ok = doSpikeSorting(app, params)
             ok = false;
+            params = MUAPipeline.completeParams(params);
             app.SpikeSortParams = params;
             [chIdx, segIdx, segWin] = app.currentSelection();
             % Drop results of any previous run so partial failures leave no stale state
@@ -957,477 +1077,39 @@ classdef MUAAnalysisApp < handle
                 idxRange = tAll >= seg(1) & tAll <= seg(2);
                 t = tAll(idxRange);
                 x = xAll(idxRange);
-                app.SpikeResults.segmentedMUA = x;
-                app.SpikeResults.segmentedTime = t;
             else
                 t = app.MUAData.time;
                 x = app.MUAData.data(chIdx, :);
-                tAll = t; %#ok<NASGU>
-                xAll = x; %#ok<NASGU>
-                app.SpikeResults.segmentedMUA = x;
-                app.SpikeResults.segmentedTime = t;
             end
 
-            fs = app.MUAData.fs;
-
-            % --- Optional bandpass filter before detection (zero-phase) ---
-            if params.filter
-                nyq = fs / 2;
-                if ~(isfinite(params.bpLow) && isfinite(params.bpHigh) && params.bpLow > 0 && ...
-                        params.bpHigh > params.bpLow && params.bpHigh < nyq)
-                    app.failSort(sprintf('Invalid bandpass range. Require 0 < low < high < %.0f Hz (Nyquist).', nyq), ...
-                        'Filter Error');
+            try
+                [res, info] = MUAPipeline.sort(x, t, app.MUAData.fs, params, @(msg) app.setStage(msg));
+            catch ME
+                if strncmp(ME.identifier, 'NeuroAnalyzer:MUAPipeline:', 26)
+                    app.failSort(ME.message, MUAPipeline.errorTitle(ME.identifier));
                     return;
                 end
-                app.setStage(sprintf('Filtering %g-%g Hz...', params.bpLow, params.bpHigh));
-                [bFilt, aFilt] = butter(3, [params.bpLow params.bpHigh] / nyq, 'bandpass');
-                x = filtfilt(bFilt, aFilt, double(x));
-                app.SpikeResults.segmentedMUA = x;
+                rethrow(ME);
             end
 
-            % --- Spike detection based on method and polarity ---
-            % Detection uses a short dead time (~0.3 ms) so that sub-refractory
-            % ISIs stay visible to the ISI quality check; the refractory period
-            % is used for QC only. Double detections of the same spike are
-            % removed after alignment (same extremum).
-            deadSamples = max(1, round(0.3e-3 * fs));
-
-            %% Spike detection
-            app.setStage(sprintf('Detecting spikes (%s)...', params.detectMethod));
-            isNEO = strcmpi(params.detectMethod, 'neo');
-            if isNEO
-                % Nonlinear Energy Operator: psi[n] = x[n]^2 - x[n-1]*x[n+1].
-                % Spikes of either sign give large positive psi, so the NEO
-                % output is searched directly irrespective of polarity.
-                xd = double(x);
-                psi = zeros(size(xd));
-                psi(2:end-1) = xd(2:end-1).^2 - xd(1:end-2) .* xd(3:end);
-                searchSigns = 1;
-            else
-                switch lower(params.polarity)
-                    case 'negative', searchSigns = -1;
-                    case 'positive', searchSigns = 1;
-                    otherwise,       searchSigns = [1 -1];  % 'both'
-                end
-            end
-
-            locs = [];
-            threshLines = [];  % thresholds on the MUA amplitude scale (for plotting)
-            for sgn = searchSigns
-                if isNEO
-                    dataToSearch = psi;
-                    % Threshold on the NEO scale
-                    thr = mean(psi) + params.threshold * std(psi);
-                else
-                    % Search the sign-flipped signal; threshold computed on it
-                    dataToSearch = sgn * double(x);
-                    switch lower(params.detectMethod)
-                        case {'mad', 'rolling mad'}
-                            med = median(dataToSearch);
-                            madVal = 1.4826 * median(abs(dataToSearch - med));
-                            thr = med + params.threshold * madVal;
-                        case 'percentile'
-                            thr = prctile(abs(dataToSearch), 99.9);  % 99.9th percentile
-                        otherwise  % 'standard'
-                            thr = mean(dataToSearch) + params.threshold * std(dataToSearch);
-                    end
-                    threshLines(end+1) = sgn * thr; %#ok<AGROW>
-                end
-
-                if strcmpi(params.detectMethod, 'rolling mad')
-                    initialIdx = find(dataToSearch > thr);
-                    sgnLocs = [];
-                    last = -Inf;
-                    searchWindow = round(0.5 * fs / 1000 * params.alignWinMs);  % 0.5 ms in samples
-                    for i = 1:length(initialIdx)
-                        if initialIdx(i) - last > deadSamples
-                            winStart = max(1, initialIdx(i) - searchWindow);
-                            winEnd = min(length(dataToSearch), initialIdx(i) + searchWindow);
-                            [~, peakRel] = max(dataToSearch(winStart:winEnd));
-                            sgnLocs(end+1,1) = winStart + peakRel - 1; %#ok<AGROW>
-                            last = sgnLocs(end);
-                        end
-                    end
-                else
-                    % Global threshold
-                    [~, sgnLocs] = findpeaks(dataToSearch, 'MinPeakHeight', thr, ...
-                        'MinPeakDistance', deadSamples);
-                end
-                locs = [locs; sgnLocs(:)]; %#ok<AGROW>
-            end
-            locs = unique(locs);  % sorted; merges coincident detections
-
-            spikeTimes = t(locs);
-            spikeTimes = spikeTimes(:);
-
-            fprintf('[Detection] Method: %s | Polarity: %s | Spikes: %d\n', ...
-                lower(params.detectMethod), lower(params.polarity), numel(locs));
-
-            % Exit if no spikes or too few
-            if isempty(locs)
-                app.failSort('No spikes detected with the current threshold. Try a lower threshold multiplier or another polarity.', ...
-                    'Detection Error');
-                return;
-            end
-            if numel(spikeTimes) < params.minSpikesPerCluster * 2
-                app.failSort(sprintf(['Too few spikes for clustering (%d detected; need at least 2 x %d). ' ...
-                    'Lower the threshold or the minimum spikes per cluster.'], numel(spikeTimes), ...
-                    params.minSpikesPerCluster), 'Clustering Error');
-                return;
-            end
-
-            %% Align waveforms around spike locations
-            app.setStage(sprintf('Aligning %d waveforms...', numel(locs)));
-
-            win = round(params.alignWinMs / 1000 * fs);  % half window for output (symmetric)
-            preAlignMs = 0.5 * params.alignWinMs;
-            postAlignMs = 1.0 * params.alignWinMs;
-
-            preSearch = round(preAlignMs / 1000 * fs);
-            postSearch = round(postAlignMs / 1000 * fs);
-
-            alignedWaves = nan(length(locs), 2*win + 1);
-            validIdx = false(size(locs));
-            peakLocs = nan(size(locs));
-
-            for i = 1:length(locs)
-                center = locs(i);
-                searchLeft = center - preSearch;
-                searchRight = center + postSearch;
-                if searchLeft > 0 && searchRight <= length(x)
-                    snip = x(searchLeft:searchRight);
-                    switch lower(params.polarity)
-                        case 'negative', [~, peakIdx] = min(snip);
-                        case 'positive', [~, peakIdx] = max(snip);
-                        case 'both',     [~, peakIdx] = max(abs(snip));
-                    end
-                    peakLoc = searchLeft + peakIdx - 1;
-                    leftFinal = peakLoc - win;
-                    rightFinal = peakLoc + win;
-                    if leftFinal > 0 && rightFinal <= length(x)
-                        alignedWaves(i,:) = x(leftFinal:rightFinal);
-                        validIdx(i) = true;
-                        peakLocs(i) = peakLoc;
-                    end
-                end
-
-            end
-
-            % Drop double detections of the same spike (snapped to the same extremum)
-            validPos = find(validIdx);
-            [~, keepPos] = unique(peakLocs(validPos), 'stable');
-            validIdx(:) = false;
-            validIdx(validPos(keepPos)) = true;
-
-            % Filter only valid waveform rows
-            alignedWaves = alignedWaves(validIdx, :);
-            locs = locs(validIdx);  % spike indices
-            spikeTimes = spikeTimes(validIdx);  % spike times aligned with waveforms
-            if numel(locs) < params.minSpikesPerCluster * 2
-                app.failSort('Too few spikes with complete waveforms for clustering.', 'Clustering Error');
-                return;
-            end
-
-            % Store original waveforms (centered at detection locs)
-            preAlignedWaves = nan(length(locs), 2*win + 1);
-            for i = 1:length(locs)
-                if locs(i)-win > 0 && locs(i)+win <= length(x)
-                    preAlignedWaves(i,:) = x(locs(i)-win : locs(i)+win);
-                end
-            end
-
-            % Save both raw and aligned waveforms for diagnostics
-            app.SpikeResults.waveformsAligned = alignedWaves;
-            app.SpikeResults.waveformsRaw = preAlignedWaves;
-
-            %% Feature extraction for clustering
-            app.setStage(sprintf('Extracting features (%s)...', params.featureMethod));
-
-            switch lower(params.featureMethod)
-                case 'pca'
-                    maxComp = min(params.numComponents, size(alignedWaves,2));
-                    coeff = pca(alignedWaves);
-                    features = alignedWaves * coeff(:, 1:maxComp);
-                case 'ica'
-                    try
-                        [icasig, ~, ~] = fastica(alignedWaves', 'numOfIC', params.numComponents);
-                        features = icasig(1:params.numComponents, :)';
-                    catch
-                        warning('ICA failed, using zeros.');
-                        features = zeros(size(alignedWaves,1), params.numComponents);
-                    end
-                case 'waveform'
-                    maxComp = min(params.numComponents, size(alignedWaves,2));
-                    features = alignedWaves(:, 1:maxComp);
-                case 'wavelet'
-                    wv = cell(size(alignedWaves,1), 1);  % preallocate
-                    for i = 1:size(alignedWaves,1)
-                        [c,~] = wavedec(alignedWaves(i,:), 3, 'haar');
-                        nComp = min(params.numComponents, length(c));
-                        wv{i} = c(1:nComp);  % truncate to fixed length
-                    end
-
-                    try
-                        features = cell2mat(wv);  % results in N x numComponents
-                    catch
-                        warning('Wavelet features inconsistent in size. Falling back to zeros.');
-                        features = zeros(size(alignedWaves,1), params.numComponents);
-                    end
-                case 't-sne'
-                    try
-                        maxComp = min(params.numComponents, 3);
-                        features = tsne(alignedWaves, 'NumDimensions', maxComp);
-                    catch
-                        warning('t-SNE failed, using zeros.');
-                        features = zeros(size(alignedWaves,1), maxComp);
-                    end
-                otherwise
-                    app.failSort('Unknown feature method.', 'Spike sorting');
-                    return;
-            end
-            % Enforce feature matrix shape [N x numComponents]
-            [N, ~] = size(alignedWaves);
-            if size(features, 1) ~= N
-                warning('Feature shape mismatch. Forcing consistent rows.');
-                features = reshape(features, N, []);
-            end
-            % Optional z-score normalization of features (helps clustering)
-            if isfield(params, 'normalize') && params.normalize
-                mu = mean(features, 1);
-                sig = std(features, 0, 1);
-                sig(sig < 1e-8) = 1;
-                features = (features - mu) ./ sig;
-            end
-
-            %% Running clustering
-            app.setStage(sprintf('Clustering (%s)...', params.clusterMethod));
-
-            % DRIFT CORRECTION: time binning strategy
-            if params.enableDriftCorrection && strcmpi(params.driftMethod, 'Time Binning')
-                % Compute bin IDs for filtered spikeTimes (aligned to features)
-                fullStart = t(1);
-                fullEnd = t(end);
-                % Add one extra bin edge to guarantee coverage of fullEnd
-                nBins = ceil((fullEnd - fullStart) / params.driftBinWidth);
-                binEdges = linspace(fullStart, fullStart + nBins * params.driftBinWidth, nBins + 1);
-                % Use right-edge inclusion for final bin coverage
-                binIDs = discretize(spikeTimes, binEdges, 'IncludedEdge', 'right');
-                uniqueBins = unique(binIDs(~isnan(binIDs)));
-                numBins = numel(uniqueBins);
-                minSpikesPerBin = max(2, ceil(params.minSpikesPerCluster / numBins));  % minimum 2 to allow 1 cluster
-                fprintf('[Auto] Using minSpikesPerBin = %d (from global %d across %d bins)\n', ...
-                            minSpikesPerBin, params.minSpikesPerCluster, numBins);
-
-                % Initialize
-                waveformBins = {};
-                labelBins = {};
-                timeBins = {};
-
-                for b = uniqueBins(:)'  % loop over bins
-                    binIdx = (binIDs == b);
-                    fprintf('[DEBUG] Bin %d: %d spikes\n', b, sum(binIdx));
-                    if sum(binIdx) < minSpikesPerBin
-                        continue;  % skip small bins
-                    end
-
-                    binFeatures = features(binIdx, :);
-                    binWaveforms = alignedWaves(binIdx, :);
-                    binTimes = spikeTimes(binIdx);
-
-                    switch lower(params.clusterMethod)
-                        case 'k-means', [labels, valid] = tryKMeans(binFeatures, minSpikesPerBin);
-                        case 'gmm',    [labels, valid] = tryGMM(binFeatures, minSpikesPerBin);
-                        case 'dbscan', [labels, valid] = tryDBSCAN(binFeatures, minSpikesPerBin, params.dbscanEpsilon);
-                    end
-
-                    if valid
-                        waveformBins{end+1} = binWaveforms; %#ok<AGROW>
-                        labelBins{end+1} = labels; %#ok<AGROW>
-                        timeBins{end+1} = binTimes; %#ok<AGROW>
-                    end
-                    fprintf('[DEBUG] Bin %d → valid: %d | #clusters: %d\n', ...
-                        b, valid, numel(unique(labels)));
-                end
-
-                if isempty(waveformBins)
-                    app.failSort('Time-binning drift correction: no time bin produced a valid clustering.', ...
-                        'Clustering Error');
-                    return;
-                end
-
-                % Flatten all bins into one array
-                spikeTimesFlat = []; waveformsFlat = []; labelsFlat = []; binIDsFlat = [];
-                for i = 1:numel(waveformBins)
-                    waveformsFlat = [waveformsFlat; waveformBins{i}]; %#ok<AGROW>
-                    labelsFlat = [labelsFlat; labelBins{i}(:)]; %#ok<AGROW>
-                    spikeTimesFlat = [spikeTimesFlat; timeBins{i}(:)]; %#ok<AGROW>
-                    binIDsFlat = [binIDsFlat; i * ones(size(labelBins{i}(:)))]; %#ok<AGROW>
-                end
-
-                % Grid search over thresholds to merge clusters
-                if params.enableGridSearchCheck
-                    app.setStage('Merging clusters across time bins (grid search)...');
-                else
-                    app.setStage('Merging clusters across time bins...');
-                end
-                clusterLabels = app.optimizeClusterMerging(spikeTimesFlat, waveformsFlat, labelsFlat, binIDsFlat,params);
-                % Enforce global minSpikesPerCluster after merging
-                uniqueLabels = unique(clusterLabels);
-                for i = 1:numel(uniqueLabels)
-                    k = uniqueLabels(i);
-                    if k == 0, continue; end  % skip unclustered
-                    if sum(clusterLabels == k) < params.minSpikesPerCluster
-                        clusterLabels(clusterLabels == k) = 0;  % reassign to noise
-                    end
-                end
-                % Replace spike times, indices and waveforms with the kept bins
-                % so they stay in sync with clusterLabels
-                spikeTimes = spikeTimesFlat;
-                alignedWaves = waveformsFlat;
-                locs = round((spikeTimes - t(1)) * fs) + 1;  % aligned to segment trace
-                locs = min(max(locs, 1), numel(t));
-
-            % DRIFT CORRECTION: dynamic clustering
-            elseif params.enableDriftCorrection && strcmpi(params.driftMethod, 'Dynamic Clustering')
-
-                tSpan = max(spikeTimes) - min(spikeTimes);
-                if tSpan <= 0, tSpan = 1; end
-                tnorm = (spikeTimes(:) - min(spikeTimes)) / tSpan;
-                dynFeatures = [features, tnorm];
-                switch lower(params.clusterMethod)
-                    case 'k-means', [clusterLabels, valid] = tryKMeans(dynFeatures, params.minSpikesPerCluster);
-                    case 'gmm',    [clusterLabels, valid] = tryGMM(dynFeatures, params.minSpikesPerCluster);
-                    case 'dbscan', [clusterLabels, valid] = tryDBSCAN(dynFeatures, params.minSpikesPerCluster, params.dbscanEpsilon);
-                end
-                if ~valid
-                    app.failSort(['Dynamic clustering failed: no clustering had enough spikes in every ' ...
-                        'cluster. Lower the minimum spikes per cluster or try another method.'], 'Clustering Error');
-                    return;
-                end
-                clusterLabels = app.mergeWithinClusters(alignedWaves, clusterLabels, 0.8, 0.5);  % adjust as needed
-            % NO drift correction
-            else
-                switch lower(params.clusterMethod)
-                    case 'k-means', [clusterLabels, valid] = tryKMeans(features, params.minSpikesPerCluster);
-                    case 'gmm',    [clusterLabels, valid] = tryGMM(features, params.minSpikesPerCluster);
-                    case 'dbscan', [clusterLabels, valid] = tryDBSCAN(features, params.minSpikesPerCluster, params.dbscanEpsilon);
-                end
-                if ~valid
-                    app.failSort(['Clustering failed: no clustering had enough spikes in every cluster. ' ...
-                        'Lower the minimum spikes per cluster or try another method.'], 'Clustering Error');
-                    return;
-                end
-            end
-
-            app.setStage('Spike sorting complete. Computing quality metrics...');
-
-            %% Save results and quality metrics
-            clusterLabels(~isfinite(clusterLabels)) = 0;
-            clusterLabels = round(clusterLabels);
-            app.SpikeResults.spikeTimes = spikeTimes;
-            app.SpikeResults.clusterIdx = clusterLabels;
-            app.SpikeResults.waveforms = {};
-
-            clusterIDs = unique(clusterLabels);
-
-            % Per-cluster SNR and ISI quality checks
-            app.SpikeResults.isiViolationRate = containers.Map('KeyType', 'double', 'ValueType', 'double');
-            refracMs = params.refractoryMs;  % ← e.g., 1.5
-            isiThresh = 2.0;  % max % spikes with ISIs < 1.5 ms allowed
-            SNRThresh = 2.0;  % min SNR allowed
-            preSpikeBasleine = 0.5; % pre-spike baseline (e.g., first 0.5 ms)
-            qc = struct('id', {}, 'n', {}, 'snr', {}, 'isiPct', {}, 'isiMs', {}, ...
-                'rejected', {}, 'reason', {});
-            for i = 1:numel(clusterIDs)
-                k = clusterIDs(i);
-                si = locs(clusterLabels == k);
-                clusterWaves = alignedWaves(clusterLabels == k, :);
-
-                % Default rejection flag
-                isRejected = false;
-                rejectionReason = "";
-
-                % --- SNR Calculation ---
-                meanWave = mean(clusterWaves, 1);
-                ampP2P = max(meanWave) - min(meanWave);
-
-                % Estimate noise from pre-spike baseline (e.g., first 0.5 ms)
-                % (at least 2 samples so std is defined at low fs)
-                baselineEnd = min(size(clusterWaves, 2), max(2, round(preSpikeBasleine / 1000 * fs)));
-                baselineRegion = clusterWaves(:, 1:baselineEnd);
-                noiseSD = std(baselineRegion(:));
-
-                snr = ampP2P / (2 * noiseSD);
-                if k == 0
-                    app.SpikeResults.noiseSNR = snr;
-                else
-                    app.SpikeResults.snr(k) = snr;
-                end
-
-                % Report to console
-                fprintf('[SNR] Cluster %d: %.2f (P2P=%.3f, noise=%.3f)\n', ...
-                    k, snr, ampP2P, noiseSD);
-                % Optional rejection
-                if snr < SNRThresh && k ~= 0
-                    isRejected = true;
-                    rejectionReason = "Low SNR";
-                end
-
-
-                % --- ISI analysis ---
-                isi = diff(t(si));
-                isiViolations = sum(isi < (refracMs / 1000));  % convert ms to seconds
-                violationRate = 100 * isiViolations / max(1, length(isi));
-
-
-                % Optional rejection
-                if violationRate > isiThresh && k ~= 0
-                    isRejected = true;
-                    if rejectionReason == ""
-                        rejectionReason = "ISI Violation";
-                    else
-                        rejectionReason = rejectionReason + " + ISI Violation";
-                    end
-                else
-                    fprintf('[ISI] Cluster %d: %.2f%% ISIs < %.1f ms\n',k, violationRate, refracMs);
-                end
-
-                clusterWaves = alignedWaves(clusterLabels == k, :);
-                app.SpikeResults.waveforms{i} = clusterWaves;
-
-                if isRejected
-                    fprintf('[REJECTED] Cluster %d: %s\n', k, rejectionReason);
-                else
-                    if k > 0
-                        app.SpikeResults.rejectedClusters(k) = false;
-                    end
-                end
-
-                % Display-only copy of the QC outcome (table, titles, markers)
-                qc(i).id = k;
-                qc(i).n = size(clusterWaves, 1);
-                qc(i).snr = snr;
-                qc(i).isiPct = violationRate;
-                qc(i).isiMs = isi(:) * 1000;
-                qc(i).rejected = isRejected;
-                qc(i).reason = char(rejectionReason);
-            end
-
-            % Display state for the plots and the cluster list
-            app.ClusterQC = qc;
-            app.SpikeLocs = locs(:);
-            app.ThreshLines = threshLines;
+            % Results and display state for the plots and the cluster list
+            app.SpikeResults = res;
+            app.ClusterQC = info.qc;
+            app.SpikeLocs = info.locs;
+            app.ThreshLines = info.threshLines;
+            app.SpikeWaves = info.waves;
             chNum = app.MUAData.channels(chIdx);
             label = sprintf('Ch %d', chNum);
             if ~isempty(segIdx), label = sprintf('%s, segment %d', label, segIdx); end
             app.SortContext = struct('chIdx', chIdx, 'channel', chNum, 'segIdx', segIdx, ...
                 'segWin', segWin, 'label', label);
-
-            clusterStr = arrayfun(@(q) clusterListText(q), qc, 'UniformOutput', false);
-            app.ClusterSelectMenu.Items = clusterStr;
-            app.ClusterSelectMenu.ItemsData = 1:numel(clusterIDs);
-            app.ClusterSelectMenu.Value = 1:numel(clusterIDs);  % Select all by default
-            app.updateQualityLabel();
+            if ~isempty(info.mergeLog)
+                desc = ['Auto-merged ' ClusterTools.describeLog(info.mergeLog)];
+                app.EditHistory = struct('labels', info.labelsBeforeMerge, 'description', desc, ...
+                    'edits', {{}});
+                app.ClusterEdits = {desc};
+            end
+            app.refreshClusterList([info.qc.id]);  % Select all by default
             ok = true;
         end
 
@@ -1480,6 +1162,435 @@ classdef MUAAnalysisApp < handle
             pos = pos(isnumeric(pos) & pos >= 1 & pos <= nIDs);
         end
 
+        %% selectedClusterIds - Cluster IDs selected in step 4 (0 = noise)
+        function ids = selectedClusterIds(app)
+            ids = [];
+            if ~app.hasResults(), return; end
+            allIds = unique(app.SpikeResults.clusterIdx);
+            ids = reshape(allIds(app.selectedClusterPos()), 1, []);
+        end
+
+        %% setSelectedIds - Select exactly these cluster IDs in step 4
+        function setSelectedIds(app, ids)
+            if ~app.hasResults(), return; end
+            allIds = unique(app.SpikeResults.clusterIdx);
+            pos = find(ismember(allIds, ids));
+            if isempty(pos)
+                try
+                    app.ClusterSelectMenu.Value = [];
+                catch
+                    app.ClusterSelectMenu.Value = {};
+                end
+            else
+                app.ClusterSelectMenu.Value = pos(:)';
+            end
+        end
+
+        %% refreshClusterList - List items from ClusterQC; select selIds (all if none exist)
+        function refreshClusterList(app, selIds)
+            qc = app.ClusterQC;
+            ids = [qc.id];
+            % Empty the list first (as clearResults does) so a stale Value never
+            % points past the new items
+            app.ClusterSelectMenu.Items = {};
+            app.ClusterSelectMenu.ItemsData = [];
+            app.ClusterSelectMenu.Items = arrayfun(@(q) clusterListText(q), qc, 'UniformOutput', false);
+            app.ClusterSelectMenu.ItemsData = 1:numel(ids);
+            pos = find(ismember(ids, selIds));
+            if isempty(pos), pos = 1:numel(ids); end
+            app.ClusterSelectMenu.Value = pos;
+            app.updateQualityLabel();
+        end
+
+        %% requireResults - Warn in the status bar when there is nothing sorted yet
+        function tf = requireResults(app, what)
+            tf = app.hasResults();
+            if ~tf
+                UIKit.setStatus(app.StatusLabel, sprintf('Run spike sorting (step 3) before %s', what), 'warning');
+            end
+        end
+
+        %% autoMergeClusters - Merge over-split clusters now (no dialog)
+        % -------------------------------------------------------------
+        % Same rule as the Configure option: mean waveforms with the same
+        % shape and size (ClusterTools.autoMerge). opts (optional struct):
+        % threshold (min correlation; default the Configure setting, 0.95),
+        % minAmpRatio (default 0.85), maxLag (samples; default 0.2 ms).
+        % Undoable. ok is true when the step ran (also when nothing needed
+        % merging); mergeLog lists the merges.
+        % -------------------------------------------------------------
+        function [ok, mergeLog] = autoMergeClusters(app, opts)
+            ok = false; mergeLog = [];
+            if ~app.requireResults('merging clusters'), return; end
+            o = MUAPipeline.mergeOptions(app.SpikeSortParams, app.MUAData.fs);
+            if nargin >= 2 && isstruct(opts)
+                fn = fieldnames(opts);
+                for i = 1:numel(fn), o.(fn{i}) = opts.(fn{i}); end
+            end
+            [labels, mergeLog] = ClusterTools.autoMerge(app.SpikeResults.clusterIdx, app.SpikeWaves, o);
+            ok = true;
+            if isempty(mergeLog)
+                UIKit.setStatus(app.StatusLabel, sprintf(['Auto-merge: no two clusters have a waveform ' ...
+                    'correlation %s %g and amplitude ratio %s %g - nothing merged'], ...
+                    char(8805), o.threshold, char(8805), o.minAmpRatio), 'info');
+                return;
+            end
+            desc = ['Auto-merged ' ClusterTools.describeLog(mergeLog)];
+            app.applyClusterEdit(labels, desc, [mergeLog.keep]);
+            nUnits = sum([app.ClusterQC.id] > 0);
+            UIKit.setStatus(app.StatusLabel, sprintf('%s - now %d unit%s (Undo in step 4 restores them)', ...
+                desc, nUnits, plural(nUnits)), 'success');
+        end
+
+        %% mergeClusters - Merge units into the lowest ID (no dialog)
+        % ids: cluster IDs (default: the units selected in step 4); noise
+        % (0) is ignored. Undoable. Returns true when clusters were merged.
+        function ok = mergeClusters(app, ids)
+            ok = false;
+            if ~app.requireResults('merging clusters'), return; end
+            if nargin < 2 || isempty(ids), ids = app.selectedClusterIds(); end
+            labels = app.SpikeResults.clusterIdx;
+            ids = reshape(ids, 1, []);
+            units = unique(ids(ids > 0 & ismember(ids, labels)));
+            if numel(units) < 2
+                UIKit.setStatus(app.StatusLabel, ['Merge: select at least two units in step 4 ' ...
+                    '(noise cluster 0 cannot be merged)'], 'warning');
+                return;
+            end
+            keep = min(units);
+            newLabels = ClusterTools.merge(labels, units);
+            gone = units(units ~= keep);
+            desc = sprintf('Merged cluster%s %s into cluster %d', plural(numel(gone)), ...
+                strjoin(arrayfun(@num2str, gone, 'UniformOutput', false), ', '), keep);
+            app.applyClusterEdit(newLabels, desc, keep);
+            UIKit.setStatus(app.StatusLabel, sprintf('%s (%d spikes) - Undo in step 4 restores them', ...
+                desc, sum(newLabels == keep)), 'success');
+            ok = true;
+        end
+
+        %% splitCluster - Split one unit in two (no dialog)
+        % id: cluster ID (default: the single unit selected in step 4).
+        % k-means on the unit's waveform PCA (ClusterTools.split); the
+        % larger part keeps id. Undoable. Returns true when split.
+        function ok = splitCluster(app, id)
+            ok = false;
+            if ~app.requireResults('splitting a cluster'), return; end
+            if nargin < 2 || isempty(id)
+                sel = app.selectedClusterIds();
+                sel = sel(sel > 0);
+                if numel(sel) ~= 1
+                    UIKit.setStatus(app.StatusLabel, 'Split: select exactly one unit in step 4', 'warning');
+                    return;
+                end
+                id = sel;
+            end
+            try
+                [newLabels, newIds] = ClusterTools.split(app.SpikeResults.clusterIdx, app.SpikeWaves, id, 2);
+            catch ME
+                UIKit.setStatus(app.StatusLabel, sprintf('Split: %s', ME.message), 'warning');
+                return;
+            end
+            counts = arrayfun(@(k) sum(newLabels == k), newIds);
+            desc = sprintf('Split cluster %d into clusters %s', id, ...
+                strjoin(arrayfun(@num2str, newIds, 'UniformOutput', false), ' and '));
+            app.applyClusterEdit(newLabels, desc, newIds);
+            UIKit.setStatus(app.StatusLabel, sprintf('%s (%s spikes) - Undo in step 4 restores it', desc, ...
+                strjoin(arrayfun(@num2str, counts, 'UniformOutput', false), ' / ')), 'success');
+            ok = true;
+        end
+
+        %% undoClusterEdit - Restore the clusters before the last edit (no dialog)
+        % Undoes merges, splits and auto-merges (also the one done while
+        % sorting), most recent first. Returns true when something was undone.
+        function ok = undoClusterEdit(app)
+            ok = false;
+            if ~app.hasResults() || isempty(app.EditHistory)
+                UIKit.setStatus(app.StatusLabel, 'Nothing to undo', 'info');
+                app.updateControls();
+                return;
+            end
+            h = app.EditHistory(end);
+            app.EditHistory(end) = [];
+            app.ClusterEdits = h.edits;
+            back = setdiff(unique(h.labels), unique(app.SpikeResults.clusterIdx));
+            app.setClusterLabels(h.labels, back);
+            nUnits = sum([app.ClusterQC.id] > 0);
+            UIKit.setStatus(app.StatusLabel, sprintf('Undone: %s - back to %d unit%s', h.description, ...
+                nUnits, plural(nUnits)), 'success');
+            ok = true;
+        end
+
+        %% applyClusterEdit - Remember the current labels (for Undo), then apply new ones
+        function applyClusterEdit(app, labels, description, focusIds)
+            app.EditHistory(end + 1) = struct('labels', app.SpikeResults.clusterIdx, ...
+                'description', description, 'edits', {app.ClusterEdits});
+            app.ClusterEdits{end + 1} = description;
+            app.setClusterLabels(labels, focusIds);
+        end
+
+        %% setClusterLabels - New cluster ID per spike: recompute QC, list and plots
+        % Keeps the selection of clusters that still exist and adds focusIds.
+        function setClusterLabels(app, labels, focusIds)
+            oldSel = app.selectedClusterIds();
+            [res, qc] = MUAPipeline.qualityMetrics(app.SpikeResults, labels, app.SpikeWaves, ...
+                app.SpikeLocs, app.SpikeResults.segmentedTime, app.MUAData.fs, app.SpikeSortParams);
+            app.SpikeResults = res;
+            app.ClusterQC = qc;
+            ids = [qc.id];
+            app.refreshClusterList([oldSel(ismember(oldSel, ids)), reshape(focusIds, 1, [])]);
+            app.computeDisplayPCs();
+            app.refreshResultPlots();
+            app.plotSignal();
+            app.updateControls();
+        end
+
+        %% showRasterPSTH - Raster & PSTH tab for units (no dialog)
+        % -------------------------------------------------------------
+        % unitIds: cluster IDs (default: the current selection; the first
+        % 4 units are shown). window: [from to] s around each stimulus
+        % onset (default the tab's fields, -0.1 to 0.3). bin: PSTH bin
+        % width in s (default 0.005). Onsets use step 2's threshold and
+        % minimum ISI (default 0.5 and 1 s). Returns true when drawn.
+        % -------------------------------------------------------------
+        function ok = showRasterPSTH(app, unitIds, window, bin)
+            if nargin >= 3 && ~isempty(window)
+                app.RasterFromField.Value = window(1);
+                app.RasterToField.Value = window(2);
+            end
+            if nargin >= 4 && ~isempty(bin), app.RasterBinField.Value = bin * 1000; end
+            % Show the tab first so a selection change draws it only once
+            app.TabGroup.SelectedTab = app.RasterTab;
+            if nargin >= 2 && ~isempty(unitIds) && app.hasResults()
+                app.setSelectedIds(unitIds);
+                app.updateClusterScatter();   % redraws the tabs, this one included
+            else
+                app.plotRasterPSTH();
+            end
+            if app.RasterDirty, app.plotRasterPSTH(); end
+            ok = app.RasterOutcome.ok;
+            msg = app.RasterOutcome.msg;
+            if ok
+                UIKit.setStatus(app.StatusLabel, sprintf('Raster & PSTH: %s', app.RasterInfoLabel.Text), 'success');
+            else
+                UIKit.setStatus(app.StatusLabel, sprintf('Raster & PSTH: %s', msg), 'warning');
+            end
+        end
+
+        %% showCorrelograms - Correlograms tab for up to 4 units (no dialog)
+        % unitIds: cluster IDs (default: the current selection); maxLagMs
+        % and binMs in ms (defaults 50 and 1). Returns true when drawn.
+        function ok = showCorrelograms(app, unitIds, maxLagMs, binMs)
+            if nargin >= 3 && ~isempty(maxLagMs), app.CorrLagField.Value = maxLagMs; end
+            if nargin >= 4 && ~isempty(binMs), app.CorrBinField.Value = binMs; end
+            % Show the tab first so a selection change draws it only once
+            app.TabGroup.SelectedTab = app.CorrTab;
+            if nargin >= 2 && ~isempty(unitIds) && app.hasResults()
+                app.setSelectedIds(unitIds);
+                app.updateClusterScatter();   % redraws the tabs, this one included
+            else
+                app.plotCorrelograms();
+            end
+            if app.CorrDirty, app.plotCorrelograms(); end
+            ok = app.CorrOutcome.ok;
+            msg = app.CorrOutcome.msg;
+            if ok
+                nU = numel(app.unitsToShow());
+                UIKit.setStatus(app.StatusLabel, sprintf(['Correlograms: %d unit%s, %s%g ms lag, %g ms bins ' ...
+                    '(shaded = refractory period)'], nU, plural(nU), char(177), app.CorrLagField.Value, ...
+                    app.CorrBinField.Value), 'success');
+            else
+                UIKit.setStatus(app.StatusLabel, sprintf('Correlograms: %s', msg), 'warning');
+            end
+        end
+
+        %% unitsToShow - Selected unit IDs (> 0, first 4) or why none can be shown
+        function [ids, msg, nSel] = unitsToShow(app)
+            ids = []; msg = ''; nSel = 0;
+            if ~app.hasResults()
+                msg = 'Run spike sorting (step 3) first';
+                return;
+            end
+            sel = app.selectedClusterIds();
+            ids = sel(sel > 0);
+            nSel = numel(ids);
+            if isempty(ids)
+                msg = 'Select one or more units in step 4 (noise cluster 0 is not shown)';
+            end
+            ids = ids(1:min(4, end));
+        end
+
+        %% stimOnsets - Stimulus onsets with step 2's onset settings
+        % Threshold and minimum ISI from "Segment by stimulation onsets"
+        % (defaults until that dialog is used). [] when there is no stimulus.
+        function [onsets, sp] = stimOnsets(app)
+            sp = app.SegmentParams;
+            if isempty(sp), sp = defaultSegmentParams(); end
+            onsets = [];
+            if isempty(app.StimData), return; end
+            onsets = SpikeTrains.stimulusOnsets(app.StimData.signal, app.StimData.time, ...
+                sp.threshold, sp.minISI);
+        end
+
+        %% plotRasterPSTH - Per selected unit: raster (top) and PSTH (bottom)
+        % -------------------------------------------------------------
+        % Spikes of each unit around every stimulus onset whose window lies
+        % inside the sorted trace; stimulus at 0 (gray line). PSTH bars =
+        % mean rate over trials (spikes/s), lines = +/- SEM. Returns
+        % [ok, msg]; msg says why nothing could be drawn.
+        % -------------------------------------------------------------
+        function [ok, msg] = plotRasterPSTH(app)
+            T = UITheme;
+            ok = false;
+            app.RasterDirty = false;
+            delete(app.RasterPanel.Children);
+            app.RasterInfoLabel.Text = '';
+            win = [app.RasterFromField.Value, app.RasterToField.Value];
+            binS = app.RasterBinField.Value / 1000;
+            [ids, msg, nSel] = app.unitsToShow();
+            if isempty(msg) && isempty(app.StimData)
+                msg = 'No stimulus channel in this file: rasters and PSTHs need stimulus onsets (stim_data)';
+            end
+            if isempty(msg) && win(2) <= win(1)
+                msg = 'Set "To" later than "From" (window around each stimulus onset, s)';
+            end
+            if isempty(msg)
+                [onsets, sp] = app.stimOnsets();
+                st = app.SpikeResults.segmentedTime;
+                span = [st(1) st(end)];
+                nIn = sum(onsets + win(1) >= span(1) & onsets + win(2) <= span(2));
+                if isempty(onsets)
+                    msg = sprintf(['No stimulus onsets: the stimulus never rises above %g. Set the threshold ' ...
+                        'with Segment by stimulation onsets (step 2).'], sp.threshold);
+                elseif nIn == 0
+                    msg = 'No stimulus onset has its whole window inside the sorted recording (or segment)';
+                else
+                    shown = '';
+                    if nSel > numel(ids), shown = sprintf('  ·  first %d of %d selected units', numel(ids), nSel); end
+                    app.RasterInfoLabel.Text = sprintf(['%d trial%s, %g ms bins (bars: mean rate, lines: ' ...
+                        '%s SEM)  ·  onsets: stimulus above %g, %g s apart (step 2)%s'], nIn, plural(nIn), ...
+                        binS * 1000, char(177), sp.threshold, sp.minISI, shown);
+                end
+            end
+            if ~isempty(msg)
+                tl = tiledlayout(app.RasterPanel, 1, 1, 'Padding', 'compact');
+                ax = nexttile(tl);
+                UIKit.styleAxes(ax, 'Raster & PSTH');
+                UIKit.emptyAxes(ax, msg);
+                app.RasterOutcome = struct('ok', false, 'msg', msg);
+                return;
+            end
+            nU = numel(ids);
+            tl = tiledlayout(app.RasterPanel, 2, nU, 'TileSpacing', 'compact', 'Padding', 'compact');
+            for u = 1:nU
+                k = ids(u);
+                col = clusterColor(k);
+                tk = app.SpikeResults.spikeTimes(app.SpikeResults.clusterIdx == k);
+                [r, p] = SpikeTrains.rasterPSTH(tk, onsets, win, binS, span);
+
+                % Raster: one tick per spike, trial 1 at the top
+                ax = nexttile(tl, u);
+                resetAxes(ax);
+                hold(ax, 'on');
+                if ~isempty(r.time)
+                    n = numel(r.time);
+                    xs = [r.time'; r.time'; nan(1, n)] * 1000;
+                    ys = [r.trial' - 0.4; r.trial' + 0.4; nan(1, n)];
+                    plot(ax, xs(:), ys(:), 'Color', col, 'LineWidth', 1);
+                end
+                xline(ax, 0, '-', 'Color', T.stimColor, 'LineWidth', 1.5);
+                hold(ax, 'off');
+                xlim(ax, win * 1000);
+                ylim(ax, [0.5, r.nTrials + 0.5]);
+                ax.YDir = 'reverse';
+                UIKit.styleAxes(ax, sprintf('%s  ·  %d spikes', clusterName(k), numel(r.time)), '', 'Trial');
+
+                % PSTH: trial-averaged rate +/- SEM
+                ax2 = nexttile(tl, nU + u);
+                resetAxes(ax2);
+                hold(ax2, 'on');
+                bar(ax2, p.centers * 1000, p.rate, 1, 'FaceColor', col, 'EdgeColor', 'none', 'FaceAlpha', 0.75);
+                errorbar(ax2, p.centers * 1000, p.rate, p.sem, 'LineStyle', 'none', ...
+                    'Color', T.sectionTitleColor, 'CapSize', 0);
+                xline(ax2, 0, '-', 'Color', T.stimColor, 'LineWidth', 1.5);
+                hold(ax2, 'off');
+                xlim(ax2, win * 1000);
+                [~, iPk] = max(p.rate);
+                UIKit.styleAxes(ax2, sprintf('PSTH  ·  peak at %.0f ms', p.centers(iPk) * 1000), ...
+                    'Time from stimulus (ms)', 'Rate (spikes/s)');
+                linkaxes([ax ax2], 'x');
+            end
+            ok = true;
+            app.RasterOutcome = struct('ok', true, 'msg', '');
+        end
+
+        %% plotCorrelograms - Auto (diagonal) and cross-correlograms of up to 4 units
+        % -------------------------------------------------------------
+        % Row i, column j: spikes of unit j around spikes of unit i
+        % (positive lag = j after i). Shaded band: +/- refractory period
+        % (Configure, default 1 ms); a clean unit's autocorrelogram is
+        % empty there. Returns [ok, msg].
+        % -------------------------------------------------------------
+        function [ok, msg] = plotCorrelograms(app)
+            T = UITheme;
+            ok = false;
+            app.CorrDirty = false;
+            delete(app.CorrPanel.Children);
+            app.CorrInfoLabel.Text = '';
+            maxLag = app.CorrLagField.Value;
+            binMs = app.CorrBinField.Value;
+            [ids, msg, nSel] = app.unitsToShow();
+            if isempty(msg) && binMs >= maxLag
+                msg = 'Set the bin (ms) smaller than the maximum lag (ms)';
+            end
+            if ~isempty(msg)
+                tl = tiledlayout(app.CorrPanel, 1, 1, 'Padding', 'compact');
+                ax = nexttile(tl);
+                UIKit.styleAxes(ax, 'Correlograms');
+                UIKit.emptyAxes(ax, msg);
+                app.CorrOutcome = struct('ok', false, 'msg', msg);
+                return;
+            end
+            ref = app.SpikeSortParams.refractoryMs;
+            shown = '';
+            if nSel > numel(ids), shown = sprintf('  ·  first %d of %d selected units', numel(ids), nSel); end
+            app.CorrInfoLabel.Text = sprintf(['Diagonal: autocorrelograms. Row i, column j: unit j around ' ...
+                'unit i (lag > 0 = j after i). Shaded: %s%g ms refractory period.%s'], char(177), ref, shown);
+            n = numel(ids);
+            tl = tiledlayout(app.CorrPanel, n, n, 'TileSpacing', 'compact', 'Padding', 'compact');
+            for i = 1:n
+                ti = app.SpikeResults.spikeTimes(app.SpikeResults.clusterIdx == ids(i));
+                for j = 1:n
+                    if i == j
+                        [c, cen] = SpikeTrains.correlogram(ti, [], maxLag / 1000, binMs / 1000);
+                        col = clusterColor(ids(i));
+                        nRef = sum(c(abs(cen) * 1000 < ref));
+                        ttl = sprintf('Cluster %d  ·  %d within %s%g ms', ids(i), nRef, char(177), ref);
+                    else
+                        tj = app.SpikeResults.spikeTimes(app.SpikeResults.clusterIdx == ids(j));
+                        [c, cen] = SpikeTrains.correlogram(ti, tj, maxLag / 1000, binMs / 1000);
+                        col = T.accentDark;
+                        ttl = sprintf('%d %s %d', ids(i), char(8594), ids(j));
+                    end
+                    ax = nexttile(tl, (i - 1) * n + j);
+                    resetAxes(ax);
+                    yTop = max([c(:); 1]) * 1.1;
+                    hold(ax, 'on');
+                    fill(ax, [-ref ref ref -ref], [0 0 yTop yTop], T.danger, 'FaceAlpha', 0.12, ...
+                        'EdgeColor', 'none');
+                    bar(ax, cen * 1000, c, 1, 'FaceColor', col, 'EdgeColor', 'none');
+                    hold(ax, 'off');
+                    xlim(ax, [-maxLag maxLag]);
+                    ylim(ax, [0 yTop]);
+                    xl = ''; yl = '';
+                    if i == n, xl = 'Lag (ms)'; end
+                    if j == 1, yl = 'Count'; end
+                    UIKit.styleAxes(ax, ttl, xl, yl);
+                end
+            end
+            ok = true;
+            app.CorrOutcome = struct('ok', true, 'msg', '');
+        end
+
         %% refreshResultPlots - Redraw every result tab from the selection
         function refreshResultPlots(app)
             app.plotWaveforms();
@@ -1488,6 +1599,21 @@ classdef MUAAnalysisApp < handle
             app.updateQualityTable();
             app.plotISI();
             app.plotAlignmentDiagnostics();
+            % Raster / correlogram grids hold many axes: draw them when shown
+            app.RasterDirty = true;
+            app.CorrDirty = true;
+            app.refreshLazyTabs();
+        end
+
+        %% refreshLazyTabs - Redraw the Raster & PSTH / Correlograms tab if shown and stale
+        function refreshLazyTabs(app)
+            if isempty(app.TabGroup) || ~isvalid(app.TabGroup), return; end
+            sel = app.TabGroup.SelectedTab;
+            if app.RasterDirty && isequal(sel, app.RasterTab)
+                app.plotRasterPSTH();
+            elseif app.CorrDirty && isequal(sel, app.CorrTab)
+                app.plotCorrelograms();
+            end
         end
 
         %% plotWaveforms - One tile per selected cluster: spikes + mean
@@ -1736,6 +1862,7 @@ classdef MUAAnalysisApp < handle
             if ~app.hasResults(), return; end
             app.plotSignal();
             app.refreshResultPlots();
+            app.updateControls();
             n = numel(app.selectedClusterPos());
             UIKit.setStatus(app.StatusLabel, sprintf('%d cluster%s selected', n, plural(n)), 'info');
         end
@@ -1802,7 +1929,9 @@ classdef MUAAnalysisApp < handle
             clusterQuality = rmfield(app.ClusterQC, 'isiMs');
             info = struct('sourceFile', app.FilePath, 'channel', app.SortContext.channel, ...
                 'segmentIndex', app.SortContext.segIdx, 'segmentWindow', app.SortContext.segWin, ...
-                'segmentParams', app.SegmentParams, 'fs', app.MUAData.fs); %#ok<NASGU>
+                'segmentParams', app.SegmentParams, 'fs', app.MUAData.fs);
+            % Merges / splits applied after sorting (saved with info below)
+            info.clusterEdits = app.ClusterEdits; %#ok<STRNU>
             outFile = fullfile(path, file);
             UIKit.setStatus(app.StatusLabel, sprintf('Saving %s...', file), 'busy');
             try
@@ -1820,319 +1949,50 @@ classdef MUAAnalysisApp < handle
             end
         end
         % ---------------------------------------------------------------------------------------------
-        %% Cluster merging (drift correction) - unchanged analysis code
-        function bestLabels = optimizeClusterMerging(app, spikeTimes, alignedWaves, clusterLabels, binIDs,params)
-            
-            fixedLabels = app.mergeClustersAcrossBins(spikeTimes, alignedWaves, clusterLabels, binIDs, 0.85, 0.5);
-            if params.enableGridSearchCheck
-                corrVals = 0.8:0.05:0.95;
-                distVals = 0.4:0.05:0.6;
-                bestScore = -Inf;
-                bestLabels = zeros(size(clusterLabels));
-                bestCorr = NaN;
-                bestDist = NaN;
-                
-                fprintf('Running grid search over correlation × distance thresholds...\n');
-                
-                for c = 1:numel(corrVals)
-                    for d = 1:numel(distVals)
-                        try
-                            labels = app.mergeSimilarClusters(alignedWaves, fixedLabels, corrVals(c), distVals(d));
-                            u = unique(labels);
-                            numClusters = numel(u(u > 0));  % exclude 0
-    
-                            if numClusters < 2, continue;  end
-                            %if numel(unique(labels(labels > 0))) < 2, continue; end  % skip trivial results
-                            sil = silhouette(alignedWaves, labels);
-                            avgSil = mean(sil(~isnan(sil)));
-            
-                            if avgSil > bestScore
-                                bestScore = avgSil;
-                                bestLabels = labels;
-                                bestCorr = corrVals(c);
-                                bestDist = distVals(d);
-                            end
-                        catch
-                            continue;
-                        end
-                        u = unique(labels);
-                        fprintf('[GridSearch] Corr %.2f Dist %.2f → %d nonzero clusters\n', ...
-                            corrVals(c), distVals(d), numel(u(u > 0)));
-                    end
-                end
-                fprintf('Best thresholds → Corr: %.2f, Dist: %.2f | Mean silhouette: %.3f\n', bestCorr, bestDist, bestScore);
-            else
-                bestLabels = app.mergeSimilarClusters(alignedWaves, fixedLabels, 0.85, 0.5);
-            end
-        
-            
+        %% Cluster merging for drift correction - implemented in MUAPipeline
+        % Kept as app methods (same signatures) for existing callers.
+        function bestLabels = optimizeClusterMerging(app, spikeTimes, alignedWaves, clusterLabels, binIDs, params) %#ok<INUSL>
+            bestLabels = MUAPipeline.optimizeClusterMerging(spikeTimes, alignedWaves, clusterLabels, binIDs, params);
         end
 
-        function finalLabels = mergeClustersAcrossBins(app,spikeTimes, waveforms, labels, binIDs, corrThresh, distThresh)
-            % mergeClustersAcrossBins - merges cluster labels across time bins
-            % for 2D waveforms [nSpikes x nSamples]
-            
-            % Inputs:
-            %   - spikeTimes: [nSpikes x 1] spike time vector
-            %   - waveforms:  [nSpikes x nSamples] (2D array)
-            %   - labels:     [nSpikes x 1] initial cluster labels
-            %   - binIDs:     [nSpikes x 1] bin index each spike belongs to
-            %   - corrThresh: scalar threshold for centroid correlation
-            %   - distThresh: scalar threshold for centroid distance
-            %
-            % Outputs:
-            %   - finalLabels: updated label assignments across bins
-            %   - labelBank: cell array of cluster info per bin
-            
-            uniqueBins = unique(binIDs);
-            labelOffset = 0;
-            finalLabels = zeros(size(labels));
-            
-            % Store cluster centroids (and their global labels) from previous bin
-            prevCentroids = [];
-            prevIDs = [];
-            
-            for b = 1:length(uniqueBins)
-                bin = uniqueBins(b);
-                idx = (binIDs == bin);
-                
-                waveBin = waveforms(idx, :);
-                labelBin = labels(idx);
-                uniqueClusts = unique(labelBin(labelBin > 0));  % label 0 = noise, stays 0
-                
-                % Compute centroids for each cluster in this bin
-                centroids = zeros(length(uniqueClusts), size(waveBin, 2));
-                for c = 1:length(uniqueClusts)
-                    clusterIdx = labelBin == uniqueClusts(c);
-                    centroids(c, :) = mean(waveBin(clusterIdx, :), 1);
-                end
-                
-                % Match clusters to previous bin centroids
-                newLabels = zeros(size(labelBin));
-                curIDs = zeros(length(uniqueClusts), 1);
-                
-                for c = 1:length(uniqueClusts)
-                    thisCentroid = centroids(c, :);
-                    bestMatch = 0;
-                    bestScore = -Inf;
-                    
-                    for p = 1:size(prevCentroids,1)
-                        corrVal = pearsonR(thisCentroid, prevCentroids(p,:));
-                        distVal = norm(thisCentroid - prevCentroids(p,:));
-                        
-                        if corrVal >= corrThresh && distVal <= distThresh
-                            score = corrVal - 0.01 * distVal;
-                            if score > bestScore
-                                bestScore = score;
-                                bestMatch = p;
-                            end
-                        end
-                    end
-                    
-                    if bestMatch > 0
-                        % Inherit the global label of the matched previous cluster
-                        curIDs(c) = prevIDs(bestMatch);
-                    else
-                        labelOffset = labelOffset + 1;
-                        curIDs(c) = labelOffset;
-                    end
-                    newLabels(labelBin == uniqueClusts(c)) = curIDs(c);
-                end
-                
-                finalLabels(idx) = newLabels;
-                if ~isempty(uniqueClusts)  % an all-noise bin keeps the previous reference
-                    prevCentroids = centroids;
-                    prevIDs = curIDs;
-                end
-            end
+        function finalLabels = mergeClustersAcrossBins(app, spikeTimes, waveforms, labels, binIDs, corrThresh, distThresh) %#ok<INUSL>
+            finalLabels = MUAPipeline.mergeClustersAcrossBins(spikeTimes, waveforms, labels, binIDs, corrThresh, distThresh);
         end
 
-        function mergedLabels = mergeWithinClusters(app, waveforms, labels, corrThresh, distThresh)
-            mergedLabels = labels;
-            uniqueClusts = unique(labels(labels > 0));  % exclude noise
-            centroids = [];
-        
-            for k = uniqueClusts(:)'
-                centroids(k,:) = mean(waveforms(labels == k,:), 1);
-            end
-        
-            % Compare all pairs
-            for i = 1:length(uniqueClusts)
-                for j = i+1:length(uniqueClusts)
-                    c1 = centroids(uniqueClusts(i),:);
-                    c2 = centroids(uniqueClusts(j),:);
-                    r = pearsonR(c1, c2);
-                    d = norm(c1 - c2);
-                    if r > corrThresh && d < distThresh
-                        mergedLabels(mergedLabels == uniqueClusts(j)) = uniqueClusts(i);
-                    end
-                end
-            end
-        
-            % Reassign cluster labels to be sequential (keep 0 = noise as 0)
-            pos = mergedLabels > 0;
-            [~, ~, seqLabels] = unique(mergedLabels(pos), 'sorted');
-            mergedLabels(pos) = seqLabels;
+        function mergedLabels = mergeWithinClusters(app, waveforms, labels, corrThresh, distThresh) %#ok<INUSL>
+            mergedLabels = MUAPipeline.mergeWithinClusters(waveforms, labels, corrThresh, distThresh);
         end
 
-        function mergedLabels = mergeSimilarClusters(app, waveforms, labels, corrThresh, distThresh)
-            mergedLabels = labels;
-            uClust = unique(labels(labels > 0));  % ignore 0/noise
-            K = numel(uClust);
-            centroids = zeros(K, size(waveforms,2));
-        
-            % Compute centroid of each cluster
-            for i = 1:K
-                centroids(i,:) = mean(waveforms(labels == uClust(i), :), 1);
-            end
-        
-            % Pairwise comparison
-            map = containers.Map('KeyType', 'double', 'ValueType', 'double');
-            for i = 1:K
-                map(uClust(i)) = uClust(i);  % initialize
-            end
-        
-            for i = 1:K
-                for j = i+1:K
-                    r = pearsonR(centroids(i,:), centroids(j,:));
-                    d = norm(centroids(i,:) - centroids(j,:));
-                    if r > corrThresh && d < distThresh
-                        % Merge cluster j into i
-                        map(uClust(j)) = map(uClust(i));
-                    end
-                end
-            end
-        
-            % Apply mapping
-            for k = 1:length(labels)
-                if labels(k) > 0 && isKey(map, labels(k))
-                    mergedLabels(k) = map(labels(k));
-                end
-            end
-        
-            % Reassign cluster labels to be sequential (keep 0 = noise as 0)
-            pos = mergedLabels > 0;
-            [~, ~, seqLabels] = unique(mergedLabels(pos), 'sorted');
-            mergedLabels(pos) = seqLabels;
+        function mergedLabels = mergeSimilarClusters(app, waveforms, labels, corrThresh, distThresh) %#ok<INUSL>
+            mergedLabels = MUAPipeline.mergeSimilarClusters(waveforms, labels, corrThresh, distThresh);
         end
     end
-end
-
-
-function [idx, valid] = tryKMeans(features, minSpikes)
-    valid = false;
-    maxK = 10;
-    bestScore = -Inf;
-    bestK = 2;
-    idx = [];
-
-    for k = 2:maxK
-        tempIdx = kmeans(features, k, 'Replicates', 5, 'MaxIter', 500);
-        counts = histcounts(tempIdx, 1:(k+1));
-
-        if all(counts >= minSpikes)
-            silScore = mean(silhouette(features, tempIdx));
-            if silScore > bestScore
-                bestScore = silScore;
-                bestK = k;
-                idx = tempIdx;
-                valid = true;
-            end
-        end
-
-        
-    end
-end
-
-function [idx, valid] = tryGMM(features, minSpikes)
-    valid = false;
-    maxK = 10;
-    bestScore = -Inf;
-    bestK = 2;
-    idx = [];
-
-    for k = 2:maxK
-        try
-            gmOptions = statset('MaxIter', 500);
-            GM = fitgmdist(features, k, 'Options', gmOptions, ...
-                'RegularizationValue', 1e-5, 'Replicates', 3);
-            tempIdx = cluster(GM, features);
-        catch
-            continue;
-        end
-
-        counts = histcounts(tempIdx, 1:(k+1));
-        if all(counts >= minSpikes)
-            silScore = mean(silhouette(features, tempIdx));
-            if silScore > bestScore
-                bestScore = silScore;
-                bestK = k;
-                idx = tempIdx;
-                valid = true;
-            end
-        end
-        
-    end
-end
-
-function [idx, valid] = tryDBSCAN(features, minSpikes, epsilon)
-    if isnan(epsilon) || epsilon <= 0
-        % Auto-tune epsilon using k-distance heuristic
-        N = size(features, 1);
-        if N < 2
-            idx = zeros(N, 1);
-            valid = false;
-            return;
-        end
-        k = min(10, N - 1); % e.g., 10th nearest neighbor
-        % knnsearch avoids the N x N distance matrix; column 1 is self
-        [~, D] = knnsearch(features, features, 'K', k + 1);
-        kDistances = D(:, k + 1);
-        epsilon = prctile(kDistances, 95);  % choose 95th percentile
-    end
-
-    idx = dbscan(features, epsilon, minSpikes);
-
-    if all(idx == -1)
-        valid = false;
-        return;
-    end
-
-    idx(idx == -1) = 0; % unclustered
-    valid = true;
-end
-
-function r = pearsonR(a, b)
-    % Pearson correlation of two vectors (base MATLAB, no toolbox)
-    R = corrcoef(a(:), b(:));
-    r = R(1, 2);
 end
 
 %% ------------------------------------------------------------------------
 % UI helpers (local to this app)
 % -------------------------------------------------------------------------
 
-%% defaultSortParams - Spike sorting defaults (same as the original dialog)
+%% defaultSortParams - Spike sorting defaults (MUAPipeline.defaultParams)
 function p = defaultSortParams()
-    p = struct();
-    p.detectMethod = 'Standard';
-    p.clusterMethod = 'K-means';
-    p.threshold = 3.5;
-    p.refractoryMs = 1.0;
-    p.alignWinMs = 1.5;
-    p.polarity = 'positive';
-    p.filter = 0;
-    p.bpLow = 300;
-    p.bpHigh = 3000;
-    p.featureMethod = 'PCA';
-    p.numComponents = 3;
-    p.normalize = 1;
-    p.minSpikesPerCluster = 20;
-    p.enableDriftCorrection = 0;
-    p.driftMethod = 'Time Binning';
-    p.driftBinWidth = 30;
-    p.enableGridSearchCheck = 0;
-    p.dbscanEpsilon = NaN;  % auto-tune
+    p = MUAPipeline.defaultParams();
+end
+
+%% defaultSegmentParams - Onset detection / segment defaults (askSegmentParams)
+function p = defaultSegmentParams()
+    p = struct('minISI', 1, 'threshold', 0.5, 'preTime', 0.5, 'postTime', 1.0);
+end
+
+%% emptyHistory - No cluster edits to undo
+function h = emptyHistory()
+    h = struct('labels', {}, 'description', {}, 'edits', {});
+end
+
+%% barLabel - Right-aligned label in a tab's control bar
+function barLabel(parent, text)
+    T = UITheme;
+    uilabel(parent, 'Text', text, 'FontSize', T.fontBody, 'FontColor', T.sectionTitleColor, ...
+        'HorizontalAlignment', 'right');
 end
 
 %% stepCard - UIKit.card with a numbered step label on the first row
