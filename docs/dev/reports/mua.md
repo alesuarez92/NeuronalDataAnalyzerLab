@@ -1,5 +1,7 @@
 # Wave 1 report: MUA spike sorting (cluster clean-up, raster/PSTH, correlograms, headless pipeline)
 
+> Development notes for the in-progress improvement strand. They are removed before merging to `main`.
+
 Classification: part of the wave-1 EXISTING STRAND (area: MUA spike sorting).
 
 Nothing here has been run in real MATLAB yet:
@@ -126,7 +128,7 @@ MUAPipeline.tryKMeans / tryGMM / tryDBSCAN
 
 Failures throw `NeuroAnalyzer:MUAPipeline:{filter|noSpikes|tooFewSpikes|tooFewWaveforms|unknownFeature|driftBins|clustering}` with the same messages as before. The app maps them back to the same alert titles ("Filter Error", "Detection Error", "Clustering Error", "Spike sorting") via `failSort`. Unexpected errors still reach the "Spike sorting failed: …" path.
 
-**Behaviour preserved.** I diffed the old `doSpikeSorting` body and drift helpers against the new code after normalising the mechanical substitutions (`app.setStage` → `stageFcn`, `app.failSort` → throw, `app.SpikeResults.` → `results.`). The only differences are:
+**Behaviour preserved.** The old `doSpikeSorting` body and drift helpers were diffed against the new code after normalising the mechanical substitutions (`app.setStage` → `stageFcn`, `app.failSort` → throw, `app.SpikeResults.` → `results.`). The only differences are:
 - the new auto-merge step, which is off with `autoMerge = 0`;
 - the rejection reason built with char instead of string. The resulting `qc.reason` char is identical.
 - one duplicated line removed (`clusterWaves` computed twice);
@@ -138,7 +140,7 @@ The drift helpers are byte-identical apart from `app.` → `MUAPipeline.`. Detec
 
 ## Why the amplitude-ratio default is 0.85 (not 0.8)
 
-I simulated demo channel 4 in Octave with the real `DemoData` code and a RandStream stand-in, across 11 seeds.
+Demo channel 4 was simulated in Octave with the real `DemoData` code and a RandStream stand-in, across 11 seeds.
 
 K-means (best silhouette) usually gives 4 clusters, sometimes 6:
 - unit 2 is split into two halves: r = 0.97–0.99, amplitude ratio 0.94–1.00;
@@ -218,7 +220,7 @@ The tests also passed for 10 other seed offsets, so the statistical assertions a
 
 **Demo assertions.** The demo test's assertions held for 8 emulated demo datasets. The weakest case was 3 units with the largest unit 83% unit 1, after a mixed cluster was merged in; the threshold is 0.7.
 
-**App logic, headless.** I ran the real `MUAAnalysisApp` methods in Octave through a subclass that replaces `buildUI` with plain-struct widgets and stubs the graphics calls. 50 checks passed, covering:
+**App logic, headless.** The real `MUAAnalysisApp` methods were run in Octave through a subclass that replaces `buildUI` with plain-struct widgets and stubs the graphics calls. 50 checks passed, covering:
 - open file → sort → auto-merge;
 - raster and correlograms (correct tile counts, and each tab drawn once);
 - merge / undo, split / undo, and undo of the sort-time auto-merge;
@@ -232,7 +234,7 @@ The tests also passed for 10 other seed offsets, so the statistical assertions a
 
 ## Not verified / risks
 
-- **Real MATLAB K-means.** It may pick a different k than my stub. The ≥ 0.85 amplitude and ≥ 0.95 correlation rule merged all over-splits in every emulated case, but I have not seen the MATLAB clusters. If CI fails `numel(units) <= 3`, look at the merge log in the test output.
+- **Real MATLAB K-means.** It may pick a different k than the stub. The ≥ 0.85 amplitude and ≥ 0.95 correlation rule merged all over-splits in every emulated case, but I have not seen the MATLAB clusters. If CI fails `numel(units) <= 3`, look at the merge log in the test output.
 - **Layout is unrendered.** Nothing has been seen on screen:
   - the Clusters card at 920 px;
   - the 3-button row, about 90 px per button ("Select all" / "Clear" / "Undo");

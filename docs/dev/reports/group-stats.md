@@ -1,5 +1,7 @@
 # Report: Signal Characterization, group statistics and publication figures
 
+> Development notes for the in-progress improvement strand. They are removed before merging to `main`.
+
 Classification: NEW STRAND, delegated sub-task. Area: Signal Characterization → group statistics and publication-ready figures.
 
 Nothing here has been run in real MATLAB yet:
@@ -23,7 +25,7 @@ New
 - `tests/StatsWalkthroughTest.m`: 2 UI tests, frames `SignalCharacterizationApp_x01..x10_*.png`.
 - `docs/dev/reports/group-stats.md`: this report.
 
-`git diff --stat` (my tracked file): `apps/SignalCharacterizationApp.m | 1376 +++++++++++++++++++++++++++++++++++---` (1281 insertions, 95 deletions).
+`git diff --stat` (tracked file): `apps/SignalCharacterizationApp.m | 1376 +++++++++++++++++++++++++++++++++++---` (1281 insertions, 95 deletions).
 
 New file sizes:
 

@@ -1,5 +1,7 @@
 # Wave 1 report: LFP time–frequency analysis (+ headless ERP analysis)
 
+> Development notes for the in-progress improvement strand. They are removed before merging to `main`.
+
 Classification: part of the wave-1 EXISTING STRAND (area: LFP time–frequency).
 Nothing here has been run in real MATLAB yet. The numeric core and the
 features tests were run in Octave 8 (see "Verification" below). The UI code
@@ -244,7 +246,7 @@ These are skipped when there is no display. Frames go to `test-artifacts/screens
 
 ## References cited in headers
 
-These are the only citations added, and I am certain of each:
+These are the only citations added, and each is certain:
 
 - Welch PD (1967). The use of fast Fourier transform for the estimation of power spectra: a method based on time averaging over short, modified periodograms. *IEEE Trans Audio Electroacoust* 15(2):70–73.
 - Tallon-Baudry C, Bertrand O, Delpuech C, Pernier J (1996). Stimulus specificity of phase-locked and non-phase-locked 40 Hz visual responses in human. *J Neurosci* 16(13):4240–4249. Covers Morlet wavelet power and the phase-locking factor (ITPC).

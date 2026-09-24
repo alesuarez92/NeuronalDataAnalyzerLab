@@ -28,6 +28,30 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **CI walkthroughs**: every window is opened and driven through its steps
   on demo data in real MATLAB; the frames are published on the
   `ci/screenshots` branch.
+- **MUA Analysis**: auto-merge of over-split clusters (mean-waveform
+  correlation and amplitude ratio), manual *Merge selected* / *Split
+  selected* / *Undo*, *Raster & PSTH* and *Correlograms* tabs; the sorting
+  runs headless via `core/MUAPipeline.m`.
+- **LFP Analysis**: time–frequency step (Welch spectrum, spectrogram,
+  Morlet ERSP / ITPC, band power); headless ERP / CSD in
+  `core/ERPAnalysis.m`.
+- **ROI Analysis**: rigid motion correction (phase correlation), several
+  ROIs with one trace each, automatic cell detection (local correlation
+  image), and a sub-pixel, blood-cell-robust vessel diameter.
+- **Extract Ephys** loads Intan RHD2000 (.rhd), Open Ephys binary and
+  NWB 2.x recordings (`core/io`); *Export NWB…* writes the processed LFP as
+  NWB (matnwb when installed, otherwise an NWB-style export, not
+  validated).
+- **Signal Characterization**: *Groups & statistics* tab (paired / Welch
+  t-test, one-way ANOVA with Tukey–Kramer, Wilcoxon, Mann–Whitney,
+  Kruskal–Wallis, effect sizes with 95% CI) and publication figure export
+  (vector PDF / SVG / EPS, 300 / 600 dpi PNG / TIFF) in `core/GroupStats.m`
+  and `core/FigureExport.m`.
+- **More demo data** (`core/demo/`, reachable via `DemoData.file`): LFP
+  with theta and evoked gamma, a jittered imaging stack with three cells,
+  three groups of eight animals, and the demo tank as Intan, Open Ephys
+  and NWB files. Help covers every new feature with its expected demo
+  results.
 
 ### Fixed
 

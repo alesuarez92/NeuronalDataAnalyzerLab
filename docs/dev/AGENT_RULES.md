@@ -1,5 +1,7 @@
 # Rules for delegated agents
 
+> Development notes for the in-progress improvement strand. They are removed before merging to `main`.
+
 Paste or reference this file when delegating work to a sub-agent.
 
 COMMON RULES (read carefully):

@@ -82,7 +82,7 @@ function testWriteAll(tests)
     files = DemoData.writeAll(folder);
     names = setdiff(fieldnames(files), {'folder'});
     for k = 1:numel(names)
-        verifyTrue(tests, exist(files.(names{k}), 'file') == 2, names{k});
+        verifyTrue(tests, any(exist(files.(names{k}), 'file') == [2 7]), names{k});   % file or folder
     end
     s = load(files.ldfCropped);
     verifyTrue(tests, all(isfield(s, {'stim', 'LDF', 't', 'Fs'})));
@@ -95,4 +95,15 @@ function testFileCacheAndDemoTank(tests)
     verifyTrue(tests, DemoData.isDemoTank(tankDir));
     tank = DemoData.loadTank(tankDir);
     verifyTrue(tests, isfield(tank.streams, 'xRAW') && isfield(tank.streams, 'Whis'));
+end
+
+function testExtraDemoKinds(tests)
+    s = load(DemoData.file('lfpOscillations'));
+    verifyEqual(tests, s.truth.theta.freqHz, 6);
+    s = load(DemoData.file('imagingAdvanced'));
+    verifyEqual(tests, size(s.stack, 3), numel(s.timeVec));
+    verifyEqual(tests, numel(dir(fullfile(DemoData.file('groups'), '*.mat'))), 24);
+    verifyEqual(tests, exist(DemoData.file('intan'), 'file'), 2);
+    verifyEqual(tests, exist(DemoData.file('openephys'), 'dir'), 7);
+    verifyError(tests, @() DemoData.file('nope'), 'NeuroAnalyzer:DemoData:unknownKind');
 end

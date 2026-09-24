@@ -1,5 +1,7 @@
 # Wave 1 report: imaging (robust vessel diameter, motion correction, multiple ROIs, cell detection)
 
+> Development notes for the in-progress improvement strand. They are removed before merging to `main`.
+
 Classification: part of the wave-1 EXISTING STRAND (area: imaging / ROI analysis).
 Nothing here has been run in real MATLAB yet. What was checked:
 
@@ -113,7 +115,7 @@ ROI-based results are now **K x N**, one row per ROI. With one ROI this is 1 x N
 
 ## Behaviour changes and backward compatibility
 
-- **vesselDiameterFromLine: sub-pixel walls are now the default for 'fwhm'.** I treat this as a strict improvement that still passes the old tests:
+- **vesselDiameterFromLine: sub-pixel walls are now the default for 'fwhm'.** This is treated as a strict improvement that still passes the old tests:
   - Before, the width was a count of samples times `lineLen / nPix`. That value was quantised, and also slightly mis-scaled, because the samples are `lineLen / (nPix − 1)` apart.
   - Now each wall is located by linear interpolation between the two samples that straddle the half level.
   - The half level is still the min/max midpoint by default.

@@ -261,7 +261,8 @@ classdef HelpApp < handle
             end
             UIKit.done(dlg);
             UIKit.setStatus(app.W.Status, sprintf(['Demo files written to %s (LDF export, cropped LDF, ' ...
-                'LDF trials, TDT tank, LFP, MUA, imaging stack).'], folder), 'success');
+                'LDF trials, TDT tank, LFP, MUA, imaging stack, oscillation LFP, advanced imaging, groups, ' ...
+                'Intan / Open Ephys / NWB).'], folder), 'success');
             if offerImport
                 uiconfirm(app.UIFig, sprintf(['The demo files are in\n%s\n\nUse this folder as the ' ...
                     'project Import folder, so every Load dialog starts there?'], folder), 'Demo files written', ...
@@ -466,10 +467,14 @@ classdef HelpApp < handle
                 '| demo_lfp.mat | LFP Analysis, Signal Characterization | 8-channel LFP at 1017 Hz, 100 µm spacing: ERP with N1 at 15 ms and P2 at 40 ms, largest at channel 4 |'
                 '| demo_mua.mat | MUA Analysis | Channels 3–5 at 24414 Hz with three units that fire more for 50 ms after each stimulus |'
                 '| demo_imaging.mat | ROI Analysis | 96 × 96 × 150 frames at 10 Hz: a pulsing vessel, a moving red blood cell and a cell with calcium transients (`roiMask` included) |'
+                '| demo_lfp_oscillations.mat | LFP Analysis (step 6) | demo_lfp.mat plus 6 Hz theta (40 µV, all channels) and a phase-locked 40 Hz burst (10 µV, 50–250 ms after each stimulus, channels 3–5) |'
+                '| demo_imaging_advanced.mat | ROI Analysis | Jittered stack (±3 px), three cells with distinct event times, a pulsing vessel and a red blood cell crossing the diameter line |'
+                '| groups/ | Signal Characterization (Groups & statistics) | 24 LDF trial files: the same 8 animals in Control, Stimulated and Drug (true peaks 18, 30 and 24 PU) |'
+                '| formats/ | Ephys Extract | The first 6 s of demo channels 3–6 as an Intan .rhd, an Open Ephys binary folder and an NWB file |'
                 'Each file also stores the ground truth in a `truth` variable. Use **Generate all demo files…** to write them to a folder (and optionally make it your Import folder), or the **Try it with demo data** button on any topic to open that window with its demo already loaded.'};
             t.inputs = {
                 'LabChart .mat export (LDF)'
-                'TDT tank / block folder (electrophysiology; needs the TDT MATLAB SDK)'
+                'TDT tank / block folder, Intan .rhd, Open Ephys binary folder or NWB 2.x file (electrophysiology; TDT needs the TDT MATLAB SDK)'
                 'Image stack .mat or multi-frame TIFF (imaging)'
                 'Any saved result with a time vector and signal (response features)'};
             t.outputs = {
@@ -629,68 +634,108 @@ classdef HelpApp < handle
         %% topicEphysExtract - Extract Ephys (TDT, LFP, MUA)
         function t = topicEphysExtract()
             t = mkTopic('Ephys Extract', 'Electrophysiology · step 1', ...
-                'Load a TDT recording and extract the LFP and MUA signals for analysis.');
+                'Load a TDT, Intan, Open Ephys or NWB recording and extract the LFP and MUA signals for analysis.');
             t.quick = {
-                '**1 Load TDT tank**: click **Load TDT tank…** and select the tank / block folder. The channel lists are filled from the recording.'
-                '**2 Choose channels**: pick the stimulus (Whis) channel and one or more raw (xRAW) channels (**All** / **None** help).'
+                '**1 Load recording**: choose the **Source** (TDT tank, Intan .rhd, Open Ephys folder or NWB file), click **Load recording…** and select the tank / block folder, the .rhd file, the Open Ephys recording folder (or any folder above it) or the .nwb file. The channel lists are filled from the recording.'
+                '**2 Choose channels**: pick the **Stimulus channel** (TDT: Whis; Intan: DIGITAL-IN / ANALOG-IN; Open Ephys: TTL line / ADC; NWB: stimulus TimeSeries or trials) and one or more raw channels (**All** / **None** help).'
                 '**3 Process**: optionally **Plot RAW**; then **Process LFP…** (low-pass, 60 Hz notch, downsample) and/or **Process MUA…** (band-pass, default 300–3000 Hz).'
-                '**4 Save**: **Save LFP…** / **Save MUA…**, choose which channels to keep and a file name (default `<tank>_LFP.mat` / `<tank>_MUA.mat`). Open these files in **LFP analysis** / **MUA analysis**.'};
+                '**4 Save**: **Save LFP…** / **Save MUA…**, choose which channels to keep and a file name (default `<recording>_LFP.mat` / `<recording>_MUA.mat`). Open these files in **LFP analysis** / **MUA analysis**. **Export NWB…** writes the processed LFP and its stimulus channel as an NWB 2.x file (default `<recording>_LFP.nwb`).'};
             t.demo = {
                 '* **Data**: a TDT-like demo block (30 s): 8 raw channels (`xRAW`, 24414 Hz, electrodes 100 µm apart) and the whisker stimulus (`Whis`: 20 ms pulses every 2 s from 1 s, 15 stimuli). The demo tank is read by a built-in stand-in, so the TDT SDK is not needed for it.'
                 '* **Process LFP** (low-pass, downsample to ~1017 Hz): each stimulus evokes a negative deflection at **15 ms** and a positive one at **40 ms**, largest on **channel 4** and weaker with distance from it.'
-                '* **Process MUA** (300–3000 Hz): spikes on **channels 3–5** (two units on channel 4, one on channel 5), denser in the 50 ms after each stimulus. Save both to try LFP and MUA Analysis.'};
+                '* **Process MUA** (300–3000 Hz): spikes on **channels 3–5** (two units on channel 4, one on channel 5), denser in the 50 ms after each stimulus. Save both to try LFP and MUA Analysis.'
+                '* **Other formats**: choose a **Source** before **Try demo data** to open the first 6 s of demo channels 3–6 written as an Intan .rhd (20 kHz; stimulus on DIGITAL-IN-01 and a 1 V copy on ANALOG-IN-1), an Open Ephys folder (30 kHz; TTL line 1 and ADC1) or an NWB file (24414 Hz; the whisker stimulus TimeSeries and a trials table). There are 3 stimuli (1, 3 and 5 s). **Process LFP** gives 1000 Hz (Intan, Open Ephys) or 1017.25 Hz (NWB), with the evoked negative deflection at **15 ms**, largest on **RAW Ch 2** (= demo channel 4).'
+                '* **Export NWB…** after Process LFP, then choose Source **NWB file** and **Load recording…** with the exported file: the LFP opens at its LFP rate with the same channel names and stimulus.'};
             t.inputs = {
-                'TDT tank / block folder containing the `Whis` (stimulus) and `xRAW` (raw neural) streams'
-                'Requires the TDT MATLAB SDK (`TDTbin2mat`) under `Utilities/TDTMatlabSDK/`'};
+                'TDT tank / block folder containing the `Whis` (stimulus) and `xRAW` (raw neural) streams (needs the TDT MATLAB SDK, `TDTbin2mat`, under `Utilities/TDTMatlabSDK/`)'
+                'Intan RHD2000 `.rhd` file (file format 1.0–3.x, traditional single-file format)'
+                'Open Ephys binary recording folder (GUI 0.5 or later: `structure.oebin`, `continuous.dat`, TTL events)'
+                'NWB 2.x `.nwb` file with an ElectricalSeries in /acquisition or /processing'};
             t.outputs = {
                 'LFP `.mat`: `lfp_data` (channels × samples), `lfp_channels`, `lfp_fs`, `t_lfp`, `stim_data`, `stim_fs`, `t_stim`'
-                'MUA `.mat`: `mua_data`, `mua_channels`, `mua_fs`, `t_mua`, `stim_data`, `stim_fs`, `t_stim`, `filterParams`'};
+                'MUA `.mat`: `mua_data`, `mua_channels`, `mua_fs`, `t_mua`, `stim_data`, `stim_fs`, `t_stim`, `filterParams`'
+                'NWB `.nwb` (Export NWB…): LFP in volts in /processing/ecephys/LFP, the stimulus in /stimulus/presentation, electrodes with source channel names. Written with matnwb when installed, otherwise an NWB-style export (not validated).'};
             t.details = {
                 '## LFP'
                 '* Optional downsampling by an integer factor after an anti-aliasing low-pass. The saved `lfp_fs` is the **actual** rate: TDT''s 24414.0625 Hz / 24 = 1017.25 Hz, not the requested 1000 Hz.'
                 '* Then a 4th-order Butterworth low-pass at the chosen cutoff and an optional 60 Hz notch (zero-phase).'
                 '## MUA'
                 '* Zero-phase band-pass (preset: 300–3000 Hz, Butterworth, order 4, or custom). The saved signal is the band-passed trace used for spike detection; the smoothed, rectified envelope is only for display.'
-                'The channels and stimulus channel saved are the ones used when you clicked Process, even if the selection changed afterwards.'};
+                'The channels and stimulus channel saved are the ones used when you clicked Process, even if the selection changed afterwards.'
+                '## Recording formats'
+                '* All sources are read into the same form: raw channels in volts plus a list of candidate stimulus channels, so processing and saving are identical for every format.'
+                '* **Intan .rhd**: amplifier channels (0.195 µV per bit); stimulus candidates are the board digital inputs (0/1) and board ADC inputs (volts). The notch-filter setting is shown in the header but not applied.'
+                '* **Open Ephys**: headstage channels (value × bit_volts); ADC channels become stimulus candidates; each TTL line becomes a 0/1 stimulus trace at the recording rate. AUX (accelerometer) channels are skipped.'
+                '* **NWB**: the first ElectricalSeries (data × conversion); stimulus candidates are stimulus TimeSeries and trial / interval tables, aligned to the series start.'
+                '## NWB export'
+                '* Without matnwb the file is written by a built-in minimal writer that follows the NWB 2.7 layout but is **not validated** at run time and does not embed the schema. To check a file, run `nwbinspector` or `pynwb.validate` in Python. Subject metadata is not written by the app.'};
             t.trouble = {
                 '"Undefined function TDTbin2mat" or tank does not load', 'Install the TDT MATLAB SDK: README → "Install the TDT SDK". The folder must be `Utilities/TDTMatlabSDK/`.'
                 '"The selected tank does not contain the required Whis and xRAW streams"', 'Select the block folder of a recording that stored both streams (stimulus as Whis, raw data as xRAW).'
                 '"Downsample rate must be below the raw rate"', 'Enter a target rate (Hz) lower than the raw sampling rate shown after loading.'
                 'Filtering fails (butter, filtfilt, iirnotch undefined)', 'The Signal Processing Toolbox is missing.'
-                'Save is disabled', 'Run Process LFP / Process MUA first; Save stores the last processed result.'};
+                'Save is disabled', 'Run Process LFP / Process MUA first; Save stores the last processed result.'
+                '"not an Intan RHD2000 file: magic number …"', 'The file is not an Intan .rhd data file. Intan stimulation files (.rhs) are not supported.'
+                '"holds only a header (no data blocks)"', 'The recording was saved as "one file per signal type" or "one file per channel" (info.rhd + .dat files). Save it in the traditional single-file .rhd format.'
+                '"… is not a whole number of … data blocks"', 'The .rhd file is truncated (for example the recording was interrupted). Re-export it from the Intan software.'
+                '"No structure.oebin found"', 'Choose the Open Ephys recording folder (…/Record Node */experiment*/recording*) or a folder above it. Only the binary format is supported; for the older "Open Ephys format" (.continuous files), re-save as binary.'
+                '"not an HDF5 file" / "without the NWB root attribute nwb_version" / "No ElectricalSeries"', 'The file is not an NWB 2.x file with extracellular data. NWB 1.x files are not supported.'
+                'The stimulus channel list shows "(no stimulus channel)"', 'The recording has no digital / analog input, TTL events or stimulus series. LFP / MUA files are still saved, with an all-zero stimulus.'
+                'Export NWB says "NWB-style file (not validated)"', 'matnwb is not installed. The file follows the NWB 2.7 layout; install matnwb (https://github.com/NeurodataWithoutBorders/matnwb) to write it with the official schema classes, or validate it with nwbinspector.'
+                'Loading a long recording runs out of memory', 'The whole recording is loaded (as for TDT tanks). Split long recordings, or export a shorter segment from the acquisition software.'};
             t.images = {'EphysExtractWorkflow.png', 'EphysExtractPrinciple.png'};
         end
 
         %% topicLFPAnalysis - Process LFP (ERP, CSD)
         function t = topicLFPAnalysis()
             t = mkTopic('LFP Analysis', 'Electrophysiology · step 2 (LFP)', ...
-                'Average the LFP around each stimulus (ERP) and compute current source density (CSD).');
+                'Average the LFP around each stimulus (ERP), compute current source density (CSD) and analyse oscillations (spectrum, spectrogram, ERSP / ITPC, band power).');
             t.quick = {
                 '**1 Load LFP file**: click **Load LFP file…** and choose the LFP file saved by Extract Ephys.'
                 '**2 Channels**: select the channels to analyse (**All** / **None**).'
                 '**3 ERP analysis**: click **Run ERP…**, set pre- and post-stimulus time (s), stimulus threshold and minimum ISI (s), click OK. The number of averaged epochs is reported.'
                 '**4 CSD**: enter **Spacing (µm)** and the **Channel order** from top to bottom (at least 3 channels of the last ERP), then click **Compute CSD**.'
-                '**5 Export**: click **Export ERP / CSD…** to save a .mat that Signal Characterization can read.'};
+                '**5 Export**: click **Export ERP / CSD…** to save a .mat that Signal Characterization can read.'
+                '**6 Time–frequency**: choose the **Channel**, **Frequencies (Hz)** (lowest – highest), **Wavelet cycles**, **Epoch (s)** and **Baseline (s)**. The band table (delta 1–4, theta 4–8, alpha 8–13, beta 13–30, gamma 30–80 Hz) holds common conventions: edit the limits for your preparation and tick **Plot** for the bands to show. **Try oscillation demo** loads a demo with known theta and gamma oscillations and selects channel 4.'
+                '**7 Time–frequency plots**: click **Spectrum** (power spectrum of the whole recording), **Spectrogram** (power over time with the stimuli marked), **ERSP / ITPC** (power change in dB and phase locking around each stimulus) and **Band power** (% change of each ticked band around the stimulus, mean ± SEM). Each opens its tab. ERSP and Band power use the stimulus onsets found with the ERP threshold (0.5 until you run the ERP).'};
             t.demo = {
                 '* **Data**: `demo_lfp.mat`, 8 channels at 1017.25 Hz, 30 s, 100 µm spacing; 15 stimuli every 2 s from 1 s.'
                 '* **ERP** (e.g. pre 0.05 s, post 0.2 s): 15 epochs; **N1 (negative) at ~15 ms** (about −120 µV at channel 4) and **P2 (positive) at ~40 ms**; both are **largest at channel 4** and fall off over ~150 µm (channels 2–6).'
-                '* **CSD** (spacing 100 µm, order 1–8): a **current sink at channel 4** at ~15 ms, flanked by sources above and below (channels 2–3 and 5–6).'};
+                '* **CSD** (spacing 100 µm, order 1–8): a **current sink at channel 4** at ~15 ms, flanked by sources above and below (channels 2–3 and 5–6).'
+                '* **Oscillation demo** (**Try oscillation demo**): the same LFP plus **6 Hz theta** (40 µV, on every channel, not phase-locked to the stimuli) and a **40 Hz gamma burst** (10 µV, **50–250 ms after each stimulus**, **channels 3–5**, phase-locked). Channel 4 is chosen.'
+                '* **Spectrum**: 1/f background with a clear **peak at ~6 Hz** (theta) and a small bump near **40 Hz**.'
+                '* **Spectrogram** (2–80 Hz): a steady band at 6 Hz, and short 40 Hz patches just after each dashed stimulus line.'
+                '* **ERSP / ITPC** (2–80 Hz, 7 cycles, baseline −0.4 to −0.1 s): about **+10 to +12 dB at 36–44 Hz between 50 and 250 ms**, ITPC ≈ **0.97** there, and ≈ 0 dB before the stimulus and after ~0.3 s. The ERP itself (N1 / P2) adds a brief broadband increase with high ITPC in the first ~50 ms. On channel 8 (no gamma) there is no 40 Hz increase. 14 of the 15 stimuli are used (the last epoch would run past the end of the recording), and 13 at the lowest frequencies.'
+                '* **Band power**: **Gamma rises by roughly +350 to +600 %** at 0.1–0.2 s; **Theta stays flat** (~0 %, no stimulus modulation).'};
             t.inputs = {'LFP `.mat` from Extract Ephys: `lfp_data`, `stim_data`, `t_lfp`, `t_stim`, `lfp_fs`, `stim_fs` (all required)'};
             t.outputs = {
                 'Tabs: Stimulus (threshold and detected onsets), ERP overlay, ERP per channel (mean ± SD), CSD map'
-                'Export `.mat`: `t`, `y` (ERP averaged over channels), `erp_avg`, `erp_std`, `erp_channels`, `n_epochs`, `onset_times`, `erp_params`, and `csd` when computed'};
+                'Export `.mat`: `t`, `y` (ERP averaged over channels), `erp_avg`, `erp_std`, `erp_channels`, `n_epochs`, `onset_times`, `erp_params`, and `csd` when computed'
+                'Time–frequency tabs: Spectrum (Welch PSD, log–log, bands shaded), Spectrogram (STFT power in dB, dashed stimulus onsets), ERSP / ITPC (dB vs baseline on a blue–white–red scale centred at 0; ITPC 0–1), Band power (% change vs baseline, mean ± SEM per band)'};
             t.details = {
                 '## ERP'
                 '* Stimulus onsets are upward crossings of the threshold by the mean-subtracted stimulus; onsets closer than the minimum ISI to the previous one are dropped.'
                 '* Each epoch runs from onset − pre to onset + post. Epochs that would run past the recording edges are excluded (not zero-filled); the ERP is the mean and SD of the valid epochs.'
                 '## CSD'
                 '* CSD is the negative second spatial derivative of the ERP across the ordered channels divided by spacing²; the first and last rows are copied from their neighbours.'
-                '* Sinks (current flowing into cells) and sources appear as opposite colours across depth; use it with a linear probe and the true channel order.'};
+                '* Sinks (current flowing into cells) and sources appear as opposite colours across depth; use it with a linear probe and the true channel order.'
+                '## Time–frequency'
+                '* **Spectrum**: Welch''s method, 2 s Hann segments with 50% overlap, each segment''s mean removed; density in units²/Hz, so the area under the spectrum equals the signal variance.'
+                '* **Spectrogram**: short-time Fourier transform, 0.5 s Hann windows, 90% overlap; power in dB.'
+                '* **ERSP / ITPC**: complex Morlet wavelets (unit energy; time resolution ≈ cycles / (2π·f) s). ERSP is 10·log10 of the trial-averaged power divided by the mean power in the baseline window; ITPC is the length of the mean unit phase vector across trials (0 = random phase, 1 = identical phase). At each frequency, trials whose wavelet would reach past the start or end of the recording are left out.'
+                '* **Band power**: band-pass filter plus Hilbert envelope (done with the FFT), power = envelope², then % change from the trial-averaged baseline. Trials closer to the recording edges than the filter''s settling time (about 1 s for delta / theta) are left out for that band.'
+                '* Band limits are conventions and vary between species, brain areas and labs; there is no single correct definition.'};
             t.trouble = {
                 '"Missing variable(s)" when loading', 'Load the file written by Extract Ephys → Save LFP, not the MUA file or a raw tank.'
                 '"No stimulus onsets detected. Check the threshold."', 'Look at the stimulus tab and set the threshold between baseline and stimulus amplitude (the stimulus is mean-subtracted first).'
                 '"No complete epochs"', 'All onsets are too close to the recording start / end for the pre/post window. Shorten pre/post.'
-                '"CSD needs at least 3 channels" / order error', 'Run the ERP with ≥ 3 channels and list only those channels in the CSD order.'};
+                '"CSD needs at least 3 channels" / order error', 'Run the ERP with ≥ 3 channels and list only those channels in the CSD order.'
+                '"No stimulus onsets detected" in ERSP / ITPC or Band power', 'These use the ERP stimulus threshold and minimum ISI (0.5 and 0.5 s until the ERP has been run). Run the ERP (step 3) with a threshold that suits the Stimulus tab, then try again.'
+                '"The highest frequency must be below the Nyquist frequency"', 'Enter a highest frequency below half the LFP sampling rate (e.g. < 508 Hz for 1017 Hz data).'
+                '"The baseline window … lies outside the epoch window"', 'Keep Baseline (s) inside Epoch (s), e.g. epoch −0.5 to 1 s and baseline −0.4 to −0.1 s.'
+                'ERSP uses fewer trials at low frequencies, or low rows are blank', 'Low-frequency wavelets are long (3·cycles / (2π·f) s each side); trials whose wavelet would run past the recording start or end are left out at those frequencies. Raise the lowest frequency or use fewer cycles.'
+                'Band power says n is smaller for delta / theta, or "No epochs far enough from the recording edges"', 'The band filter needs about 1 s of data on each side of an epoch; trials near the start or end of the recording are left out for that band.'
+                'A band-table edit is undone', 'Limits must be numbers ≥ 0 with Low < High; the previous value is restored and the status bar says why.'};
             t.images = {'LFPAnalysisWorkflow.png', 'LFPAnalysisCSD.png', 'LFPAnalysisPrinciple.png'};
         end
 
@@ -701,13 +746,16 @@ classdef HelpApp < handle
             t.quick = {
                 '**1 Load MUA file**: click **Load MUA file...** and choose the MUA file saved by Extract Ephys. Channels and whether a stimulus is present are shown.'
                 '**2 Channel & segments**: choose the channel; optionally tick **Segment by stimulation onsets** (minimum ISI, threshold, pre / post-stimulus times) and pick a segment.'
-                '**3 Spike sorting**: click **Configure...** (detection method, threshold, polarity, filtering, features, clustering, drift correction) and then **Run**.'
-                '**4 Clusters**: select the clusters to show (**Select all** / **Clear**) and read the quality summary. Result tabs: Signal & spikes, Waveforms, Clusters (feature space), Spike rate, Quality.'
-                '**5 Export**: click **Save results...** to write spike times, cluster IDs, the sorting parameters and quality measures to .mat.'};
+                '**3 Spike sorting**: click **Configure...** (detection method, threshold, polarity, filtering, features, clustering, **Auto-merge similar clusters** with its **Merge threshold (correlation)**, drift correction) and then **Run**. With auto-merge on (default), clusters whose mean waveforms have the same shape (correlation ≥ 0.95) and size (amplitude ratio ≥ 0.85) are joined; the status bar says what was merged.'
+                '**4 Clusters**: select the clusters to show (**Select all** / **Clear**) and read the quality summary. Select two or more units and click **Merge selected** when they are the same neuron; select one unit and click **Split selected** to cut it in two; **Undo** reverses the last merge, split or auto-merge.'
+                '**5 Raster & PSTH** tab: spikes of each selected unit (up to 4) around every stimulus onset (raster) and the mean firing rate ± SEM (PSTH). Set **From (s)**, **To (s)** and **Bin (ms)**; onsets use the threshold and minimum ISI of **Segment by stimulation onsets** (default 0.5, 1 s).'
+                '**6 Correlograms** tab: autocorrelograms (diagonal) and cross-correlograms of up to 4 selected units; set **Max lag (ms)** and **Bin (ms)**. The shaded band is ± the refractory period: a clean unit has (almost) no spikes there.'
+                '**7 Export**: click **Save results...** to write spike times, cluster IDs, the sorting parameters, quality measures and the list of merges / splits (`info.clusterEdits`) to .mat.'};
             t.demo = {
                 '* **Data**: `demo_mua.mat`, channels 3–5 at 24414 Hz, 30 s, stimulus every 2 s from 1 s. Three units with negative spikes: **unit 1 (~90 µV) and unit 2 (~50 µV) on channel 4**, **unit 3 (~110 µV) on channel 5** (seen weaker on channel 4). Noise ~10 µV.'
                 '* The demo selects **channel 4** and detection **MAD, k = 4, negative polarity**; click **Run**.'
-                '* **What you should get**: **2 units on channel 4** with clearly different amplitudes (and 1 on channel 5). In the Spike rate tab (bin ~0.05 s), rates jump **5–55 ms after each stimulus** (baseline ~6–10 Hz, evoked 40–80 Hz); ISI violations should be ~0% (2 ms refractory).'};
+                '* **What you should get**: K-means alone tends to split one unit in two (e.g. 4 clusters, two with the same waveform); with **Auto-merge similar clusters** on (default) the status bar reports e.g. "Auto-merged cluster 3 into 1 (r = 0.98, amplitude ratio 0.99)" and **2–3 units** remain on channel 4: unit 1 (~90 µV), unit 2 (~50 µV) and possibly unit 3 seen weaker from channel 5.'
+                '* **Raster & PSTH** (−0.1 to 0.3 s, 5–10 ms bins): 15 trials; every unit fires more **5–55 ms after each stimulus** (unit 1: ~80 vs ~6 spikes/s). **Correlograms**: the autocorrelograms are empty within ±1 ms (2 ms refractory period); ISI violations ~0%.'};
             t.inputs = {
                 'MUA `.mat` from Extract Ephys: `mua_data`, `mua_fs`, `t_mua`, `mua_channels`'
                 'Optional `stim_data`, `stim_fs`, `t_stim` (needed to segment by stimulus)'};
@@ -729,7 +777,13 @@ classdef HelpApp < handle
                 'Very few or no spikes', 'Lower the threshold multiplier, check the polarity, or enable filtering before detection.'
                 'Many ISI violations in one cluster', 'It probably mixes units or noise: try another feature method, more clusters, or a higher threshold.'
                 'ICA / Wavelet not in the list', 'They need FastICA or the Wavelet Toolbox; use PCA instead.'
-                'Detection fails (findpeaks / butter undefined)', 'Install the Signal Processing Toolbox.'};
+                'Detection fails (findpeaks / butter undefined)', 'Install the Signal Processing Toolbox.'
+                'Two clusters have the same waveform', 'One neuron was split: select both and click Merge selected, or turn on Auto-merge similar clusters (Configure...). Lower the Merge threshold (e.g. 0.9) to merge more.'
+                'Auto-merge joined two different neurons', 'Click Undo (step 4) to restore the clusters, then raise the Merge threshold (e.g. 0.98) or turn Auto-merge off in Configure....'
+                'One cluster mixes two waveforms or has many ISI violations', 'Select that unit alone and click Split selected; Undo if the result is worse.'
+                'Raster & PSTH says "No stimulus channel in this file"', 'The MUA file has no stim_data; save it again from Extract Ephys with the stimulus channel. Correlograms do not need a stimulus.'
+                'Raster & PSTH says "No stimulus onsets"', 'The stimulus never rises above the onset threshold: tick Segment by stimulation onsets (step 2) and set a lower threshold, then untick it if you want to sort the full recording.'
+                'Autocorrelogram has spikes inside the shaded band', 'The unit has refractory violations: it probably contains a second neuron or noise; try Split selected or a higher detection threshold.'};
             t.images = {'MUAAnalysisWorkflow.png', 'MUAAnalysisPrinciple.png'};
         end
 
@@ -738,23 +792,28 @@ classdef HelpApp < handle
             t = mkTopic('ROI Analysis', 'Imaging', ...
                 'Measure a ROI or a line over time in a stack of coregistered frames (2-photon, gCaMP, blood-flow imaging).');
             t.quick = {
-                '**1 Load stack**: click **Load stack** and choose a .mat or multi-frame TIFF. The first frame is shown with the size, frame count and time source.'
-                '**2 Preprocess (optional)**: tick **B&W 256 levels**, **Smooth** and/or **Normalize each frame**. They are applied, in that order, when you click Run.'
-                '**3 Draw ROI or line**: click **Draw ROI** and drag a rectangle, or **Draw line** and drag a line (across the vessel for diameter). You can move / resize them afterwards.'
-                '**4 Analysis**: choose the **Method** (for ΔF/F also the baseline frames) and click **Run**. The result is plotted below the frame.'
-                '**5 Export**: click **Export results** to save a .csv (time + values) or a .mat (results, ROI / line and settings).'};
+                '**1 Load stack**: click **Load stack** and choose a .mat or multi-frame TIFF (or **Try demo data** / **Try advanced demo (motion, 3 cells)**). The first frame is shown with the size, frame count and time source; a `roiMask` / `roiMasks` in the file becomes the first ROI(s).'
+                '**2 Preprocess (optional)**: tick **Motion correction (rigid)** if the frames jitter: the shifts are estimated once (max shift shown next to the box, per-frame plot in the **Motion correction** tab) and applied before everything else. Then optionally **B&W 256 levels**, **Smooth** and/or **Normalize each frame**, applied in that order when you click Run.'
+                '**3 ROIs and line**: click **Add ROI** and drag a rectangle (repeat for more ROIs), or **Detect cells** to add one ROI per active cell automatically. ROIs are listed next to the image (double-click a name to rename, **Remove ROI** to delete). For line methods click **Draw line** (across the vessel for diameter). **Clear ROIs and line** starts over.'
+                '**4 Analysis**: choose the **Method** (for ΔF/F also the baseline frames; for Vessel diameter optionally **Robust diameter (ignore blood cells)**) and click **Run**. ROI methods give one trace per ROI, in the ROI''s colour.'
+                '**5 Export**: click **Export results** to save a .csv (time + one column per measure and ROI) or a .mat (all series, ROI masks and names, line, shifts and settings).'};
             t.demo = {
                 '* **Data**: `demo_imaging.mat`, 96 × 96 px, 150 frames at 10 Hz (15 s). A dark vertical **vessel at x = 60** whose **diameter oscillates 12 ± 3 px (9–15 px) every 5 s**; a bright **red blood cell moving down 2 px/frame** (20 px/s); a **cell at (24, 30), radius 6 px** with calcium transients (ΔF/F ≈ 1) at **3, 7 and 11 s**. The cell''s `roiMask` is in the file.'
                 '* The demo selects **ΔF/F** with that mask (baseline = first 30 frames) and a line across the vessel from (45, 70) to (75, 70).'
                 '* **ΔF/F**: flat ~0 until 3 s, then **three peaks of ~1 at 3, 7 and 11 s**, each decaying in ~1–2 s.'
-                '* **Vessel diameter** (same line): a sine between **~9 and ~15 px with a 5 s period**. **Kymograph** along the vessel (e.g. from (60, 5) to (60, 90)): slanted streaks with a slope of **2 px per frame**.'};
+                '* **Vessel diameter** (same line): a sine between **~9 and ~15 px with a 5 s period**. **Kymograph** along the vessel (e.g. from (60, 5) to (60, 90)): slanted streaks with a slope of **2 px per frame**.'
+                '* **Advanced demo** (**Try advanced demo (motion, 3 cells)**): 96 × 96 px, 150 frames at 10 Hz. Every frame is shifted by up to **±3 px** (smooth random walk); **three cells**: cell 1 at (22, 24) with events at **4, 8.5, 13 s**, cell 2 at (26, 78) at **5.5, 10.5 s**, cell 3 at (82, 30) at **7, 12 s**; the vessel at x = 60 (12 ± 3 px, period 5 s) and a bright **red blood cell that crosses the diameter line** (35, 64)–(85, 64) about every 3 s.'
+                '* **Motion correction**: the Motion correction tab shows dy and dx following the dashed true shifts (error < 0.3 px), max shift ≈ 3 px.'
+                '* **Show → Correlation image**: the three cells are bright disks (correlation ≈ 0.9), the vessel a bright band; **Detect cells** adds exactly **Cell 1–3** (the vessel is rejected as too elongated).'
+                '* **ΔF/F** (Run): three traces, each peaking only at its own cell''s event times.'
+                '* **Vessel diameter**: without Robust diameter the trace jumps to ~50 px whenever the blood cell crosses the line; with **Robust diameter** it follows the 9–15 px sine (error < 2.5 px) and the replaced frames are circled.'};
             t.inputs = {
                 '`.mat` with `stack` or `frames` (H × W × N grayscale or H × W × 3 × N RGB; otherwise the first variable is used)'
-                'Optional in the .mat: `timeVec` or `t` (one time per frame), `roiMask` (logical H × W, used when no ROI is drawn)'
+                'Optional in the .mat: `timeVec` or `t` (one time per frame), `roiMask` (logical H × W) or `roiMasks` (H × W × K, optional `roiNames`), used as the first ROIs'
                 'Multi-frame TIFF: RGB frames are converted to grayscale (mean of the colour channels); time = frame index'};
             t.outputs = {
-                '.csv: `Time` plus one column per measure (Intensity, Movement, DFF, Speed, Diameter_px); for a kymograph, a matrix (first row = time)'
-                '.mat: struct `results` with the series, `kymograph`, `roiMask`, `lineStart` / `lineEnd` and the preprocessing settings'};
+                '.csv: `Time` plus one column per measure (Intensity, Movement, DFF, Speed; with several ROIs `<measure>_<ROI name>`), or `Diameter_px` (+ `Diameter_standard_px`, `Replaced` when robust); for a kymograph, a matrix (first row = time)'
+                '.mat: struct `results` with the series (one row per ROI), `roiMasks` / `roiNames`, `roiMask` (ROI 1), `lineStart` / `lineEnd`, `motionCorrection` and `shifts`, and the preprocessing and diameter settings'};
             t.details = {
                 '## Methods using the ROI'
                 '* **Brightness**: mean intensity in the ROI per frame.'
@@ -768,29 +827,46 @@ classdef HelpApp < handle
                 '## Preprocessing'
                 '* **B&W 256**: rescale to 256 grey levels (uint8), e.g. for fluorescence intensity.'
                 '* **Smooth**: Gaussian filter, sigma 2 px, on every frame.'
-                '* **Normalize**: every frame scaled to 0–1 by its own min / max (removes global brightness changes, so do not use it for Brightness or ΔF/F).'};
+                '* **Normalize**: every frame scaled to 0–1 by its own min / max (removes global brightness changes, so do not use it for Brightness or ΔF/F).'
+                '## Advanced'
+                '* **Motion correction (rigid)**: every frame is aligned to the mean image by FFT phase correlation with a sub-pixel peak fit (two passes), then shifted back (bilinear). Translation only.'
+                '* **Multiple ROIs**: every ROI method gives one trace per ROI; the ROI table shows number (in the trace colour), name, area and source (file, drawn, detected, added).'
+                '* **Detect cells**: local correlation image (mean correlation of each pixel with its 8 neighbours), threshold (automatic: median + 4 robust SD, at least 0.2), connected components of 20–1000 px that are not elongated, holes filled.'
+                '* **Robust diameter**: background from the line ends and vessel core from a low percentile (both as running medians over 7 frames), outermost half-level crossings, then a Hampel filter (7 frames, 3 robust SD) replaces remaining spikes. Walls are located to sub-pixel precision in all modes.'};
             t.trouble = {
                 '"Could not draw a rectangle / line"', 'drawrectangle / drawline need the Image Processing Toolbox. Without it, save a logical `roiMask` in the .mat for ROI methods.'
                 'Run is disabled', 'The chosen method needs a ROI (Brightness, Movement, Both, ΔF/F, Speed) or a line (Kymograph, Vessel diameter); the step 3 card says which is missing.'
                 '"roiMask size does not match"', 'The mask must be H × W, the same size as one frame.'
                 'Time axis shows frames, not seconds', 'Add a `timeVec` (or `t`) with one value per frame to the .mat.'
-                'Load is slow / out of memory', 'Large TIFFs are read frame by frame into memory as double; crop or bin the stack first.'};
+                'Load is slow / out of memory', 'Large TIFFs are read frame by frame into memory as double; crop or bin the stack first.'
+                'Detect cells finds nothing', 'Tick **Motion correction** first: residual motion makes every edge look correlated and raises the automatic threshold. Otherwise lower **Detect: min correlation** (e.g. 0.3; 0 = automatic).'
+                'Detect cells also picks up vessels or blobs at the border', 'Elongated structures (ratio > 3) and components outside 20–1000 px are rejected; after motion correction the border within the largest shift is ignored. Remove unwanted ROIs with **Remove ROI**.'
+                'Two touching cells become one ROI', 'Raise **Detect: min correlation** so they separate, or draw them with **Add ROI**.'
+                'Vessel diameter jumps for single frames', 'A bright blood cell crossing the line moves the half level. Tick **Robust diameter (ignore blood cells)**; make the line extend at least one vessel radius beyond each wall so its ends sample the background.'
+                'Motion correction shifts look noisy / wrong', 'It corrects translation only (not rotation or warping) and needs structure in the image; very dim or uniform stacks give unreliable shifts. Untick it to go back to the raw frames.'
+                'ROIs are slightly off after turning motion correction on or off', 'ROIs and the line keep their pixel positions; re-run **Detect cells** or redraw them on the image you analyse.'};
             t.images = {'ROIAnalysisWorkflow.png', 'ROIAnalysisPrinciple.png'};
         end
 
         %% topicSignalCharacterization - Signal Characterization
         function t = topicSignalCharacterization()
             t = mkTopic('Signal Characterization', 'Response features', ...
-                'Turn each response into numbers: latency, onset delay, FWHM, AUC, rise / decay time, amplitude.');
+                'Turn each response into numbers (latency, onset delay, FWHM, AUC, rise / decay time, amplitude), compare groups of animals statistically and export publication figures.');
             t.quick = {
                 '**1 Load data**: click **Load .mat file**. The data type is detected (LDF segments, ERP / average, time series) and the number of series, Fs and time range are shown; the first series is plotted.'
                 '**2 Parameters**: set the stimulus onset **t0** (s), the **baseline** window (s) and the response **direction**. The plot shows t0 (dashed), the baseline window (shaded) and the detected peak and FWHM, so you can check them before extracting.'
                 '**3 Features**: select the features (Ctrl/Cmd-click for several) and click **Extract features**.'
-                '**4 Export**: check the table (click a row to plot that series) and click **Export to CSV / MAT**.'};
+                '**4 Export**: check the table (click a row to plot that series) and click **Export to CSV / MAT**. **Export figure…** above the plot saves the selected trace as a publication figure.'
+                '**5 Groups & statistics** tab (or **Try group demo**): in **1 Files and groups** type a **Group** name and click **Add files…** (one .mat per animal); repeat for each group. The **#** column is the subject number: paired designs match #1 with #1, #2 with #2 (fix with **▲ Move up** / **▼ Move down**).'
+                '**6 Feature and test**: choose the **Feature**, **Value per** (File (mean trace) recommended: one animal = one file), **Onset t0 (s)**, **Baseline (s)** and **Direction**; then the **Design** (Paired, Unpaired or ANOVA for 2+ groups), the **Method** (Parametric or Nonparametric) and, for two groups, **Compare** A vs B (difference = B − A). Click **Run test**: the **Plot** tab shows every animal, pair lines, mean ± SEM (or **Box plot**) and the significance bracket; the **Results** tab lists test, statistic, df, p, effect size, 95% CI, n, a robustness check with the other test family, assumptions and a copy-ready report.'
+                '**7 Export**: choose a format and click **Export figure…** (PDF / SVG / EPS vector, or PNG / TIFF at 300 or 600 dpi; 8.5 cm wide, 8 pt Helvetica, the window is not changed). **Export values & report…** saves the per-animal values (.csv plus a _report.txt) or the full result (.mat).'};
             t.demo = {
                 '* **Data**: `demo_ldf_trials.mat`, 8 LDF trials from −5 to 20 s at 10 Hz (0 = stimulus onset). The demo sets t0 = 0, direction Auto, the baseline to −5–0 s and selects every feature.'
                 '* **Expected per trial** (true response: ~120 PU baseline + 30 PU gamma-shaped hyperemia): **peak latency ≈ 4 s**, **peak amplitude ≈ 30 PU**, onset delay (50%) ≈ 1.9 s, FWHM ≈ 5.5 s, rise time (10–90%) ≈ 2.2 s, decay to 50% ≈ 3.4 s; positive direction.'
-                '* Trials differ by a few PU / tenths of a second because of vasomotion and noise, which is why the mean over trials is the number to report.'};
+                '* Trials differ by a few PU / tenths of a second because of vasomotion and noise, which is why the mean over trials is the number to report.'
+                '* **Group demo** (**Try group demo**): 24 files, `control_animal01.mat` … `drug_animal08.mat`: the same 8 animals in Control, Stimulated and Drug, each with 8 LDF trials (−5 to 20 s at 10 Hz). True peak hyperemia 18, 30 and 24 PU; animals differ by ~3 PU, plus ~2.5 PU per animal and condition.'
+                '* **Paired t-test, Peak amplitude, Control vs Stimulated**: Stimulated − Control ≈ **+12 PU** (95% CI roughly +9 to +15), **p < 0.001**, d_z ≈ 3 (simulated 3.3). Wilcoxon signed-rank: p ≈ 0.008 (all 8 animals increase; the smallest exact p possible with 8 pairs). Unpaired (Welch): also significant, with a smaller t.'
+                '* **ANOVA**: F(2, 21) large, p < 0.001; Tukey–Kramer Stimulated − Control ≈ +12 PU (p < 0.001); Drug lies ~6 PU from each of the others (usually, not always, significant). **Peak latency** ≈ 4 s in every group: no difference expected.'};
             t.inputs = {
                 'LDF trials from LDF Process: `segmentedLDF`, `segmentedTime` (one series per trial)'
                 'LFP from Extract Ephys: `lfp_data`, `t_lfp` (mean over channels = one series)'
@@ -816,7 +892,15 @@ classdef HelpApp < handle
                 '"… does not contain a supported format"', 'The file needs segmentedLDF + segmentedTime, lfp_data + t_lfp, or t + y (or t + LDF). The alert lists the variables it found.'
                 'Series skipped (t and y lengths differ)', 'Each y must have one value per time point; check the saved variables.'
                 'Features are NaN', 'Check t0 (inside the time range?) and the direction; the plot shows where the peak was found.'
-                'Peak found on the wrong deflection', 'Set Direction to Positive or Negative instead of Auto.'};
+                'Peak found on the wrong deflection', 'Set Direction to Positive or Negative instead of Auto.'
+                '"The paired design needs the same number of subjects in both groups"', 'Every animal needs one file in each group. Add the missing file or remove the extra one; the **#** column shows the pairing.'
+                'Wrong animals paired', 'The Results report lists every pair (`1: fileA ↔ fileB`). Files are added in alphabetical order; fix the order with **▲ Move up** / **▼ Move down**.'
+                '**Run test** is disabled', 'Add files to at least two groups. For a two-group design, choose two different groups in **Compare**.'
+                '"… value(s) excluded because the feature could not be computed"', 'The feature was NaN for those files (peak not found or never crossing 50%). Check **Onset t0**, **Baseline** and **Direction**, or choose another feature.'
+                '"The parametric and rank-based tests disagree"', 'Usually few animals or an outlier. Look at the Plot tab, and report the rank-based result or add animals.'
+                'Same animals in 3 or more conditions', 'The one-way ANOVA assumes independent groups; repeated-measures ANOVA is not available. Compare the conditions of interest with paired tests (corrected for multiple comparisons), or use a statistics package.'
+                '**Export figure…** is disabled', 'Run a test first (Groups & statistics), or load a file (Single file).'
+                'The journal wants Arial or another size', 'Export as PDF or SVG (vector) and change the font or size in Illustrator or Inkscape; the text stays editable.'};
             t.images = {'SignalCharacterizationWorkflow.png', 'SignalCharacterizationPrinciple.png'};
         end
     end

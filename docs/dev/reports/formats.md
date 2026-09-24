@@ -1,11 +1,13 @@
 # Wave 1 report: data formats (Intan RHD, Open Ephys binary, NWB) in Extract Ephys
 
+> Development notes for the in-progress improvement strand. They are removed before merging to `main`.
+
 Classification: NEW STRAND (area: data formats / acquisition-system adapters).
 
 Nothing here has been run in real MATLAB yet. This is what was checked, and how:
 
 - **Intan and Open Ephys readers and writers, `.npy` I/O, `EphysSource` and `demoFormats`**: run in Octave 8.
-- **Independent check of the files my writers produce**: the neo library (`IntanRawIO`, `OpenEphysBinaryRawIO`, BSD licence) reads them back with the same samples, rates, channel names and TTL events. neo was used only as a black-box checker; none of its code was copied.
+- **Independent check of the files the writers produce**: the neo library (`IntanRawIO`, `OpenEphysBinaryRawIO`, BSD licence) reads them back with the same samples, rates, channel names and TTL events. neo was used only as a black-box checker; none of its code was copied.
 - **NWB layout from `writeNWB`**: written to HDF5 from Octave and validated with pynwb's schema validator. It shows **0 errors against NWB core 2.7.0** (pynwb 2.8.3) **and 2.11.0** (pynwb 4.2.0). pynwb reads every object back. nwbinspector reports no structural problems (details below). Two routes were used to write the file:
   - a Python (h5py) copy of the layout;
   - the real `commitLayout` code, run through an Octave stand-in for MATLAB's low-level `H5F/H5G/H5D/H5A/H5T/H5S/H5R/H5L` calls. The stand-in accepts only the documented argument forms and data shapes, and replays the calls with h5py.
@@ -164,7 +166,7 @@ The reader was written from Intan's published RHD2000 data file format documenta
 - UTF-16 surrogate pairs in channel names are not decoded.
 - RHS files and the multi-file `.dat` formats are not read.
 
-**Checked:** neo reads my version 1.2, 1.3, 2.0 and 3.0 files with the same values: amplifier within half an LSB, aux 0.748 V, supply 3.3 V, ADC, digital lines. neo itself fails on files that contain temperature-sensor channels (a neo bug), so that case is covered only by my own round trip.
+**Checked:** neo reads the written version 1.2, 1.3, 2.0 and 3.0 files with the same values: amplifier within half an LSB, aux 0.748 V, supply 3.3 V, ADC, digital lines. neo itself fails on files that contain temperature-sensor channels (a neo bug), so that case is covered only by my own round trip.
 
 ### Open Ephys binary (`readOpenEphysBinary`)
 
@@ -186,7 +188,7 @@ Each line becomes a square wave on the continuous grid; `info.stimOnsets` holds 
 
 **Not read:** text and message events, spikes, and the older "Open Ephys format" (`.continuous` files).
 
-**Checked:** neo reads my 0.6 folders with the same data, the ADC stream split off, and TTL times and durations. For 0.5 folders, the data and labels match. neo's 0.5 event times are divided by the rate twice, which is a neo quirk: the raw sample numbers it reads are the ones I wrote.
+**Checked:** neo reads the written 0.6 folders with the same data, the ADC stream split off, and TTL times and durations. For 0.5 folders, the data and labels match. neo's 0.5 event times are divided by the rate twice, which is a neo quirk: the raw sample numbers it reads are the ones I wrote.
 
 ### NWB 2.x (`readNWB`)
 
@@ -340,7 +342,7 @@ The frames go to `test-artifacts/screens/walkthrough/ExtractEphysApp_xNN_*.png`.
 
 ## References cited in the headers
 
-- **Intan Technologies**: RHD2000 data file format documentation (application note), intantech.com. I am not certain of the document's exact title, so it is cited by publisher and site.
+- **Intan Technologies**: RHD2000 data file format documentation (application note), intantech.com. The document's exact title is uncertain, so it is cited by publisher and site.
 - **Open Ephys GUI documentation**: "Binary format", open-ephys.github.io.
 - **NWB 2.x format specification**: nwb-schema.readthedocs.io.
 - **Rübel O. et al. (2022)**: The Neurodata Without Borders ecosystem for neurophysiological data science. *eLife* 11:e78362.
@@ -357,7 +359,7 @@ The frames go to `test-artifacts/screens/walkthrough/ExtractEphysApp_xNN_*.png`.
 3. **The UI** (layout, and dropdown `ItemsData` as a cell of char) is parse-checked only.
 4. **The matnwb engine** is untested.
 
-## Wiring suggestions (files I was not allowed to edit)
+## Wiring suggestions (files outside this area's scope)
 
 - **`NeuroAnalyzer.m`, `run_tests.m`, `tests/AppSmokeTest.m`, `tests/DemoWalkthroughTest.m`**: add `addpath(fullfile(root, 'core', 'io'))` and `addpath(fullfile(root, 'core', 'demo'))`. The app already does this itself (`ensureIOPath`), so nothing breaks without it.
 - **`core/DemoData.m`**:

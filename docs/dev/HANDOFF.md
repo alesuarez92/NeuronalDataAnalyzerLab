@@ -1,5 +1,7 @@
 # Handoff — NeuroAnalyzer improvement strand
 
+> Development notes for the in-progress improvement strand. They are removed before merging to `main`.
+
 Start a new session by reading, in order: `CLAUDE.md`, this file,
 `docs/UI_STYLE.md`, `docs/dev/AGENT_RULES.md`, then `docs/dev/reports/*.md`.
 Classification of the ongoing work: **EXISTING STRAND**.
