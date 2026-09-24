@@ -2,27 +2,37 @@
 % =========================================================================
 % AVERAGE LDF VIEWER - GRAND AVERAGE OF SEGMENTED LDF TRIALS
 % =========================================================================
-% Launched from Main. Loads one or more .mat files containing segmentedLDF
-% and segmentedTime (from ProcessingLDFApp). Displays segments, plots grand
-% average (mean ± SD), optional "Relative to Baseline" correction. Buttons:
-% Load Segmented Files, Clear Segments, Plot Grand Average.
+% Launched from Main. Built with UIKit.window: numbered step cards on the
+% left (1 Load trial files, 2 Options, 3 Grand average) and two plots on
+% the right (all trials; grand average mean ± SD). Loads one or more .mat
+% files containing segmentedLDF and segmentedTime (from
+% ProcessingLDFApp); files are appended to the current set when their
+% time axes match, otherwise skipped and reported. Optional "Relative to
+% baseline" subtracts each trial's pre-stimulus (t < 0) mean. Clear
+% removes all trials. updateControls() enables actions from the data
+% state and marks the next step primary.
 % =========================================================================
 
 classdef LDFGrandAverageApp < handle
-    %% PROPERTIES: UI, loaded segment matrix, time axis, grand average figure handles
+    %% PROPERTIES: UI, loaded segment matrix, time axis, plot handles
     properties
-        UIFig
-        LoadBtn
-        PlotBtn
-        ClearBtn
-        Ax
-        SegmentedData
-        SegmentedTime
-        RelativeCheck
-        GrandFig  % handle to the grand average figure
-        GrandPlot % handle to the average line
-        GrandAxes % handle the Axes
-        ShadedArea % handle to std shading
+        UIFig          % Main uifigure (UIKit.window)
+        StatusLabel    % Status bar label (UIKit.setStatus)
+        HelpBtn        % Opens HelpApp('LDF Average')
+        LoadBtn        % Step 1: add segmented files
+        ClearBtn       % Step 1: remove all trials
+        FileList       % Step 1: loaded files with trial counts
+        InfoLabel      % Step 1: total trials, time window
+        RelativeCheck  % Step 2: subtract pre-stimulus baseline
+        PlotBtn        % Step 3: plot grand average
+        Ax             % uiaxes: all trials
+        GrandAxes      % uiaxes: grand average
+        GrandPlot      % handle to the average line
+        ShadedArea     % handle to the ± SD shading
+        SegmentedData  % [nTrials x nSamples] trials from all files
+        SegmentedTime  % time axis (s, 0 = onset)
+        FileNames = {} % loaded file names (one per accepted file)
+        FileCounts = [] % trials contributed by each file
     end
 
     methods
@@ -32,195 +42,323 @@ classdef LDFGrandAverageApp < handle
             app.buildUI();
         end
 
-        %% buildUI - Header | fixed controls | axes | fixed footer (consistent with Main)
+        %% buildUI - Window, step cards (left), trial and average axes (right)
         function buildUI(app)
             T = UITheme;
-            app.UIFig = figure('Name', 'Average LDF Viewer', ...
-                'Position', [400 300 1000 640], 'Resize', 'on', ...
-                'Color', T.bgGray, ...
-                'MenuBar', 'none', 'ToolBar', 'none', 'NumberTitle', 'off');
+            W = UIKit.window('Average LDF Viewer', ...
+                'Pool segmented LDF trials from several files and plot the grand average', ...
+                'LDF Average', [1150 740]);
+            app.UIFig = W.Fig;
+            app.StatusLabel = W.Status;
+            app.HelpBtn = W.HelpBtn;
+            W.Body.RowHeight = {'1x'};
+            W.Body.ColumnWidth = {300, '1x'};
 
-            % --- Header: full-width, tall enough for title + subtitle ---
-            headerH = 0.14;
-            headerPanel = uipanel(app.UIFig, 'Units', 'normalized', ...
-                'Position', [0 1-headerH 1 headerH], 'BorderType', 'none', ...
-                'BackgroundColor', T.headerBg);
-            uicontrol(headerPanel, 'Style', 'text', 'String', 'Average LDF Viewer', ...
-                'Units', 'normalized', 'Position', [0.02 0.45 0.6 0.45], ...
-                'FontSize', T.fontTitle, 'FontWeight', 'bold', 'ForegroundColor', T.headerTitleColor, ...
-                'BackgroundColor', T.headerBg, 'HorizontalAlignment', 'left');
-            uicontrol(headerPanel, 'Style', 'text', 'String', 'Grand average of segmented LDF trials', ...
-                'Units', 'normalized', 'Position', [0.02 0.10 0.6 0.30], ...
-                'FontSize', T.fontSubtitle, 'ForegroundColor', T.headerSubtitleColor, ...
-                'BackgroundColor', T.headerBg, 'HorizontalAlignment', 'left');
+            left = uigridlayout(W.Body, [4 1], 'Padding', [0 0 0 0], 'RowSpacing', 10, ...
+                'BackgroundColor', T.bgGray, 'Scrollable', 'on');
+            left.Layout.Row = 1; left.Layout.Column = 1;
+            heights = cell(1, 4);
 
-            % --- Fixed footer (plain hyperlink-style text, no button border) ---
-            footerH = 0.06;
-            footerPanel = uipanel(app.UIFig, 'Units', 'normalized', ...
-                'Position', [0 0 1 footerH], 'BorderType', 'none', 'BackgroundColor', T.bgGray);
-            uicontrol(footerPanel, 'Style', 'text', ...
-                'String', sprintf('© Copyrights by Alejandro Suarez, Ph.D.  ·  v%s', T.version), ...
-                'Units', 'normalized', 'Position', [0.45 0.15 0.53 0.7], ...
-                'HorizontalAlignment', 'right', 'FontSize', T.fontSmall, 'ForegroundColor', T.mutedColor, ...
-                'BackgroundColor', T.bgGray, 'Enable', 'inactive', ...
-                'ButtonDownFcn', @(~,~)web('https://github.com/alesuarez92', '-browser'));
+            % --- 1 Load trial files ---
+            [p, g, heights{1}] = stepCard(left, 1, 'Load trial files', {T.buttonHeight, 120, 34});
+            p.Layout.Row = 1;
+            app.LoadBtn = UIKit.button(g, 'Add files...', @(~,~)app.loadFiles(), 'primary', ...
+                'Add one or more .mat files with segmentedLDF and segmentedTime (saved by LDF Processing); trials are pooled');
+            app.LoadBtn.Layout.Row = 2; app.LoadBtn.Layout.Column = 1;
+            app.ClearBtn = UIKit.button(g, 'Clear all', @(~,~)app.clearSegments(), 'danger', ...
+                'Remove all loaded trials and start again');
+            app.ClearBtn.Layout.Row = 2; app.ClearBtn.Layout.Column = 2;
+            app.FileList = uilistbox(g, 'Items', {'(no files loaded)'}, 'FontSize', T.fontSmall, ...
+                'Tooltip', 'Files pooled so far, with the number of trials each contributed');
+            app.FileList.Layout.Row = 3; app.FileList.Layout.Column = [1 2];
+            app.InfoLabel = infoLabel(g, 'No trials loaded', 'Total number of trials and time window');
+            app.InfoLabel.Layout.Row = 4; app.InfoLabel.Layout.Column = [1 2];
 
-            % --- Fixed controls section (positioned just below the header) ---
-            ctrlTop = 1 - headerH - 0.02;
-            ctrlH = 0.08;
-            ctrlPanel = uipanel(app.UIFig, 'Title', 'Controls', 'Units', 'normalized', ...
-                'Position', [0.01 ctrlTop-ctrlH 0.98 ctrlH], 'BackgroundColor', T.cardBg, ...
-                'HighlightColor', T.cardBorder, 'FontSize', T.fontSmall);
-            app.LoadBtn = uicontrol(ctrlPanel, 'Style','pushbutton','String','Load Segmented Files', ...
-                'Units', 'normalized', 'Position', [0.02 0.15 0.22 0.7], ...
-                'Callback', @(~,~)app.loadFiles());
-            app.ClearBtn = uicontrol(ctrlPanel, 'Style','pushbutton','String','Clear Segments', ...
-                'Units', 'normalized', 'Position', [0.26 0.15 0.16 0.7], ...
-                'Callback', @(~,~)app.clearSegments());
-            app.PlotBtn = uicontrol(ctrlPanel, 'Style','pushbutton','String','Plot Grand Average', ...
-                'Units', 'normalized', 'Position', [0.44 0.15 0.18 0.7], ...
-                'Callback', @(~,~)app.plotGrandAverage());
-            uicontrol(ctrlPanel, 'Style','text','String','Relative to Baseline:', ...
-                'Units', 'normalized', 'Position', [0.66 0.15 0.16 0.5], 'HorizontalAlignment','left');
-            app.RelativeCheck = uicontrol(ctrlPanel, 'Style','checkbox', ...
-                'Units', 'normalized', 'Position', [0.84 0.25 0.08 0.5], ...
-                'Value', 0, 'Callback', @(src,~)app.updateSegmentPlot());
+            % --- 2 Options ---
+            [p, g, heights{2}] = stepCard(left, 2, 'Options', {T.controlHeight, 30});
+            p.Layout.Row = 2;
+            app.RelativeCheck = uicheckbox(g, 'Text', 'Relative to baseline', 'Value', false, ...
+                'FontSize', T.fontBody, 'ValueChangedFcn', @(~,~)app.updateSegmentPlot(), ...
+                'Tooltip', 'Subtract each trial''s mean over the pre-stimulus period (t < 0 s)');
+            app.RelativeCheck.Layout.Row = 2; app.RelativeCheck.Layout.Column = [1 2];
+            note = infoLabel(g, 'Subtracts each trial''s pre-stimulus (t < 0) mean.', ...
+                'Baseline correction per trial');
+            note.Layout.Row = 3; note.Layout.Column = [1 2];
 
-            % --- Axes (above footer, below controls); leave room above the
-            % footer so the xlabel/tick labels never overlap the copyright.
-            % Also reserve a top margin so the axis title is not clipped. ---
-            graphBottom = footerH + 0.06;
-            graphTop = ctrlTop - ctrlH - 0.04;
-            app.Ax = axes(app.UIFig, 'Units', 'normalized', ...
-                'Position', [0.08 graphBottom 0.84 graphTop - graphBottom]);
+            % --- 3 Grand average ---
+            [p, g, heights{3}] = stepCard(left, 3, 'Grand average', {T.buttonHeight});
+            p.Layout.Row = 3;
+            app.PlotBtn = UIKit.button(g, 'Plot grand average', @(~,~)app.plotGrandAverage(), ...
+                'secondary', 'Plot the mean ± SD across all loaded trials');
+            app.PlotBtn.Layout.Row = 2; app.PlotBtn.Layout.Column = [1 2];
+
+            heights{4} = '1x';
+            left.RowHeight = heights;
+
+            % --- Plots ---
+            plotCard = UIKit.card(W.Body, '');
+            plotCard.Layout.Row = 1; plotCard.Layout.Column = 2;
+            axGrid = uigridlayout(plotCard, [2 1], 'RowHeight', {'1x', '1x'}, ...
+                'Padding', [8 8 14 8], 'RowSpacing', 8, 'BackgroundColor', T.cardBg);
+            app.Ax = uiaxes(axGrid);
+            app.GrandAxes = uiaxes(axGrid);
+            app.showPlaceholders();
+
+            UIKit.setStatus(app.StatusLabel, 'Step 1: add segmented trial files (saved by LDF Processing).', 'info');
+            app.updateControls();
         end
 
+        %% updateControls - Enable controls from data state; next step is primary
+        function updateControls(app)
+            hasData = ~isempty(app.SegmentedData);
+            hasAvg = ~isempty(app.GrandPlot) && isgraphics(app.GrandPlot);
+            app.ClearBtn.Enable = onoff(hasData);
+            app.RelativeCheck.Enable = onoff(hasData);
+            app.PlotBtn.Enable = onoff(hasData);
+            setButtonStyle(app.LoadBtn, ifelse(~hasData, 'primary', 'secondary'));
+            setButtonStyle(app.PlotBtn, ifelse(hasData && ~hasAvg, 'primary', 'secondary'));
+            if hasData
+                app.FileList.Items = cellfun(@(f, n) sprintf('%s  (%d)', f, n), ...
+                    app.FileNames, num2cell(app.FileCounts), 'UniformOutput', false);
+                t = app.SegmentedTime;
+                app.InfoLabel.Text = sprintf('%d trials from %d file(s)\nWindow %.2f to %.2f s', ...
+                    size(app.SegmentedData, 1), numel(app.FileNames), t(1), t(end));
+                app.InfoLabel.FontColor = UITheme.sectionTitleColor;
+            else
+                app.FileList.Items = {'(no files loaded)'};
+                app.InfoLabel.Text = 'No trials loaded';
+                app.InfoLabel.FontColor = UITheme.bodyColor;
+            end
+        end
+
+        %% loadFiles - Add segmented files; skip files that do not match
+        % -------------------------------------------------------------
+        % Files without segmentedLDF/segmentedTime, or whose time axis
+        % differs from the trials already loaded, are skipped and listed
+        % in a warning.
+        % -------------------------------------------------------------
         function loadFiles(app)
-            uistack(app.UIFig, 'bottom');
-            drawnow;
-            [files, path] = uigetfile('*.mat', 'Select Segmented Files', 'MultiSelect', 'on');
+            UIKit.setStatus(app.StatusLabel, 'Choose segmented trial files...', 'busy');
+            startDir = ProjectManager.getExportDir();
+            if isempty(startDir), startDir = Exporter.getLastUsedPath(); end
+            if isempty(startDir), startDir = pwd; end
+            [files, path] = uigetfile(fullfile(startDir, '*.mat'), 'Select Segmented Files', 'MultiSelect', 'on');
             figure(app.UIFig);
-            if isequal(files, 0), return; end
+            if isequal(files, 0)
+                UIKit.setStatus(app.StatusLabel, 'No files added.', 'info');
+                return;
+            end
             if ischar(files), files = {files}; end
 
+            dlg = UIKit.busy(app.UIFig, sprintf('Loading %d file(s)...', numel(files)));
+            skipped = {};
+            nBefore = size(app.SegmentedData, 1);
             for i = 1:length(files)
-                data = load(fullfile(path, files{i}));
-                if isfield(data, 'segmentedLDF') && isfield(data, 'segmentedTime')
-                    if isempty(app.SegmentedData)
-                        app.SegmentedData = data.segmentedLDF;
-                        app.SegmentedTime = data.segmentedTime;
-                    else
-                        if isequal(app.SegmentedTime, data.segmentedTime)
-                            app.SegmentedData = [app.SegmentedData; data.segmentedLDF];
-                        else
-                            warning('Skipped file "%s": time axes do not match.', files{i});
-                        end
-                    end
+                if isvalid(dlg), dlg.Message = sprintf('Loading %s (%d of %d)...', files{i}, i, numel(files)); end
+                try
+                    data = load(fullfile(path, files{i}));
+                catch ME
+                    skipped{end+1} = sprintf('%s: could not be read (%s)', files{i}, ME.message); %#ok<AGROW>
+                    continue;
                 end
+                if ~(isfield(data, 'segmentedLDF') && isfield(data, 'segmentedTime'))
+                    skipped{end+1} = sprintf('%s: no segmentedLDF/segmentedTime', files{i}); %#ok<AGROW>
+                    continue;
+                end
+                if isempty(app.SegmentedData)
+                    app.SegmentedData = data.segmentedLDF;
+                    app.SegmentedTime = data.segmentedTime;
+                elseif isequal(app.SegmentedTime, data.segmentedTime)
+                    app.SegmentedData = [app.SegmentedData; data.segmentedLDF];
+                else
+                    skipped{end+1} = sprintf('%s: time axis does not match', files{i}); %#ok<AGROW>
+                    continue;
+                end
+                app.FileNames{end+1} = files{i};
+                app.FileCounts(end+1) = size(data.segmentedLDF, 1);
             end
+            UIKit.done(dlg);
+            Exporter.setLastUsedPath(path);
 
-            msgbox(sprintf('Total segments loaded: %d', size(app.SegmentedData,1)),'modal');
-
-            % Plot immediately
-            axes(app.Ax); cla(app.Ax); hold on;
-            plot(app.SegmentedTime, app.SegmentedData');% 'Color', [0.6 0.6 0.9 0.3]);
-            xlabel('Time (s)'); ylabel('LDF');
-            title(sprintf('All Segments Loaded (n = %d)', size(app.SegmentedData, 1)));
-            grid on;
-        
+            added = size(app.SegmentedData, 1) - nBefore;
+            if ~isempty(app.SegmentedData)
+                app.updateSegmentPlot();   % also refreshes a grand average already shown
+            end
+            app.updateControls();
+            total = size(app.SegmentedData, 1);
+            if isempty(skipped)
+                UIKit.setStatus(app.StatusLabel, sprintf('Added %d trials (%d in total). Next: plot the grand average.', ...
+                    added, total), 'success');
+            else
+                UIKit.setStatus(app.StatusLabel, sprintf('Added %d trials (%d in total); %d file(s) skipped.', ...
+                    added, total, numel(skipped)), 'warning');
+                UIKit.alert(app.UIFig, sprintf('These files were skipped:\n%s', strjoin(skipped, newline)), ...
+                    'Some files skipped', 'warning');
+            end
         end
 
+        %% updateSegmentPlot - Plot all trials (baseline-corrected if checked)
         function updateSegmentPlot(app)
             if isempty(app.SegmentedData)
                 return;
             end
-        
-            segments = app.SegmentedData;
-            t = app.SegmentedTime;
-        
+            [segments, ok] = app.correctedSegments();
+            if ~ok, return; end
+            T = UITheme;
+            t = app.SegmentedTime(:)';
+            ax = app.Ax;
+            cla(ax);
+            resetAxesModes(ax);
+            ax.ColorOrder = T.plotColors;
+            hold(ax, 'on');
+            plot(ax, t, segments');
+            xline(ax, 0, '-', 'Color', T.stimColor, 'LineWidth', 1.2);
+            hold(ax, 'off');
             if app.RelativeCheck.Value
-                baselineMask = t < 0;
-                if ~any(baselineMask)
-                    errordlg('No pre-stimulus baseline available for correction.');
-                    return;
-                end
-                baselineMeans = mean(segments(:, baselineMask), 2);
-                segments = segments - baselineMeans;
-            end
-        
-            axes(app.Ax); cla(app.Ax); hold on;
-            plot(t, segments');%, 'Color', [0.6 0.6 0.9 0.3]);
-            xlabel('Time (s)'); ylabel('LDF');
-            if app.RelativeCheck.Value
-                label = 'All Segments (Relative)';
+                label = 'All trials (relative to baseline)';
+                yl = 'LDF change from baseline';
             else
-                label = 'All Segments';
+                label = 'All trials';
+                yl = 'LDF';
             end
-            title(sprintf('%s (n = %d)', label, size(segments,1)));
-            grid on;
-            
-%             if isfield(app, 'GrandFig') && ~isempty(app.GrandFig) && isvalid(app.GrandFig)
-%                 app.plotGrandAverage();  % update the grand average but only if it is already shown
-%             end
+            UIKit.styleAxes(ax, sprintf('%s (n = %d)', label, size(segments, 1)), 'Time from onset (s)', yl);
+            if ~isempty(app.GrandPlot) && isgraphics(app.GrandPlot)
+                app.plotGrandAverage();   % keep the average consistent with the option
+            end
         end
 
+        %% clearSegments - Remove all trials and reset the plots
         function clearSegments(app)
             app.SegmentedData = [];
             app.SegmentedTime = [];
-            cla(app.Ax);  % Clear the plot
-            title(app.Ax, 'No Data Loaded');
+            app.FileNames = {};
+            app.FileCounts = [];
+            app.GrandPlot = [];
+            app.ShadedArea = [];
+            app.showPlaceholders();
+            app.updateControls();
+            UIKit.setStatus(app.StatusLabel, 'All trials cleared. Add files to start again.', 'info');
         end
 
+        %% plotGrandAverage - Mean ± SD across all trials
         function plotGrandAverage(app)
             if isempty(app.SegmentedData)
-                errordlg('No segmented data loaded.');
+                UIKit.alert(app.UIFig, 'No segmented data loaded.', 'No trials', 'warning');
                 return;
             end
-        
-            segments = app.SegmentedData;
-            t = app.SegmentedTime;
-        
-            % Apply relative baseline correction if needed
+            [segments, ok] = app.correctedSegments();
+            if ~ok, return; end
+            T = UITheme;
+            t = app.SegmentedTime(:)';
+            avg = mean(segments, 1);
+            stddev = std(segments, 0, 1);
+
+            ax = app.GrandAxes;
+            cla(ax);
+            resetAxesModes(ax);
+            hold(ax, 'on');
+            % Shaded area for std
+            app.ShadedArea = fill(ax, [t, fliplr(t)], [avg + stddev, fliplr(avg - stddev)], ...
+                T.shadeColor, 'EdgeColor', 'none', 'FaceAlpha', 0.2, 'DisplayName', '± SD');
+            % Average trace
+            app.GrandPlot = plot(ax, t, avg, 'Color', T.plotColors(1, :), 'LineWidth', 2, ...
+                'DisplayName', 'Mean');
+            xline(ax, 0, '-', 'Color', T.stimColor, 'LineWidth', 1.2, 'HandleVisibility', 'off');
+            hold(ax, 'off');
+            legend(ax, 'Location', 'best', 'Box', 'off');
             if app.RelativeCheck.Value
-                baselineMask = t < 0;
+                yl = 'LDF change from baseline';
+            else
+                yl = 'LDF';
+            end
+            UIKit.styleAxes(ax, sprintf('Grand average (n = %d)', size(segments, 1)), 'Time from onset (s)', yl);
+            app.updateControls();
+            UIKit.setStatus(app.StatusLabel, sprintf('Grand average of %d trials plotted.', size(segments, 1)), 'success');
+        end
+    end
+
+    methods (Access = private)
+        %% correctedSegments - Trials, baseline-corrected when the option is on
+        function [segments, ok] = correctedSegments(app)
+            ok = true;
+            segments = app.SegmentedData;
+            if app.RelativeCheck.Value
+                baselineMask = app.SegmentedTime < 0;
                 if ~any(baselineMask)
-                    errordlg('No pre-stimulus baseline available for correction.');
+                    ok = false;
+                    app.RelativeCheck.Value = false;
+                    UIKit.setStatus(app.StatusLabel, 'No pre-stimulus baseline: relative mode turned off.', 'error');
+                    UIKit.alert(app.UIFig, ['No pre-stimulus baseline available for correction ' ...
+                        '(the trials have no samples before t = 0).'], 'No baseline', 'error');
                     return;
                 end
                 baselineMeans = mean(segments(:, baselineMask), 2);
                 segments = segments - baselineMeans;
             end
-        
-            avg = mean(segments, 1);
-            stddev = std(segments, 0, 1);
-        
-            % === Reuse the same figure ===
-            if isempty(app.GrandFig) || ~isvalid(app.GrandFig)
-                app.GrandFig = figure('Name','Grand Average of Segments');
-                app.GrandAxes = axes(app.GrandFig);  % Store axes if needed
-            else
-                figure(app.GrandFig);                % Bring figure to front
-                cla(app.GrandFig.CurrentAxes);       % Clear previous plots
-            end
-        
-            ax = app.GrandFig.CurrentAxes;
-        
-            % Plot shaded area for std
-            app.ShadedArea = fill(ax, ...
-                [t, fliplr(t)], ...
-                [avg + stddev, fliplr(avg - stddev)], ...
-                [0.8 0.8 1], 'EdgeColor','none', 'FaceAlpha', 0.4);
-        
-            hold(ax, 'on');
-        
-            % Plot average trace
-            app.GrandPlot = plot(ax, t, avg, 'b-', 'LineWidth', 2);
-        
-            xlabel(ax, 'Time (s)');
-            ylabel(ax, 'LDF');
-            title(ax, sprintf('Grand Average (n = %d)', size(segments,1)));
-            grid(ax, 'on');
         end
 
+        %% showPlaceholders - Empty-axes hints before data
+        function showPlaceholders(app)
+            legend(app.GrandAxes, 'off');
+            UIKit.emptyAxes(app.Ax, 'Add trial files to begin');
+            UIKit.emptyAxes(app.GrandAxes, 'Grand average (mean ± SD) appears here');
+            UIKit.styleAxes(app.Ax, 'All trials');
+            UIKit.styleAxes(app.GrandAxes, 'Grand average');
+        end
+    end
+end
+
+%% Local helpers
+% -------------------------------------------------------------------------
+
+%% stepCard - Card with a numbered step label and a 2-column grid
+% rowHeights: heights of the rows below the step label. Returns the
+% panel, its grid and the pixel height the card needs.
+function [p, g, h] = stepCard(parent, n, text, rowHeights)
+    T = UITheme;
+    p = UIKit.card(parent, '');
+    rh = [{22}, rowHeights];
+    g = uigridlayout(p, [numel(rh) 2], 'RowHeight', rh, 'ColumnWidth', {'1x', '1x'}, ...
+        'Padding', [10 8 10 10], 'RowSpacing', 6, 'ColumnSpacing', 8, ...
+        'BackgroundColor', T.cardBg);
+    lbl = UIKit.step(g, n, text);
+    lbl.Layout.Row = 1; lbl.Layout.Column = [1 2];
+    h = sum([rh{:}]) + 6 * (numel(rh) - 1) + 18 + 4;
+end
+
+%% infoLabel - Small wrapped muted label for file/result summaries
+function lbl = infoLabel(parent, text, tooltip)
+    T = UITheme;
+    lbl = uilabel(parent, 'Text', text, 'FontSize', T.fontSmall, 'FontColor', T.bodyColor, ...
+        'WordWrap', 'on', 'VerticalAlignment', 'top', 'Tooltip', tooltip);
+end
+
+%% setButtonStyle - Restyle an existing UIKit button (primary/secondary)
+function setButtonStyle(b, style)
+    T = UITheme;
+    if strcmp(style, 'primary')
+        b.BackgroundColor = T.accent; b.FontColor = [1 1 1]; b.FontWeight = 'bold';
+    else
+        b.BackgroundColor = T.secondaryBg; b.FontColor = T.secondaryFg; b.FontWeight = 'normal';
+    end
+end
+
+%% resetAxesModes - Undo emptyAxes tick removal / fixed limits
+function resetAxesModes(ax)
+    ax.XTickMode = 'auto'; ax.YTickMode = 'auto';
+    ax.XLimMode = 'auto';  ax.YLimMode = 'auto';
+end
+
+%% onoff - 'on'/'off' from a logical
+function s = onoff(cond)
+    if cond, s = 'on'; else, s = 'off'; end
+end
+
+%% ifelse - Return one of two values based on condition
+function s = ifelse(cond, a, b)
+    if cond
+        s = a;
+    else
+        s = b;
     end
 end
