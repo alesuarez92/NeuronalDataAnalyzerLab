@@ -7,6 +7,28 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **Redesigned every window** on a shared UI kit (`core/UIKit.m`): numbered
+  step cards (Load → Settings → Run → Save), plots on the right, a status
+  bar that says what happened and what to do next, in-window alerts,
+  controls enabled only when their step is possible, tooltips and units
+  everywhere, and a colourblind-safe plot palette. Legacy `figure` windows
+  are now `uifigure`s; results that used to open extra figure windows are
+  shown in tabs.
+- **Help** has a topic list with a quick start, inputs and outputs,
+  expected demo results and troubleshooting for every window.
+
+### Added
+
+- **Demo data** (`core/DemoData.m`): synthetic LDF, electrophysiology, MUA
+  and imaging recordings with known ground truth. Every window has a
+  *Try demo data* button, Help has *Try it with demo data* per topic, and
+  the launcher links to it.
+- **CI walkthroughs**: every window is opened and driven through its steps
+  on demo data in real MATLAB; the frames are published on the
+  `ci/screenshots` branch.
+
 ### Fixed
 
 - **Signal Characterization**: FWHM, rise time and decay time used the peak
