@@ -86,3 +86,12 @@ function testWriteAll(tests)
     s = load(files.ldfCropped);
     verifyTrue(tests, all(isfield(s, {'stim', 'LDF', 't', 'Fs'})));
 end
+
+function testFileCacheAndDemoTank(tests)
+    p = DemoData.file('ldfTrials');
+    verifyTrue(tests, exist(p, 'file') == 2);
+    tankDir = DemoData.file('tdtTank');
+    verifyTrue(tests, DemoData.isDemoTank(tankDir));
+    tank = DemoData.loadTank(tankDir);
+    verifyTrue(tests, isfield(tank.streams, 'xRAW') && isfield(tank.streams, 'Whis'));
+end

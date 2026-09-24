@@ -16,6 +16,9 @@
 %   s  = DemoData.muaFile()       mua_data, t_mua, mua_fs, stim_* (Extract Ephys)
 %   s  = DemoData.imagingStack()  stack, timeVec, roiMask (ROI analysis)
 %
+%   p  = DemoData.file(kind)      cached demo file path (generated on first use),
+%                                 used by the windows' "Try demo data" buttons
+%
 % Ground truth is in the .truth field of each struct (and saved as 'truth').
 % =========================================================================
 
@@ -28,6 +31,56 @@ classdef DemoData
     end
 
     methods(Static)
+
+        %% file - Path to one demo file, generated on first use and cached
+        % kind: 'ldfExport' | 'ldfCropped' | 'ldfTrials' | 'tdtTank' | 'lfp' |
+        %       'mua' | 'imaging'. Files live in DemoData.folder(). For
+        % 'tdtTank' the returned path is the tank folder (demo_tank/).
+        function p = file(kind)
+            folder = DemoData.folder();
+            if ~exist(folder, 'dir'), mkdir(folder); end
+            names = struct('ldfExport', 'demo_ldf_export.mat', 'ldfCropped', 'demo_ldf_cropped.mat', ...
+                'ldfTrials', 'demo_ldf_trials.mat', 'tdtTank', fullfile('demo_tank', 'demo_tank.mat'), ...
+                'lfp', 'demo_lfp.mat', 'mua', 'demo_mua.mat', 'imaging', 'demo_imaging.mat');
+            if ~isfield(names, kind)
+                error('NeuroAnalyzer:DemoData:unknownKind', 'Unknown demo data kind ''%s''.', kind);
+            end
+            p = fullfile(folder, names.(kind));
+            if ~exist(p, 'file')
+                if ~exist(fileparts(p), 'dir'), mkdir(fileparts(p)); end
+                switch kind
+                    case 'ldfExport',  s = DemoData.ldfExport();
+                    case 'ldfCropped', s = DemoData.ldfCropped();
+                    case 'ldfTrials',  s = DemoData.ldfTrials();
+                    case 'lfp',        s = DemoData.lfpFile();
+                    case 'mua',        s = DemoData.muaFile();
+                    case 'imaging',    s = DemoData.imagingStack();
+                    case 'tdtTank',    tank = DemoData.tdtTank(); %#ok<NASGU>
+                end
+                if strcmp(kind, 'tdtTank')
+                    save(p, 'tank', '-v7.3');
+                else
+                    save(p, '-struct', 's', '-v7.3');
+                end
+            end
+            if strcmp(kind, 'tdtTank'), p = fileparts(p); end
+        end
+
+        %% folder - Where demo files are cached (tempdir/NeuroAnalyzerDemo)
+        function f = folder()
+            f = fullfile(tempdir, 'NeuroAnalyzerDemo');
+        end
+
+        %% isDemoTank - True if folder is a demo tank (contains demo_tank.mat)
+        function tf = isDemoTank(folder)
+            tf = exist(fullfile(folder, 'demo_tank.mat'), 'file') == 2;
+        end
+
+        %% loadTank - TDTbin2mat stand-in for a demo tank folder
+        function tank = loadTank(folder)
+            s = load(fullfile(folder, 'demo_tank.mat'), 'tank');
+            tank = s.tank;
+        end
 
         %% writeAll - Write all demo files into folder; returns file list
         function files = writeAll(folder)
