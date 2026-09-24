@@ -4,8 +4,15 @@ Start a new session by reading, in order: `CLAUDE.md`, this file,
 `docs/UI_STYLE.md`, `docs/dev/AGENT_RULES.md`, then `docs/dev/reports/*.md`.
 Classification of the ongoing work: **EXISTING STRAND**.
 
-- **Branch:** `claude/admiring-cori-52ekpa`. Every commit is pushed there. No PR exists yet, and the owner hasn't asked for one.
+- **Branch:** `feature/ui-demo-features`. Every commit is pushed there. No PR exists yet, and the owner hasn't asked for one.
 - **Repo rule** (from `CLAUDE.md`): no AI or agent attribution in commits, PRs or anything else visible on GitHub.
+
+## 0. First steps for the next session
+
+- **Active branch:** `feature/ui-demo-features`. It holds the full history rewritten so the owner is the sole author, and its file contents are identical to the old branch.
+- **Delete the old branch:** remove `claude/admiring-cori-52ekpa` on GitHub, where its commits are authored by the default container identity. The owner approved this. If the auto-mode classifier blocks a remote branch deletion, ask the owner to delete it from the GitHub Branches page.
+- **Merging to `main`:** use "Squash and merge", which gives one commit signed by GitHub under the owner's name.
+- **Pending question for the owner:** `docs/dev/` contains working notes written in the first person by delegated agents. Propose rewording them neutrally as "development notes" now, and removing them before merging to `main`.
 
 ## 1. What exists now
 
