@@ -50,7 +50,19 @@ Classification of the ongoing work: **EXISTING STRAND**.
 - The private artifact "NeuroAnalyzer Tool Tour" is at https://claude.ai/artifact/8nJqKUUxYBGiXc8ivNeTBZ.
 - Its source is not in the repo. The website below replaces it.
 
-## 2. In flight when this handoff was written — WAVE 1 (five background agents)
+## 2. WAVE 1 — landed and integrated (2026-09-24)
+
+Status: all five areas are committed. `DemoData.file` knows the new kinds,
+Help and CHANGELOG cover the features, and CI run 38 was 161 passed / 1 failed
+(an Intan error-message bug, fixed in the next push). Left from the review of
+the walkthrough frames, all minor (not done):
+- MUA: the cluster listbox shows only 2 rows; the status bar after loading the demo is cut at the right edge; the PSTH y-axes go below 0; MUA plots say "a.u." where Help quotes µV.
+- ROI: the image title is clipped by the axes toolbar; detected cells are numbered in a different order from the Help's cells 1–3; "Detect: min correlation" shows 0 (automatic) while the status bar gives the threshold actually used; the "Area" column and the Load-stack info text are truncated.
+- LFP: the band-power status bar reports the ERP transient as the "largest change" (consider ignoring the first ~50 ms); the ERP overlay y-label has no unit.
+- Extract Ephys: LFP / RAW plots have no unit (V); a reopened NWB LFP is still labelled "RAW".
+- Signal Characterization: `exportFigure(path, fmt)` does not update the format dropdown; the "Assumptions" cell is truncated; frame x09 is taken after the values export, not the figure export.
+
+### Original wave-1 plan (for reference)
 
 Each agent implements one area, commits its own files and pushes. It also
 writes its full report (API, tests, references, ready-to-paste Help text) to

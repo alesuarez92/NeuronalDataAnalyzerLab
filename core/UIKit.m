@@ -223,7 +223,7 @@ classdef UIKit
             % Undo emptyAxes: its placeholder text and fixed empty ticks
             delete(findobj(ax, 'Tag', 'emptyHint'));
             ax.XTickMode = 'auto'; ax.YTickMode = 'auto';
-            if nargin >= 2 && ~isempty(ttl), title(ax, ttl, 'FontWeight', 'bold', 'Color', T.sectionTitleColor); end
+            if nargin >= 2 && ~isempty(ttl), title(ax, ttl, 'FontWeight', 'bold', 'Color', T.sectionTitleColor, 'Interpreter', 'none'); end
             if nargin >= 3 && ~isempty(xl), xlabel(ax, xl); end
             if nargin >= 4 && ~isempty(yl), ylabel(ax, yl); end
             ax.FontSize = T.fontSmall;
@@ -240,7 +240,7 @@ classdef UIKit
             T = UITheme;
             cla(ax);
             text(ax, 0.5, 0.5, msg, 'Units', 'normalized', 'HorizontalAlignment', 'center', ...
-                'Color', T.mutedColor, 'FontSize', T.fontBody, 'Tag', 'emptyHint');
+                'Color', T.mutedColor, 'FontSize', T.fontBody, 'Tag', 'emptyHint', 'Interpreter', 'none');
             ax.XTick = []; ax.YTick = [];
         end
 

@@ -706,7 +706,7 @@ classdef HelpApp < handle
                 '* **Spectrum**: 1/f background with a clear **peak at ~6 Hz** (theta) and a small bump near **40 Hz**.'
                 '* **Spectrogram** (2–80 Hz): a steady band at 6 Hz, and short 40 Hz patches just after each dashed stimulus line.'
                 '* **ERSP / ITPC** (2–80 Hz, 7 cycles, baseline −0.4 to −0.1 s): about **+10 to +12 dB at 36–44 Hz between 50 and 250 ms**, ITPC ≈ **0.97** there, and ≈ 0 dB before the stimulus and after ~0.3 s. The ERP itself (N1 / P2) adds a brief broadband increase with high ITPC in the first ~50 ms. On channel 8 (no gamma) there is no 40 Hz increase. 14 of the 15 stimuli are used (the last epoch would run past the end of the recording), and 13 at the lowest frequencies.'
-                '* **Band power**: **Gamma rises by roughly +350 to +600 %** at 0.1–0.2 s; **Theta stays flat** (~0 %, no stimulus modulation).'};
+                '* **Band power** (channel 4): the ERP itself (N1 / P2) gives a very large, brief increase in the first ~50 ms in every band, so the status bar''s "largest change" points there and the y-axis is scaled to it; the **gamma burst** (roughly **+350 to +600 %**) is the plateau at 0.05–0.25 s. Theta also swings around the ERP. On **channel 8** (far from the ERP, no gamma) **theta stays flat** (~0 %): theta is not modulated by the stimuli.'};
             t.inputs = {'LFP `.mat` from Extract Ephys: `lfp_data`, `stim_data`, `t_lfp`, `t_stim`, `lfp_fs`, `stim_fs` (all required)'};
             t.outputs = {
                 'Tabs: Stimulus (threshold and detected onsets), ERP overlay, ERP per channel (mean ± SD), CSD map'
@@ -800,7 +800,7 @@ classdef HelpApp < handle
             t.demo = {
                 '* **Data**: `demo_imaging.mat`, 96 × 96 px, 150 frames at 10 Hz (15 s). A dark vertical **vessel at x = 60** whose **diameter oscillates 12 ± 3 px (9–15 px) every 5 s**; a bright **red blood cell moving down 2 px/frame** (20 px/s); a **cell at (24, 30), radius 6 px** with calcium transients (ΔF/F ≈ 1) at **3, 7 and 11 s**. The cell''s `roiMask` is in the file.'
                 '* The demo selects **ΔF/F** with that mask (baseline = first 30 frames) and a line across the vessel from (45, 70) to (75, 70).'
-                '* **ΔF/F**: flat ~0 until 3 s, then **three peaks of ~1 at 3, 7 and 11 s**, each decaying in ~1–2 s.'
+                '* **ΔF/F**: flat ~0 until 3 s, then **three peaks of ~0.2–0.3 at 3, 7 and 11 s**, each decaying in ~1–2 s. (The simulated calcium signal has ΔF/F ≈ 1, but it is added on top of the tissue background inside the ROI, so the measured ΔF/F of the ROI is smaller.)'
                 '* **Vessel diameter** (same line): a sine between **~9 and ~15 px with a 5 s period**. **Kymograph** along the vessel (e.g. from (60, 5) to (60, 90)): slanted streaks with a slope of **2 px per frame**.'
                 '* **Advanced demo** (**Try advanced demo (motion, 3 cells)**): 96 × 96 px, 150 frames at 10 Hz. Every frame is shifted by up to **±3 px** (smooth random walk); **three cells**: cell 1 at (22, 24) with events at **4, 8.5, 13 s**, cell 2 at (26, 78) at **5.5, 10.5 s**, cell 3 at (82, 30) at **7, 12 s**; the vessel at x = 60 (12 ± 3 px, period 5 s) and a bright **red blood cell that crosses the diameter line** (35, 64)–(85, 64) about every 3 s.'
                 '* **Motion correction**: the Motion correction tab shows dy and dx following the dashed true shifts (error < 0.3 px), max shift ≈ 3 px.'

@@ -526,7 +526,7 @@ classdef MUAAnalysisApp < handle
             app.plotSignal();
             app.updateControls();
             UIKit.setStatus(app.StatusLabel, ['Demo loaded: 30 s of synthetic MUA (ch 3-5), stimulus every 2 s; ' ...
-                'ch 4 holds two units (~90 and ~50 uV), ch 5 a third (~110 uV). Channel 4 selected - ' ...
+                'ch 4 holds two units (~90 and ~50 µV), ch 5 a third (~110 µV). Channel 4 selected - ' ...
                 'click Run (step 3): expect units 1 and 2 (plus unit 3, seen weaker from ch 5) whose rate ' ...
                 'rises 5-55 ms after each stimulus (see Raster & PSTH).'], 'success');
             ok = true;
@@ -1814,7 +1814,7 @@ classdef MUAAnalysisApp < handle
                 'HandleVisibility', 'off');
             hold(ax, 'off');
             xlim(ax, [0 50]);
-            showLegend(ax, 'northeast');
+            showLegend(ax, 'best');
             UIKit.styleAxes(ax, sprintf('ISI (dashed = %g ms refractory)', app.SpikeSortParams.refractoryMs), ...
                 'ISI (ms)', 'Count');
         end
