@@ -3,8 +3,16 @@ name: CI
 on:
   push:
     branches-ignore: [ci/screenshots]
+    # Documentation / website-only changes don't need MATLAB
+    paths-ignore: ['**.md', 'docs/**', 'website/**']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'website/**']
   workflow_dispatch:
+
+# One run per branch: a newer push cancels the older, still-running run
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write   # publish window screenshots to the ci/screenshots branch
@@ -51,6 +59,7 @@ jobs:
           name: window-screenshots
           path: test-artifacts/screens/
           if-no-files-found: warn
+          retention-days: 7
 
       # Artifacts need a browser login to view; also publish the screenshots
       # as a single force-pushed commit on ci/screenshots for easy review.
