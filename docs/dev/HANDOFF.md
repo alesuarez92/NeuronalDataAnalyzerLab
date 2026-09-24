@@ -91,12 +91,16 @@ Each area also adds `core/demo/*.m` generators and
    - update the launcher (`core/Main.m`) if needed;
    - add CHANGELOG entries.
 
-## 3. WAVE 2 — in flight (started 2026-09-24)
+## 3. WAVE 2 — integrated (2026-09-24), waiting for CI
 
-Two background agents, disjoint files, **not committing** (the lead reviews, integrates and pushes once):
-- **Batch:** `core/LDFPipeline.m` (extracted from ProcessingLDFApp, identical results), `core/Batch.m`, `apps/BatchApp.m`, launcher card in `core/Main.m`, BatchApp in AppSmokeTest; tests `LDFPipelineTest`, `BatchFeaturesTest`, `BatchWalkthroughTest`; report `docs/dev/reports/batch.md`.
-- **Sessions and reports:** `core/Session.m`, `core/Report.m`, UIKit helpers, hooks in 7 analysis windows (not ProcessingLDFApp: the lead adds it from the report); tests `SessionFeaturesTest`, `SessionWalkthroughTest`; report `docs/dev/reports/session-report.md`.
-If this session ends before they finish, check `git status` for their uncommitted files; if the working tree is lost, relaunch both areas with this description.
+Both areas are committed together with the lead's integration (Help topics
+"Batch processing" and "Sessions and reports", a quick-start line per window,
+session buttons in ProcessingLDFApp, CHANGELOG). Reports:
+`docs/dev/reports/batch.md`, `docs/dev/reports/session-report.md`.
+Neither area ran in real MATLAB before this push (Octave only), so expect CI
+fixes. Things to look at first: MUA batch sorting (never run), the report PDF
+layout, the Java MD5 call, the new card heights (Main is now 940 px tall,
+BatchApp 1440x860), and test durations (target < 90 s per file).
 
 ### Original wave-2 plan
 

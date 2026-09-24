@@ -28,6 +28,11 @@
 % loadGroupDemo(), runGroupStats(feature, design, method, pair),
 % setGroupPlotStyle(style), exportFigure(path, format, target),
 % exportGroupResults(path).
+% Sessions (step 4 buttons of both tabs; core/Session.m, core/Report.m):
+% saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
+% sessionState(), restoreSession(s). A session stores both modes: the
+% single file and every group file (with MD5), all settings, the feature
+% table and the group test; opening it re-extracts and re-runs the test.
 % =========================================================================
 
 classdef SignalCharacterizationApp < handle
@@ -112,6 +117,9 @@ classdef SignalCharacterizationApp < handle
         GroupBaselineAuto = true % Baseline window follows the data until edited
         GroupDemo = []     % demoGroups() output (with .truth) after loadGroupDemo
         LastExportPath = '' % File written by the last exportFigure
+        FilePath = ''      % Full path of the Single file (session provenance)
+        SessionBtns        % Single file step 4: Save session / Open session / Report
+        GroupSessionBtns   % Groups step 4: the same buttons
     end
 
     properties(Constant, Access = private)
@@ -155,7 +163,7 @@ classdef SignalCharacterizationApp < handle
                 'Padding', [8 8 8 8], 'ColumnSpacing', 10, 'BackgroundColor', T.bgGray);
 
             % === LEFT: numbered step cards ===
-            left = uigridlayout(singleGrid, [4 1], 'RowHeight', {150, 172, '1x', 100}, ...
+            left = uigridlayout(singleGrid, [4 1], 'RowHeight', {150, 172, '1x', 100 + UIKit.sessionButtonsHeight() + 12}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 10, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
 
@@ -221,14 +229,16 @@ classdef SignalCharacterizationApp < handle
                 'primary', 'Compute the selected features for every series in the file');
 
             % --- 4 Export ---
-            g4 = uigridlayout(UIKit.card(left), [3 1], ...
-                'RowHeight', {'fit', T.buttonHeight, '1x'}, 'Padding', [10 8 10 10], ...
+            g4 = uigridlayout(UIKit.card(left), [4 1], ...
+                'RowHeight', {'fit', T.buttonHeight, '1x', UIKit.sessionButtonsHeight()}, 'Padding', [10 8 10 10], ...
                 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
             UIKit.step(g4, 4, 'Export results');
             app.ExportBtn = UIKit.button(g4, 'Export to CSV / MAT', @(~,~)app.exportResults(), ...
                 'secondary', 'Save the results table as .csv (one row per series) or .mat (data, colNames)');
             app.ResultsLabel = uilabel(g4, 'Text', 'No results yet', 'FontSize', T.fontSmall, ...
                 'FontColor', T.mutedColor, 'WordWrap', 'on');
+            app.SessionBtns = UIKit.sessionButtons(g4, app);
+            app.SessionBtns.Grid.Layout.Row = 4;
 
             % === RIGHT: plot (with series selector) above results table ===
             right = uigridlayout(singleGrid, [2 1], 'RowHeight', {'1.3x', '1x'}, ...
@@ -273,7 +283,7 @@ classdef SignalCharacterizationApp < handle
             T = UITheme;
             g = uigridlayout(app.GroupsTab, [1 2], 'ColumnWidth', {320, '1x'}, 'RowHeight', {'1x'}, ...
                 'Padding', [8 8 8 8], 'ColumnSpacing', 10, 'BackgroundColor', T.bgGray);
-            left = uigridlayout(g, [4 1], 'RowHeight', {146, 198, 206, 112}, ...
+            left = uigridlayout(g, [4 1], 'RowHeight', {146, 198, 206, 112 + UIKit.sessionButtonsHeight() + 6}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 8, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
 
@@ -375,8 +385,8 @@ classdef SignalCharacterizationApp < handle
                  '(statistic, df, p, effect size, 95% CI, n per group, assumptions)']);
 
             % --- 4 Export ---
-            c4 = uigridlayout(UIKit.card(left), [3 1], ...
-                'RowHeight', {'fit', T.buttonHeight, T.buttonHeight}, 'Padding', [10 8 10 10], ...
+            c4 = uigridlayout(UIKit.card(left), [4 1], ...
+                'RowHeight', {'fit', T.buttonHeight, T.buttonHeight, UIKit.sessionButtonsHeight()}, 'Padding', [10 8 10 10], ...
                 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
             UIKit.step(c4, 4, 'Export');
             e4 = uigridlayout(c4, [1 2], 'ColumnWidth', {'1x', '1x'}, 'RowHeight', {'1x'}, ...
@@ -393,6 +403,8 @@ classdef SignalCharacterizationApp < handle
                 @(~,~)app.exportGroupResultsDialog(), 'secondary', ...
                 ['.csv: one row per subject (group, subject, value) plus a _report.txt with the ' ...
                  'test results; .mat: the full result struct']);
+            app.GroupSessionBtns = UIKit.sessionButtons(c4, app);
+            app.GroupSessionBtns.Grid.Layout.Row = 4;
 
             % === RIGHT: Files | Results | Plot ===
             app.GroupTabs = uitabgroup(g);
@@ -526,6 +538,8 @@ classdef SignalCharacterizationApp < handle
                     numel(app.GroupFiles), numel(names), strjoin(parts, ', '));
             end
             app.DesignHint.Text = app.designHintText();
+            UIKit.setSessionEnable(app.SessionBtns, hasData || hasGF);
+            UIKit.setSessionEnable(app.GroupSessionBtns, hasData || hasGF);
         end
 
         %% loadData - Pick a .mat, detect its format, parse series and plot the first
@@ -564,6 +578,7 @@ classdef SignalCharacterizationApp < handle
             end
             app.Data = s;
             app.FileName = file;
+            app.FilePath = fullPath;
             app.DataTypeMenu.Value = dt;
             % Infer Fs from segmentedTime, lfp_fs, t or t_lfp if present
             if isfield(s, 'segmentedTime') && ~isempty(s.segmentedTime)
@@ -876,6 +891,151 @@ classdef SignalCharacterizationApp < handle
                 UIKit.setStatus(app.W.Status, 'Export failed', 'error');
                 UIKit.alert(app.UIFig, sprintf('Export failed: %s', ME.message), 'Export');
             end
+        end
+
+        %% ----------------------------------------------------------------
+        %% Sessions and reports (core/Session.m, core/Report.m)
+        %% saveSessionTo - Save inputs (path, size, date, MD5), settings, results and notes (no dialog)
+        function ok = saveSessionTo(app, filePath, notes)
+            if nargin < 3, notes = []; end
+            ok = Session.saveApp(app, filePath, notes);
+        end
+
+        %% openSession - Reopen a .nasession.mat saved by this window
+        % interactive (default false, no dialogs): ask for missing inputs
+        % and show warnings as alerts. Returns true when restored.
+        function ok = openSession(app, filePath, interactive)
+            if nargin < 3, interactive = false; end
+            ok = Session.openInApp(app, filePath, interactive);
+        end
+
+        %% makeReport - One-page PDF: window image + versions, inputs (MD5), settings, results
+        function ok = makeReport(app, pdfPath)
+            ok = Report.forApp(app, pdfPath);
+        end
+
+        %% sessionState - Settings, results and inputs for Session.capture
+        % inputs: the Single file, then every group file in table order.
+        % settings.single: data type, t0, baseline, direction, features,
+        % shown series; settings.groups: files (group + input index), group
+        % order, feature, value per subject, t0, baseline, direction, design,
+        % method, compared groups, plot style. results: the feature table
+        % and the group test (GroupStats result).
+        function st = sessionState(app)
+            st.inputs = [];
+            st.results = struct();
+            st.summary = {};
+            sg = struct('input', 0, 'dataType', app.DataTypeMenu.Value, 't0', app.T0Edit.Value, ...
+                'baseline', [app.BaselineStartEdit.Value, app.BaselineEndEdit.Value], ...
+                'direction', app.DirectionMenu.Value, 'features', {cellstr(app.FeatureList.Value)}, ...
+                'series', app.SeriesMenu.Value, 'extracted', logical(app.HasResults));
+            if ~isempty(app.Data) && ~isempty(app.FilePath)
+                st.inputs = Session.fileInfo(app.FilePath, 'Single file');
+                sg.input = 1;
+                st.summary{end+1} = sprintf('Single file: %d series (%s)', numel(app.SeriesT), ...
+                    strtrim(strtok(app.DataTypeMenu.Value, '(')));
+            end
+            files = struct('group', {}, 'input', {});
+            for i = 1:numel(app.GroupFiles)
+                gf = app.GroupFiles(i);
+                k = sum(strcmp({app.GroupFiles(1:i).group}, gf.group));
+                in = Session.fileInfo(gf.path, sprintf('Group %s #%d', gf.group, k));
+                if isempty(st.inputs), st.inputs = in; else, st.inputs(end+1) = in; end
+                files(end+1) = struct('group', gf.group, 'input', numel(st.inputs)); %#ok<AGROW>
+            end
+            gs = struct('files', files, 'order', {app.GroupOrder}, 'groupName', char(app.GroupNameMenu.Value), ...
+                'feature', app.GroupFeatureMenu.Value, 'subjectMode', app.SubjectMenu.Value, ...
+                't0', app.GroupT0Edit.Value, 'baseline', [app.GroupBaseStartEdit.Value, app.GroupBaseEndEdit.Value], ...
+                'baselineAuto', logical(app.GroupBaselineAuto), 'direction', app.GroupDirectionMenu.Value, ...
+                'design', app.DesignMenu.Value, 'method', app.MethodMenu.Value, 'groupA', app.GroupAMenu.Value, ...
+                'groupB', app.GroupBMenu.Value, 'plotStyle', app.PlotStyleMenu.Value, ...
+                'tested', ~isempty(app.GroupResult) && ~app.GroupStale);
+            st.settings = struct('mode', app.ModeTabs.SelectedTab.Title, 'single', sg, 'groups', gs);
+            if app.HasResults
+                data = app.ResultsTable.Data;
+                cols = app.ResultsTable.ColumnName;
+                st.results.features = struct('data', {data}, 'colNames', {cellstr(cols(:)')});
+                vals = cell2mat(data(:, 2:end));
+                for f = 1:size(vals, 2)
+                    v = vals(:, f);
+                    if all(isnan(v)), continue; end
+                    st.summary{end+1} = sprintf('  %s: mean %.4g, SD %.4g (n = %d)', cols{f + 1}, ...
+                        mean(v, 'omitnan'), std(v, 'omitnan'), sum(isfinite(v))); %#ok<AGROW>
+                end
+            end
+            if ~isempty(app.GroupFiles)
+                names = app.groupNames();
+                counts = cellfun(@(nm) sum(strcmp({app.GroupFiles.group}, nm)), names);
+                st.summary{end+1} = sprintf('Groups: %s', strjoin(arrayfun(@(i) sprintf('%s (%d files)', ...
+                    names{i}, counts(i)), 1:numel(names), 'UniformOutput', false), ', '));
+            end
+            if ~isempty(app.GroupResult)
+                st.results.groupTest = app.GroupResult;
+                st.results.groupFileValues = [app.GroupFiles.value];
+                if isfield(app.GroupResult, 'summary')
+                    st.summary{end+1} = sprintf('Group test%s: %s', ifelseText(app.GroupStale, ...
+                        ' (settings changed since)', ''), app.GroupResult.summary);
+                end
+            end
+        end
+
+        %% restoreSession - Reload the single file and the groups, re-apply settings, re-run
+        function ok = restoreSession(app, s)
+            ok = false;
+            cfg = s.settings;
+            if isfield(cfg, 'single') && cfg.single.input > 0
+                sg = cfg.single;
+                app.T0Edit.Value = sg.t0;
+                if ~app.openFile(s.inputs(sg.input).path), return; end
+                if ~strcmp(app.DataTypeMenu.Value, sg.dataType) && ismember(sg.dataType, app.DataTypeMenu.Items)
+                    app.DataTypeMenu.Value = sg.dataType;
+                    app.parseSeries();
+                end
+                app.BaselineStartEdit.Value = sg.baseline(1);
+                app.BaselineEndEdit.Value = sg.baseline(2);
+                app.DirectionMenu.Value = sg.direction;
+                app.FeatureList.Value = sg.features(ismember(sg.features, app.FeatureItems));
+                if sg.extracted && ~app.extract(), return; end
+                if ismember(sg.series, app.SeriesMenu.Items), app.SeriesMenu.Value = sg.series; end
+                app.plotSelected();
+            end
+            if isfield(cfg, 'groups') && ~isempty(cfg.groups.files)
+                g = cfg.groups;
+                app.clearGroups();
+                files = g.files;
+                k = 1;
+                while k <= numel(files)   % consecutive files of one group in one call, in saved order
+                    j = k;
+                    while j < numel(files) && strcmp(files(j + 1).group, files(k).group), j = j + 1; end
+                    paths = arrayfun(@(f) s.inputs(f.input).path, files(k:j), 'UniformOutput', false);
+                    if ~app.addGroupFiles(paths, files(k).group), return; end
+                    k = j + 1;
+                end
+                if numel(app.GroupFiles) ~= numel(files), return; end
+                app.GroupOrder = g.order;
+                app.GroupFeatureMenu.Value = g.feature;
+                app.SubjectMenu.Value = g.subjectMode;
+                app.GroupT0Edit.Value = g.t0;
+                app.GroupBaseStartEdit.Value = g.baseline(1);
+                app.GroupBaseEndEdit.Value = g.baseline(2);
+                app.GroupBaselineAuto = g.baselineAuto;
+                app.GroupDirectionMenu.Value = g.direction;
+                app.DesignMenu.Value = g.design;
+                app.MethodMenu.Value = g.method;
+                app.refreshGroups();
+                if ismember(g.groupA, app.GroupAMenu.Items), app.GroupAMenu.Value = g.groupA; end
+                if ismember(g.groupB, app.GroupBMenu.Items), app.GroupBMenu.Value = g.groupB; end
+                app.PlotStyleMenu.Value = g.plotStyle;
+                app.GroupNameMenu.Value = g.groupName;
+                if g.tested && ~app.runGroupStats(), return; end
+            end
+            if isfield(cfg, 'mode') && strcmp(cfg.mode, app.GroupsTab.Title)
+                app.ModeTabs.SelectedTab = app.GroupsTab;
+            else
+                app.ModeTabs.SelectedTab = app.SingleTab;
+            end
+            app.updateControls();
+            ok = true;
         end
 
         %% ================= Groups & statistics ==========================
@@ -1892,6 +2052,11 @@ function item = pickItem(value, items, keys, what)
             what, value, strjoin(keys, ', '));
     end
     item = items{i};
+end
+
+%% ifelseText - a if cond, else b
+function s = ifelseText(cond, a, b)
+    if cond, s = a; else, s = b; end
 end
 
 %% ensureDemoPath - Put core/demo (demo generators) on the path if needed

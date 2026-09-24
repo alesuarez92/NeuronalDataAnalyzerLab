@@ -19,6 +19,12 @@
 % renameROI(idx, name), setLine([x1 y1], [x2 y2]), setMotionCorrection(tf),
 % runMotionCorrection(), detectCells(opts), setDisplay(mode),
 % setRobustDiameter(tf), runAnalysis(methodName), exportResultsTo(path).
+% Sessions (step 5 buttons; core/Session.m, core/Report.m):
+% saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
+% sessionState(), restoreSession(s). A session stores the stack file (with
+% MD5; the advanced demo is regenerated), preprocessing, every ROI (mask,
+% name, source) and the line, the method settings and the results;
+% opening it re-runs motion correction and the analysis.
 % =========================================================================
 
 classdef ROIAnalysisApp < handle
@@ -89,6 +95,8 @@ classdef ROIAnalysisApp < handle
         ResultROINames = {}  % ROI names of the current ROI results
         ResultROIMasks = []  % H x W x K masks of the current ROI results
         LastMethod = ''      % Method of the current results ('' = none)
+        FilePath = ''        % Full path of the loaded stack ('' = generated demo; session provenance)
+        SessionBtns          % Step 5: Save session / Open session / Report (UIKit.sessionButtons)
     end
 
     properties(Access = private)
@@ -118,7 +126,7 @@ classdef ROIAnalysisApp < handle
             body.ColumnWidth = {310, '1x'};
 
             % === LEFT: numbered step cards ===
-            left = uigridlayout(body, [5 1], 'RowHeight', {168, 144, 154, 168, 88}, ...
+            left = uigridlayout(body, [5 1], 'RowHeight', {168, 144, 154, 168, 88 + UIKit.sessionButtonsHeight() + 14}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 10, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
 
@@ -226,7 +234,7 @@ classdef ROIAnalysisApp < handle
                 'Preprocess the stack and compute the selected method');
 
             % --- 5 Export ---
-            g5 = uigridlayout(UIKit.card(left), [3 1], 'RowHeight', {'fit', T.buttonHeight, '1x'}, ...
+            g5 = uigridlayout(UIKit.card(left), [4 1], 'RowHeight', {'fit', T.buttonHeight, '1x', UIKit.sessionButtonsHeight()}, ...
                 'Padding', [10 8 10 8], 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
             UIKit.step(g5, 5, 'Export');
             app.ExportBtn = UIKit.button(g5, 'Export results', @(~,~)app.exportResults(), ...
@@ -234,6 +242,8 @@ classdef ROIAnalysisApp < handle
                  'kymograph as a matrix) or .mat (results plus all ROI masks, line, shifts and settings)']);
             app.ExportLabel = uilabel(g5, 'Text', 'Run an analysis first', 'FontSize', T.fontSmall, ...
                 'FontColor', T.mutedColor, 'WordWrap', 'on');
+            app.SessionBtns = UIKit.sessionButtons(g5, app);
+            app.SessionBtns.Grid.Layout.Row = 4;
 
             % === RIGHT: image + ROI list above the result tabs ===
             right = uigridlayout(body, [2 1], 'RowHeight', {'1.2x', '1x'}, ...
@@ -307,6 +317,7 @@ classdef ROIAnalysisApp < handle
             app.RobustCb.Enable = onOff{(hasStack && strcmp(method, 'Vessel diameter')) + 1};
             app.ComputeBtn.Enable = onOff{ready + 1};
             app.ExportBtn.Enable = onOff{hasRes + 1};
+            UIKit.setSessionEnable(app.SessionBtns, hasStack);
             % Recommended next action is primary
             styleBtn(app.DrawROIBtn, hasStack && ~needLine && ~hasROI);
             styleBtn(app.DrawLineBtn, hasStack && needLine && ~hasLine);
@@ -430,6 +441,7 @@ classdef ROIAnalysisApp < handle
             end
             UIKit.done(dlg);
             app.applyLoaded(stack, timeVec, timeFromFile, masks, roiNames, file);
+            app.FilePath = fullPath;
             app.DemoTruth = truth;
             UIKit.setStatus(app.W.Status, sprintf('Loaded %s (%d frames). Next: add ROIs or draw a line (step 3).', ...
                 file, app.nFrames()), 'success');
@@ -495,6 +507,7 @@ classdef ROIAnalysisApp < handle
             end
             UIKit.done(dlg);
             app.applyLoaded(s.stack, s.timeVec, true, [], {}, 'demo_imaging_advanced');
+            app.FilePath = '';
             app.DemoTruth = s.truth;
             app.MethodDropdown.Value = 'ΔF/F (gCaMP)';
             app.BaselineFramesEdit.Value = 30;   % 0-2.9 s, before the first transient (4 s)
@@ -1316,6 +1329,150 @@ classdef ROIAnalysisApp < handle
                 UIKit.alert(app.UIFig, sprintf('Export failed: %s', ME.message), 'Export');
             end
         end
+
+        %% ----------------------------------------------------------------
+        %% Sessions and reports (core/Session.m, core/Report.m)
+        %% saveSessionTo - Save inputs (path, size, date, MD5), settings, results and notes (no dialog)
+        function ok = saveSessionTo(app, filePath, notes)
+            if nargin < 3, notes = []; end
+            ok = Session.saveApp(app, filePath, notes);
+        end
+
+        %% openSession - Reopen a .nasession.mat saved by this window
+        % interactive (default false, no dialogs): ask for missing inputs
+        % and show warnings as alerts. Returns true when restored.
+        function ok = openSession(app, filePath, interactive)
+            if nargin < 3, interactive = false; end
+            ok = Session.openInApp(app, filePath, interactive);
+        end
+
+        %% makeReport - One-page PDF: window image + versions, inputs (MD5), settings, results
+        function ok = makeReport(app, pdfPath)
+            ok = Report.forApp(app, pdfPath);
+        end
+
+        %% sessionState - Settings, results and inputs for Session.capture
+        % settings: preprocessing, method options, display, detection
+        % threshold, every ROI (name, mask, rectangle position, source) and
+        % the line. results: the series of the last Run and the shifts.
+        function st = sessionState(app)
+            st.inputs = [];
+            st.settings = struct();
+            st.results = struct();
+            st.summary = {};
+            if isempty(app.Stack), return; end
+            if isempty(app.FilePath)
+                st.inputs = Session.fileInfo('', 'Advanced demo stack (demoImagingAdvanced)');
+                st.settings.generator = 'demoImagingAdvanced';
+            else
+                st.inputs = Session.fileInfo(app.FilePath, 'Image stack');
+                st.settings.generator = '';
+            end
+            masks = app.roiMaskStack();   % also reads drawn rectangles at their current position
+            st.settings.preprocess = struct('motionCorrection', logical(app.MotionCb.Value), ...
+                'bw256', logical(app.ConvertBWCb.Value), 'smooth', logical(app.SmoothCb.Value), ...
+                'normalize', logical(app.NormalizeCb.Value));
+            st.settings.method = app.MethodDropdown.Value;
+            st.settings.dffBaselineFrames = app.BaselineFramesEdit.Value;
+            st.settings.robustDiameter = logical(app.RobustCb.Value);
+            st.settings.display = app.DisplayDropdown.Value;
+            st.settings.detectThresholdField = app.DetectThresholdEdit.Value;
+            st.settings.detectThresholdUsed = app.DetectThreshold;
+            st.settings.roiNames = {app.ROIs.Name};
+            st.settings.roiSources = {app.ROIs.Source};
+            st.settings.roiPositions = {app.ROIs.Position};
+            st.settings.roiMasks = masks;
+            st.settings.line = app.linePosition();
+            st.summary{end+1} = sprintf('Stack: %d x %d px, %d frames; %d ROI(s)%s', size(app.Stack, 2), ...
+                size(app.Stack, 1), app.nFrames(), numel(app.ROIs), ...
+                ifelseStr(isempty(st.settings.line), '', sprintf('; line %s px', mat2str(round(st.settings.line, 1)))));
+            if ~isempty(app.Shifts)
+                st.results.shifts = app.Shifts;
+                st.summary{end+1} = sprintf('Motion correction %s: max shift %.2f px', ...
+                    ifelseStr(app.MotionCb.Value, 'on', 'off'), max(abs(app.Shifts(:))));
+            end
+            if isempty(app.LastMethod), return; end
+            st.results.method = app.LastMethod;
+            st.results.t = app.T;
+            st.results.roiNames = app.ResultROINames;
+            names = {'intensity', 'Intensity'; 'movement', 'Movement'; 'dff', 'DFF'; 'speed', 'Speed'; ...
+                'kymograph', 'Kymo'; 'diameter', 'Diameter'; 'diameterStandard', 'DiameterPlain'; ...
+                'diameterPerFrame', 'DiameterRaw'; 'diameterReplaced', 'DiameterOutliers'};
+            for k = 1:size(names, 1)
+                st.results.(names{k, 1}) = app.(names{k, 2});
+            end
+            st.summary{end+1} = sprintf('Method: %s over %d frames', app.LastMethod, numel(app.T));
+            series = {'Intensity', app.Intensity; 'Movement', app.Movement; 'dF/F', app.DFF; 'Speed', app.Speed};
+            for m = 1:size(series, 1)
+                v = series{m, 2};
+                for r = 1:size(v, 1)
+                    [pk, i] = max(v(r, :));
+                    nm = sprintf('ROI %d', r);
+                    if r <= numel(app.ResultROINames), nm = app.ResultROINames{r}; end
+                    st.summary{end+1} = sprintf('  %s %s: mean %.4g, max %.4g at t = %.4g', series{m, 1}, nm, ...
+                        mean(v(r, :), 'omitnan'), pk, app.T(i)); %#ok<AGROW>
+                end
+            end
+            if ~isempty(app.Diameter)
+                d = app.Diameter(isfinite(app.Diameter));
+                st.summary{end+1} = sprintf('  Diameter: mean %.3g px (range %.3g-%.3g)%s', mean(d), min(d), max(d), ...
+                    ifelseStr(app.RobustCb.Value, sprintf(', robust, %d frame(s) replaced', nnz(app.DiameterOutliers)), ''));
+            end
+            if ~isempty(app.Kymo)
+                st.summary{end+1} = sprintf('  Kymograph: %d positions x %d frames', size(app.Kymo, 1), size(app.Kymo, 2));
+            end
+        end
+
+        %% restoreSession - Reload the stack, ROIs, line and settings; re-run the analysis
+        function ok = restoreSession(app, s)
+            ok = false;
+            cfg = s.settings;
+            if isfield(cfg, 'generator') && strcmp(cfg.generator, 'demoImagingAdvanced')
+                if ~app.loadAdvancedDemo(), return; end
+            elseif isempty(s.inputs)
+                ok = true; return;
+            elseif ~app.openFile(s.inputs(1).path)
+                return;
+            end
+            % ROIs and line exactly as saved
+            app.deleteROIHandles();
+            app.ROIs = app.ROIs([]);
+            app.SelectedROI = [];
+            for k = 1:numel(cfg.roiNames)
+                app.appendROI(cfg.roiNames{k}, cfg.roiMasks(:, :, k), cfg.roiPositions{k}, cfg.roiSources{k});
+            end
+            app.MaskFromFile = any(ismember(cfg.roiSources, {'file', 'mask'}));
+            app.syncLegacy();
+            try delete(app.CurrentLine); catch, end
+            app.CurrentLine = [];
+            if isempty(cfg.line)
+                app.LineStart = []; app.LineEnd = [];
+            else
+                app.LineStart = cfg.line(1, :); app.LineEnd = cfg.line(2, :);
+            end
+            pp = cfg.preprocess;
+            app.ConvertBWCb.Value = pp.bw256;
+            app.SmoothCb.Value = pp.smooth;
+            app.NormalizeCb.Value = pp.normalize;
+            app.MethodDropdown.Value = cfg.method;
+            app.BaselineFramesEdit.Value = cfg.dffBaselineFrames;
+            app.RobustCb.Value = cfg.robustDiameter;
+            app.DetectThresholdEdit.Value = cfg.detectThresholdField;
+            app.DetectThreshold = cfg.detectThresholdUsed;
+            if pp.motionCorrection
+                if ~app.runMotionCorrection(), return; end
+            else
+                app.MotionCb.Value = false;
+            end
+            app.refreshROITable();
+            app.setDisplay(cfg.display);
+            app.clearResults();
+            if isfield(s.results, 'method') && ~isempty(s.results.method)
+                if ~app.runAnalysis(s.results.method), return; end
+            end
+            app.updateControls();
+            ok = true;
+        end
     end
 
     methods(Access = private)
@@ -1557,6 +1714,11 @@ end
 %% ------------------------------------------------------------------------
 
 %% hasDrawn - True for a valid (not deleted) drawn ROI/line object
+%% ifelseStr - a if cond, else b
+function s = ifelseStr(cond, a, b)
+    if cond, s = a; else, s = b; end
+end
+
 function tf = hasDrawn(h)
     tf = ~isempty(h) && isvalid(h);
 end

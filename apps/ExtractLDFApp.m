@@ -15,6 +15,10 @@
 % "Try demo data" (loadDemo) opens DemoData's synthetic export and
 % pre-fills the range 20-280 s. Programmatic use (no dialogs): openFile(path),
 % setRange(start, end), processData(), saveCroppedTo(path).
+% Sessions (step 4 buttons; core/Session.m, core/Report.m):
+% saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
+% sessionState(), restoreSession(s). A session stores the export file
+% (with MD5), the Start/End range, the crop and the view.
 % =========================================================================
 
 classdef ExtractLDFApp < handle
@@ -48,6 +52,7 @@ classdef ExtractLDFApp < handle
         PickStart = NaN % Time (s) of the first click while picking
         RangeGfx        % Shaded range patches on both axes
         PickGfx         % Start marker lines shown while picking
+        SessionBtns     % Step 4: Save session / Open session / Report (UIKit.sessionButtons)
     end
 
     methods
@@ -135,7 +140,7 @@ classdef ExtractLDFApp < handle
             app.CropInfoLabel.Layout.Row = 4; app.CropInfoLabel.Layout.Column = [1 2];
 
             % --- 4 Save ---
-            [p, g, heights{4}] = stepCard(left, 4, 'Save', {T.buttonHeight, 34});
+            [p, g, heights{4}] = stepCard(left, 4, 'Save', {T.buttonHeight, 34, UIKit.sessionButtonsHeight()});
             p.Layout.Row = 4;
             app.SaveCroppedBtn = UIKit.button(g, 'Save cropped data...', @(~,~)app.saveCroppedData(), ...
                 'secondary', 'Save cropped stim, LDF, time vector (t) and sampling rate (Fs) to a .mat file');
@@ -143,6 +148,8 @@ classdef ExtractLDFApp < handle
             note = infoLabel(g, 'Output (stim, LDF, t, Fs) opens in LDF Processing.', ...
                 'The saved file is the input of the LDF Processing window');
             note.Layout.Row = 3; note.Layout.Column = [1 2];
+            app.SessionBtns = UIKit.sessionButtons(g, app);
+            app.SessionBtns.Grid.Layout.Row = 4; app.SessionBtns.Grid.Layout.Column = [1 2];
 
             heights{5} = '1x';
             left.RowHeight = heights;
@@ -185,6 +192,7 @@ classdef ExtractLDFApp < handle
             app.SaveCroppedBtn.Enable = onoff(cropCurrent && ~picking);
             app.LoadBtn.Enable        = onoff(~picking);
             app.DemoBtn.Enable        = onoff(~picking);
+            UIKit.setSessionEnable(app.SessionBtns, hasRaw && ~picking);
 
             if picking
                 app.SelectRangeBtn.Text = 'Cancel picking';
@@ -605,6 +613,76 @@ classdef ExtractLDFApp < handle
             [~, name, ext] = fileparts(filePath);
             UIKit.setStatus(app.StatusLabel, sprintf('Saved cropped data to %s%s. Open it in LDF Processing.', ...
                 name, ext), 'success');
+        end
+
+        %% ----------------------------------------------------------------
+        %% Sessions and reports (core/Session.m, core/Report.m)
+        %% saveSessionTo - Save inputs (path, size, date, MD5), settings, results and notes (no dialog)
+        function ok = saveSessionTo(app, filePath, notes)
+            if nargin < 3, notes = []; end
+            ok = Session.saveApp(app, filePath, notes);
+        end
+
+        %% openSession - Reopen a .nasession.mat saved by this window
+        % interactive (default false, no dialogs): ask for missing inputs
+        % and show warnings as alerts. Returns true when restored.
+        function ok = openSession(app, filePath, interactive)
+            if nargin < 3, interactive = false; end
+            ok = Session.openInApp(app, filePath, interactive);
+        end
+
+        %% makeReport - One-page PDF: window image + versions, inputs (MD5), settings, results
+        function ok = makeReport(app, pdfPath)
+            ok = Report.forApp(app, pdfPath);
+        end
+
+        %% sessionState - Settings, results and inputs for Session.capture
+        % inputs: the LDF export. settings: Start/End, view, channels.
+        % results: crop range, rate, samples and LDF mean / SD of the crop
+        % (the cropped signals are re-cut from the export on open).
+        function st = sessionState(app)
+            st.inputs = [];
+            if ~isempty(app.AppData.FilePath)
+                st.inputs = Session.fileInfo(app.AppData.FilePath, 'LDF export');
+            end
+            st.settings = struct('range', app.currentRange(), 'view', app.ViewDropDown.Value, ...
+                'stimulusChannel', 6, 'ldfChannel', 8);
+            st.results = struct();
+            st.summary = {};
+            if ~isempty(app.AppData.RawStim)
+                st.summary{end+1} = sprintf('Recording: %d samples at %g Hz (%s)', numel(app.AppData.RawStim), ...
+                    app.AppData.SamplingRate, formatDuration(numel(app.AppData.RawStim) / app.AppData.SamplingRate));
+            end
+            if ~isempty(app.AppData.ProcessedLDF)
+                ldf = double(app.AppData.ProcessedLDF(:));
+                st.results = struct('cropRange', app.CropRange, 'fs', app.AppData.SamplingRate, ...
+                    'nSamples', numel(ldf), 'ldfMean', mean(ldf), 'ldfSD', std(ldf));
+                st.summary{end+1} = sprintf('Crop: %.3f-%.3f s, %d samples', app.CropRange(1), ...
+                    app.CropRange(2), numel(ldf));
+                st.summary{end+1} = sprintf('Cropped LDF: mean %.4g, SD %.4g', mean(ldf), std(ldf));
+            end
+        end
+
+        %% restoreSession - Reload the export, crop to the saved range, restore the fields
+        function ok = restoreSession(app, s)
+            ok = false;
+            if isempty(s.inputs), ok = true; return; end
+            if ~app.openFile(s.inputs(1).path), return; end
+            cfg = s.settings;
+            if isfield(s.results, 'cropRange') && numel(s.results.cropRange) == 2
+                app.setRange(s.results.cropRange(1), s.results.cropRange(2));
+                app.processData();
+            end
+            if isfield(cfg, 'range') && numel(cfg.range) == 2
+                app.setRange(cfg.range(1), cfg.range(2));
+            end
+            if isfield(cfg, 'view') && ~isempty(app.AppData.ProcessedStim) && ...
+                    ismember(cfg.view, app.ViewDropDown.Items)
+                app.ViewDropDown.Value = cfg.view;
+                app.plotSignals();
+            end
+            app.updateButtonStates();
+            ok = true;
         end
     end
 end

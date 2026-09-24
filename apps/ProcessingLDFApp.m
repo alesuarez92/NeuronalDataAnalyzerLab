@@ -18,6 +18,13 @@
 % threshold 2.5, pre 5 s, post 20 s, min interval 10 s. Programmatic use (no
 % dialogs): openFile(path), applyProcessingParams(params),
 % setSegmentParams(thr, pre, post, isi), segmentByOnsetsConfig(), saveData(path).
+% The numerics (decimate / filter, onset detection, trial cutting) live in
+% core/LDFPipeline.m, shared with scripts and Batch processing.
+% Sessions (step 4 buttons; core/Session.m, core/Report.m):
+% saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
+% sessionState(), restoreSession(s). A session stores the cropped file (with
+% MD5), the processing and segmentation settings and the trial average;
+% opening it re-runs processing and segmentation.
 % =========================================================================
 
 classdef ProcessingLDFApp < handle
@@ -61,6 +68,7 @@ classdef ProcessingLDFApp < handle
         FilePath = ''    % loaded file
         SegmentedLDF     % segmented LDF trials [nTrials x nSamples]
         SegmentedTime    % time axis for each segment (s, 0 = onset)
+        SessionBtns      % Step 4: Save session / Open session / Report (UIKit.sessionButtons)
     end
 
     methods
@@ -133,7 +141,7 @@ classdef ProcessingLDFApp < handle
             app.SegmentInfoLabel.Layout.Row = 7; app.SegmentInfoLabel.Layout.Column = [1 2];
 
             % --- 4 Save ---
-            [p, g, heights{4}] = stepCard(left, 4, 'Save trials', {T.buttonHeight, 34});
+            [p, g, heights{4}] = stepCard(left, 4, 'Save trials', {T.buttonHeight, 34, UIKit.sessionButtonsHeight()});
             p.Layout.Row = 4;
             app.SaveBtn = UIKit.button(g, 'Save trials...', @(~,~)app.saveData(), 'secondary', ...
                 'Save segmentedLDF, segmentedTime and Fs to .mat; choosing an existing file appends the trials to it');
@@ -141,6 +149,8 @@ classdef ProcessingLDFApp < handle
             note = infoLabel(g, 'Choosing an existing file appends to it. Open the files in LDF Average.', ...
                 'Trials are appended when the time axes match');
             note.Layout.Row = 3; note.Layout.Column = [1 2];
+            app.SessionBtns = UIKit.sessionButtons(g, app);
+            app.SessionBtns.Grid.Layout.Row = 4; app.SessionBtns.Grid.Layout.Column = [1 2];
 
             heights{5} = '1x';
             left.RowHeight = heights;
@@ -197,6 +207,7 @@ classdef ProcessingLDFApp < handle
             end
             app.SegmentBtn.Enable = onoff(hasData);
             app.SaveBtn.Enable = onoff(hasSeg);
+            UIKit.setSessionEnable(app.SessionBtns, hasData);
 
             setButtonStyle(app.LoadBtn, ifelse(~hasData, 'primary', 'secondary'));
             setButtonStyle(app.SegmentBtn, ifelse(hasData && ~hasSeg, 'primary', 'secondary'));
@@ -396,74 +407,20 @@ classdef ProcessingLDFApp < handle
             stim = app.RawStim;
             Fs = app.RawFs;
             p = app.ProcessingParams;
-            FsNew = Fs;
-            if p.downsample > 1, FsNew = Fs / p.downsample; end
 
             % Validate filter settings against the post-downsample Nyquist
-            if p.filterType ~= 1
-                msg = '';
-                if any([p.cutoffLow, p.cutoffHigh] >= FsNew/2)
-                    msg = sprintf('Cutoff frequency must be below Nyquist (Fs/2 = %g Hz).', FsNew/2);
-                elseif p.cutoffLow >= p.cutoffHigh && ismember(p.filterType, [4, 5])
-                    msg = 'For band-pass and notch filters, Low cutoff must be < High cutoff.';
-                elseif p.filterOrder <= 0 || isnan(p.filterOrder)
-                    msg = 'Filter order must be a positive number.';
-                end
-                if ~isempty(msg)
-                    UIKit.setStatus(app.StatusLabel, ['Processing not applied: ' msg], 'error');
-                    UIKit.alert(app.UIFig, msg, 'Invalid filter settings', 'error');
-                    return;
-                end
+            msg = LDFPipeline.validateProcessing(p, Fs);
+            if ~isempty(msg)
+                UIKit.setStatus(app.StatusLabel, ['Processing not applied: ' msg], 'error');
+                UIKit.alert(app.UIFig, msg, 'Invalid filter settings', 'error');
+                return;
             end
 
             UIKit.setStatus(app.StatusLabel, 'Processing LDF...', 'busy');
             dlg = UIKit.busy(app.UIFig, 'Downsampling and filtering LDF...');
             try
-                % Downsample
-                if p.downsample > 1
-                    % decimate = anti-alias lowpass + downsample (length ceil(N/r))
-                    LDFdec = decimate(double(LDF(:)), p.downsample);
-                    if isrow(LDF), LDFdec = LDFdec.'; end  % keep original orientation
-                    LDF = LDFdec;
-                    % Stim is a TTL: plain sample picking keeps edges sharp
-                    stim = downsample(stim, p.downsample);
-                    t = downsample(t, p.downsample);
-                    n = min([numel(LDF), numel(stim), numel(t)]);
-                    LDF = LDF(1:n); stim = stim(1:n); t = t(1:n);
-                    Fs = Fs / p.downsample;
-                end
-
-                % Filter (skip if no filtering)
-                b = []; a = [];
-                if p.filterType == 1
-                    filteredLDF = LDF;
-                else
-                    Wn = [];  % Normalized cutoff
-                    filterOrder = p.filterOrder;
-                    switch p.filterType
-                        case 2  % Low-pass
-                            Wn = p.cutoffHigh / (Fs/2);
-                        case 3  % High-pass
-                            Wn = p.cutoffLow / (Fs/2);
-                        case 4  % Band-pass
-                            Wn = [p.cutoffLow p.cutoffHigh] / (Fs/2);
-                        case 5  % Notch
-                            Wn = [p.cutoffLow p.cutoffHigh] / (Fs/2);
-                    end
-                    % Design filter
-                    mode = app.getFilterMode(p.filterType);
-                    switch p.designType
-                        case 1  % Butterworth
-                            [b, a] = butter(filterOrder, Wn, mode);
-                        case 2  % Chebyshev I
-                            [b, a] = cheby1(filterOrder, 0.5, Wn, mode);
-                        case 3  % FIR
-                            b = fir1(filterOrder, Wn, mode);
-                            a = 1;
-                    end
-                    % Apply filter (zero-phase)
-                    filteredLDF = filtfilt(b, a, LDF);
-                end
+                % Decimate / filter (same code as scripts and batch: LDFPipeline)
+                [filteredLDF, stim, t, Fs, b, a] = LDFPipeline.process(LDF, stim, t, Fs, p);
             catch ME
                 UIKit.done(dlg);
                 UIKit.setStatus(app.StatusLabel, 'Processing failed.', 'error');
@@ -515,18 +472,7 @@ classdef ProcessingLDFApp < handle
 
         %% getFilterMode - filterType index -> butter/cheby1/fir1 mode string
         function mode = getFilterMode(~, filterType)
-            switch filterType
-                case 2
-                    mode = 'low';
-                case 3
-                    mode = 'high';
-                case 4
-                    mode = 'bandpass';
-                case 5
-                    mode = 'stop';
-                otherwise
-                    mode = 'low';
-            end
+            mode = LDFPipeline.filterMode(filterType);
         end
 
         %% segmentByOnsetsConfig - Read and validate step-3 fields, segment
@@ -565,41 +511,12 @@ classdef ProcessingLDFApp < handle
             end
             UIKit.setStatus(app.StatusLabel, 'Detecting onsets and cutting trials...', 'busy');
 
-            ldf = app.LDF;
-            Fs = app.Fs;
-
-            % 1. Threshold and detect rising edges
-            stimLogic = app.Stim > threshold;
-            stimLogic = stimLogic(:);  % ensure column vector
-            rawOnsets = find(diff([0; stimLogic]) == 1);  % all rising edges
-
-            % 2. Debounce: only keep one onset per pulse
-            minISI_samp = round(minISI_sec * app.Fs);
-            onsets = [];
-            lastAccepted = -inf;
-            for i = 1:length(rawOnsets)
-                if rawOnsets(i) - lastAccepted >= minISI_samp
-                    onsets(end+1) = rawOnsets(i); %#ok<AGROW>
-                    lastAccepted = rawOnsets(i);
-                end
-            end
-
-            preSamp = round(preSec * Fs);
-            postSamp = round(postSec * Fs);
-            segLength = preSamp + postSamp + 1;
-
-            validSegments = zeros(0, 2);
-            for i = 1:length(onsets)
-                idx = onsets(i);
-                startIdx = idx - preSamp;
-                endIdx = idx + postSamp;
-                if startIdx > 0 && endIdx <= length(ldf)
-                    validSegments = [validSegments; startIdx endIdx]; %#ok<AGROW>
-                end
-            end
+            % Debounced onsets and complete [-pre, +post] trials (LDFPipeline)
+            [ldfSegments, t_seg, onsets] = LDFPipeline.segment(app.LDF, app.Stim, app.Fs, ...
+                threshold, preSec, postSec, minISI_sec);
 
             app.drawOnsets(onsets);
-            if isempty(validSegments)
+            if isempty(ldfSegments)
                 if isempty(onsets)
                     msg = sprintf(['No stimulus onsets found above threshold %g. ' ...
                         'Check the dashed threshold line on the stimulus plot.'], threshold);
@@ -612,15 +529,9 @@ classdef ProcessingLDFApp < handle
                 return;
             end
 
-            % 3. Create LDF segment matrix
-            nTrials = size(validSegments, 1);
-            ldfSegments = zeros(nTrials, segLength);
-            for i = 1:nTrials
-                ldfSegments(i,:) = ldf(validSegments(i,1):validSegments(i,2));
-            end
-            t_seg = (-preSamp:postSamp) / Fs;
+            nTrials = size(ldfSegments, 1);
 
-            % 4. Store for further analysis and plot
+            % Store for further analysis and plot
             app.SegmentedLDF = ldfSegments;
             app.SegmentedTime = t_seg;
             app.plotSegments();
@@ -776,6 +687,74 @@ classdef ProcessingLDFApp < handle
             UIKit.styleAxes(app.AxAvg, 'Average LDF');
             UIKit.emptyAxes(app.AxSeg, 'Segment trials (step 3) to see them here');
             UIKit.emptyAxes(app.AxAvg, 'Average ± SD appears after segmentation');
+        end
+
+        %% ----------------------------------------------------------------
+        %% Sessions and reports (core/Session.m, core/Report.m)
+        %% saveSessionTo - Save inputs (path, size, date, MD5), settings, results and notes (no dialog)
+        function ok = saveSessionTo(app, filePath, notes)
+            if nargin < 3, notes = []; end
+            ok = Session.saveApp(app, filePath, notes);
+        end
+
+        %% openSession - Reopen a .nasession.mat saved by this window
+        % interactive (default false, no dialogs): ask for missing inputs
+        % and show warnings as alerts. Returns true when restored.
+        function ok = openSession(app, filePath, interactive)
+            if nargin < 3, interactive = false; end
+            ok = Session.openInApp(app, filePath, interactive);
+        end
+
+        %% makeReport - One-page PDF: window image + versions, inputs (MD5), settings, results
+        function ok = makeReport(app, pdfPath)
+            ok = Report.forApp(app, pdfPath);
+        end
+
+        %% sessionState - Settings, results and inputs for Session.capture
+        % settings: processing params (as LDFProcessingParamsApp returns
+        % them), segmentation fields, whether trials were cut, tab.
+        % results: trials, window, rate and the trial mean / SD.
+        function st = sessionState(app)
+            st.inputs = [];
+            st.settings = struct('processing', app.ProcessingParams, ...
+                'threshold', app.ThresholdInput.Value, 'preS', app.PreInput.Value, ...
+                'postS', app.PostInput.Value, 'minISI', app.ISIInput.Value, ...
+                'segmented', ~isempty(app.SegmentedLDF), 'tab', app.Tabs.SelectedTab.Title);
+            st.results = struct();
+            st.summary = {};
+            if isempty(app.RawLDF), return; end
+            st.inputs = Session.fileInfo(app.FilePath, 'Cropped LDF file');
+            st.summary{end+1} = sprintf('Loaded %d samples at %g Hz; processed rate %g Hz', ...
+                numel(app.RawLDF), app.RawFs, app.Fs);
+            if ~isempty(app.SegmentedLDF)
+                t = app.SegmentedTime(:)';
+                m = mean(app.SegmentedLDF, 1);
+                st.results = struct('nTrials', size(app.SegmentedLDF, 1), 'window', t([1 end]), ...
+                    'fs', app.Fs, 'mean', m, 'sd', std(app.SegmentedLDF, 0, 1));
+                post = t >= 0;
+                [pk, i] = max(m(post));
+                tp = t(post);
+                st.summary{end+1} = sprintf('%d trials, %.2f to %.2f s; trial mean peaks at %.4g, %.3g s after onset', ...
+                    size(app.SegmentedLDF, 1), t(1), t(end), pk, tp(i));
+            end
+        end
+
+        %% restoreSession - Reload the file, re-apply processing and segmentation
+        function ok = restoreSession(app, s)
+            ok = false;
+            if isempty(s.inputs), ok = true; return; end
+            if ~app.openFile(s.inputs(1).path), return; end
+            cfg = s.settings;
+            if ~isempty(cfg.processing) && ~app.applyProcessingParams(cfg.processing), return; end
+            app.setSegmentParams(cfg.threshold, cfg.preS, cfg.postS, cfg.minISI);
+            if cfg.segmented
+                app.segmentByOnsetsConfig();
+                if isempty(app.SegmentedLDF), return; end
+            end
+            tab = findobj(app.Tabs, 'Type', 'uitab', 'Title', cfg.tab);
+            if ~isempty(tab), app.Tabs.SelectedTab = tab(1); end
+            app.updateControls();
+            ok = true;
         end
 
         %% saveData - Save (or append to) segmented data .mat

@@ -16,6 +16,7 @@
 %   Electrophysiology: 1 Extract (TDT) -> 2 LFP analysis or 2 MUA analysis
 %   Imaging:           ROI analysis
 %   Response features: Signal Characterization
+%   Batch:             Batch processing (one pipeline on many files)
 % =========================================================================
 
 classdef Main < handle
@@ -34,6 +35,7 @@ classdef Main < handle
         EphysPanel
         ImagingPanel
         CharPanel
+        BatchPanel
         % Step buttons
         ExtractLDFBtn
         ProcessLDFBtn
@@ -43,6 +45,7 @@ classdef Main < handle
         ProcessMUABtn
         ROIBtn             % Open ROI / image analysis
         CharBtn            % Open Signal Characterization
+        BatchBtn           % Open Batch processing
         % Environment checks (set by checkSignalToolbox / checkTDTSDK)
         HasSignalToolbox = true
         HasTDTSDK = false
@@ -64,7 +67,7 @@ classdef Main < handle
         function buildUI(app)
             T = UITheme;
             app.UIFig = uifigure('Name', 'Neuronal Data Analyzer Lab', ...
-                'Position', UIKit.centeredPosition([1060 820]), 'Resize', 'on', ...
+                'Position', UIKit.centeredPosition([1060 940]), 'Resize', 'on', ...
                 'Color', T.bgGray);
 
             % === MAIN GRID: Header | Project bar | Hint | Cards | Status | Footer ===
@@ -115,8 +118,8 @@ classdef Main < handle
 
             % === WORKFLOW CARDS ===
             app.ContentPanel = uipanel(mainGrid, 'BackgroundColor', T.bgGray, 'BorderType', 'none');
-            contentGrid = uigridlayout(app.ContentPanel, [4, 1], ...
-                'RowHeight', {'1x', '1x', '1x', '1x'}, 'Padding', [16 10 16 10], ...
+            contentGrid = uigridlayout(app.ContentPanel, [5, 1], ...
+                'RowHeight', {'1x', '1x', '1x', '1x', '1x'}, 'Padding', [16 10 16 10], ...
                 'RowSpacing', 10, 'BackgroundColor', T.bgGray, 'Scrollable', 'on');
 
             % --- LDF ---
@@ -190,6 +193,20 @@ classdef Main < handle
                  'with t and y. Output: one row of ' ...
                  'features per trial, exported as .csv or .mat.'], app);
             chainNote(chain, 'Works on the output of the LDF and electrophysiology pipelines');
+
+            % --- Batch processing ---
+            [app.BatchPanel, chain] = app.workflowCard(contentGrid, ...
+                'Batch  ·  Many files at once', ...
+                'Run one analysis on a whole folder with the same settings and get one summary table.', ...
+                'In: a folder of files for one pipeline  ·  Out: summary .csv / .mat + log', ...
+                'Batch processing');
+            app.BatchBtn = chainButton(chain, 1, 'Batch processing', @()BatchApp(), ...
+                ['Input: a folder or list of files for one pipeline: cropped LDF .mat (trials + response ' ...
+                 'features), LFP .mat (ERP / CSD per channel), MUA .mat (spike sorting per channel), ' ...
+                 'image stacks (ROI dF/F, vessel diameter) or any trace file (response features). ' ...
+                 'Output: one summary table (.csv and .mat, one row per file / channel / ROI) and a log; ' ...
+                 'files that fail are listed with their error.'], app);
+            chainNote(chain, 'LDF trials · ERP / CSD · MUA sorting · ROI ΔF/F and diameter · Response features');
 
             % === STATUS + FOOTER ===
             app.StatusLabel = UIKit.statusBar(mainGrid);

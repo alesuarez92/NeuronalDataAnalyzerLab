@@ -33,6 +33,12 @@
 % runSorting(params), autoMergeClusters(opts), mergeClusters(ids),
 % splitCluster(id), undoClusterEdit(), showRasterPSTH(unitIds, window,
 % bin), showCorrelograms(unitIds, maxLagMs, binMs).
+% Sessions (step 5 buttons; core/Session.m, core/Report.m):
+% saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
+% sessionState(), restoreSession(s). A session stores the MUA file (with
+% MD5), channel, segmentation, sorting and display settings, and the
+% sorting results including cluster edits and their Undo history; these
+% are restored as saved (K-means and manual edits are not re-run).
 % =========================================================================
 
 classdef MUAAnalysisApp < handle
@@ -118,6 +124,7 @@ classdef MUAAnalysisApp < handle
         RasterOutcome = struct('ok', false, 'msg', '')  % Result of the last raster draw
         CorrOutcome = struct('ok', false, 'msg', '')    % Result of the last correlogram draw
         BusyDlg             % uiprogressdlg while sorting
+        SessionBtns         % Step 5: Save session / Open session / Report (UIKit.sessionButtons)
     end
 
     methods
@@ -145,7 +152,7 @@ classdef MUAAnalysisApp < handle
             W.Body.ColumnWidth = {310, '1x'};
 
             left = uigridlayout(W.Body, [5 1], ...
-                'RowHeight', {136, 160, 124, '1x', 84}, 'ColumnWidth', {'1x'}, ...
+                'RowHeight', {136, 160, 124, '1x', 84 + UIKit.sessionButtonsHeight() + 6}, 'ColumnWidth', {'1x'}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 8, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
             left.Layout.Row = 1; left.Layout.Column = 1;
@@ -233,9 +240,12 @@ classdef MUAAnalysisApp < handle
             app.QualityLabel.Layout.Row = 5; app.QualityLabel.Layout.Column = [1 2];
 
             % --- 5 Export ---
-            g = stepCard(left, 5, 'Export', {T.buttonHeight});
+            g = stepCard(left, 5, 'Export', {T.buttonHeight, UIKit.sessionButtonsHeight()});
             app.SaveBtn = UIKit.button(g, 'Save results...', @(~,~)app.saveResults(), 'secondary', ...
                 'Save spike times, cluster IDs, waveforms, quality metrics and settings to a .mat file');
+            app.SaveBtn.Layout.Row = 2;
+            app.SessionBtns = UIKit.sessionButtons(g, app);
+            app.SessionBtns.Grid.Layout.Row = 3;
 
             % --- Plots: one tab per view ---
             app.TabGroup = uitabgroup(W.Body);
@@ -352,6 +362,7 @@ classdef MUAAnalysisApp < handle
             app.SelectAllBtn.Enable = onOff(hasRes);
             app.ClearBtn.Enable = onOff(hasRes);
             app.SaveBtn.Enable = onOff(hasRes);
+            UIKit.setSessionEnable(app.SessionBtns, hasData);
             app.RateBinField.Enable = onOff(hasRes);
             app.RateRelativeCheck.Enable = onOff(hasRes);
             selIds = app.selectedClusterIds();
@@ -1948,6 +1959,152 @@ classdef MUAAnalysisApp < handle
                 UIKit.setStatus(app.StatusLabel, sprintf('Save failed: %s', ME.message), 'error');
             end
         end
+
+        %% ----------------------------------------------------------------
+        %% Sessions and reports (core/Session.m, core/Report.m)
+        %% saveSessionTo - Save inputs (path, size, date, MD5), settings, results and notes (no dialog)
+        function ok = saveSessionTo(app, filePath, notes)
+            if nargin < 3, notes = []; end
+            ok = Session.saveApp(app, filePath, notes);
+        end
+
+        %% openSession - Reopen a .nasession.mat saved by this window
+        % interactive (default false, no dialogs): ask for missing inputs
+        % and show warnings as alerts. Returns true when restored.
+        function ok = openSession(app, filePath, interactive)
+            if nargin < 3, interactive = false; end
+            ok = Session.openInApp(app, filePath, interactive);
+        end
+
+        %% makeReport - One-page PDF: window image + versions, inputs (MD5), settings, results
+        function ok = makeReport(app, pdfPath)
+            ok = Report.forApp(app, pdfPath);
+        end
+
+        %% sessionState - Settings, results and inputs for Session.capture
+        % settings: channel, segmentation (parameters, windows, segment),
+        % sorting parameters, raster / correlogram / rate fields, selected
+        % clusters and tab. results: SpikeResults with the display state,
+        % cluster QC, edit history (Undo) and the list of edits.
+        function st = sessionState(app)
+            st.inputs = [];
+            st.settings = struct();
+            st.results = struct();
+            st.summary = {};
+            if isempty(app.MUAData), return; end
+            st.inputs = Session.fileInfo(app.FilePath, 'MUA file');
+            chIdx = app.ChannelMenu.Value;
+            st.settings.channelIndex = chIdx;
+            st.settings.channel = app.MUAData.channels(chIdx);
+            st.settings.segmentation = struct('on', logical(app.SegmentCheckbox.Value), ...
+                'params', app.SegmentParams, 'segments', app.Segments, 'segment', app.SegmentMenu.Value);
+            st.settings.sortParams = app.SpikeSortParams;
+            st.settings.raster = struct('from', app.RasterFromField.Value, 'to', app.RasterToField.Value, ...
+                'binMs', app.RasterBinField.Value);
+            st.settings.correlogram = struct('maxLagMs', app.CorrLagField.Value, 'binMs', app.CorrBinField.Value);
+            st.settings.rate = struct('binS', app.RateBinField.Value, 'relative', logical(app.RateRelativeCheck.Value));
+            st.settings.selectedClusters = app.selectedClusterIds();
+            st.settings.tab = app.TabGroup.SelectedTab.Title;
+            st.summary{end+1} = sprintf('MUA: %d channel(s) at %s Hz, analysed Ch %d', numel(app.MUAData.channels), ...
+                num2str(app.MUAData.fs), st.settings.channel);
+            if ~app.hasResults(), return; end
+            r = struct();
+            r.spikeResults = app.SpikeResults;
+            r.sortContext = app.SortContext;
+            r.clusterQC = app.ClusterQC;
+            r.spikeLocs = app.SpikeLocs;
+            r.threshLines = app.ThreshLines;
+            r.spikeWaves = app.SpikeWaves;
+            r.displayPCs = app.DisplayPCs;
+            r.editHistory = app.EditHistory;
+            r.clusterEdits = app.ClusterEdits;
+            st.results = r;
+            qc = app.ClusterQC;
+            st.summary{end+1} = sprintf('Sorted %d spikes on %s: %d unit(s), %d rejected', ...
+                numel(app.SpikeResults.spikeTimes), app.SortContext.label, sum([qc.id] > 0), sum([qc.rejected]));
+            for k = 1:numel(qc)
+                if qc(k).id == 0
+                    st.summary{end+1} = sprintf('  noise (0): %d spikes', qc(k).n); %#ok<AGROW>
+                else
+                    st.summary{end+1} = sprintf('  unit %d: %d spikes, SNR %.2f, ISI < refractory %.2f%%%s', ...
+                        qc(k).id, qc(k).n, qc(k).snr, qc(k).isiPct, ifelseText(qc(k).rejected, ' (rejected)', '')); %#ok<AGROW>
+                end
+            end
+            for k = 1:numel(app.ClusterEdits)
+                st.summary{end+1} = sprintf('  edit %d: %s', k, app.ClusterEdits{k}); %#ok<AGROW>
+            end
+        end
+
+        %% restoreSession - Reload the MUA file, re-apply settings, restore the sorting as saved
+        function ok = restoreSession(app, s)
+            ok = false;
+            if isempty(s.inputs), ok = true; return; end
+            if ~app.openFile(s.inputs(1).path, false), return; end
+            cfg = s.settings;
+            if isfield(cfg, 'channelIndex') && ismember(cfg.channelIndex, app.ChannelMenu.ItemsData)
+                app.ChannelMenu.Value = cfg.channelIndex;
+            end
+            if isfield(cfg, 'segmentation')
+                seg = cfg.segmentation;
+                if ~isempty(seg.params), app.SegmentParams = seg.params; end
+                if seg.on && ~isempty(seg.segments) && ~isempty(app.StimData)
+                    n = size(seg.segments, 1);
+                    app.Segments = seg.segments;
+                    app.SegmentCheckbox.Value = true;
+                    app.SegmentMenu.Items = arrayfun(@(i) sprintf('Segment %d  (onset %.2f s)', i, ...
+                        seg.segments(i, 1) + seg.params.preTime), 1:n, 'UniformOutput', false);
+                    app.SegmentMenu.ItemsData = 1:n;
+                    app.SegmentMenu.Value = min(max(1, seg.segment), n);
+                    app.SegmentInfoLabel.Text = sprintf('%d segment%s: %.2f s before to %.2f s after each onset', ...
+                        n, plural(n), seg.params.preTime, seg.params.postTime);
+                end
+            end
+            if isfield(cfg, 'sortParams'), app.SpikeSortParams = cfg.sortParams; end
+            app.updateParamsLabel();
+            if isfield(cfg, 'raster')
+                app.RasterFromField.Value = cfg.raster.from;
+                app.RasterToField.Value = cfg.raster.to;
+                app.RasterBinField.Value = cfg.raster.binMs;
+            end
+            if isfield(cfg, 'correlogram')
+                app.CorrLagField.Value = cfg.correlogram.maxLagMs;
+                app.CorrBinField.Value = cfg.correlogram.binMs;
+            end
+            if isfield(cfg, 'rate')
+                app.RateBinField.Value = cfg.rate.binS;
+                app.RateRelativeCheck.Value = cfg.rate.relative;
+            end
+            r = s.results;
+            if isfield(r, 'spikeResults') && isstruct(r.spikeResults) && isstruct(r.clusterQC)
+                app.SpikeResults = r.spikeResults;
+                app.SortContext = r.sortContext;
+                app.ClusterQC = r.clusterQC;
+                app.SpikeLocs = r.spikeLocs;
+                app.ThreshLines = r.threshLines;
+                app.SpikeWaves = r.spikeWaves;
+                app.DisplayPCs = r.displayPCs;
+                app.EditHistory = r.editHistory;
+                if isempty(app.EditHistory), app.EditHistory = emptyHistory(); end
+                app.ClusterEdits = r.clusterEdits;
+                if isempty(app.ClusterEdits), app.ClusterEdits = {}; end
+                if ischar(app.SpikeWaves) || ischar(app.DisplayPCs)
+                    app.SpikeWaves = []; app.computeDisplayPCs();   % too large to have been stored
+                end
+                app.refreshClusterList(cfg.selectedClusters);
+                app.refreshResultPlots();
+            end
+            app.plotSignal();
+            if isfield(cfg, 'tab')
+                tab = findobj(app.TabGroup, 'Type', 'uitab', 'Title', cfg.tab);
+                if ~isempty(tab)
+                    app.TabGroup.SelectedTab = tab(1);
+                    app.refreshLazyTabs();
+                end
+            end
+            app.updateControls();
+            ok = true;
+        end
+
         % ---------------------------------------------------------------------------------------------
         %% Cluster merging for drift correction - implemented in MUAPipeline
         % Kept as app methods (same signatures) for existing callers.
@@ -1981,6 +2138,11 @@ end
 %% defaultSegmentParams - Onset detection / segment defaults (askSegmentParams)
 function p = defaultSegmentParams()
     p = struct('minISI', 1, 'threshold', 0.5, 'preTime', 0.5, 'postTime', 1.0);
+end
+
+%% ifelseText - a if cond, else b
+function s = ifelseText(cond, a, b)
+    if cond, s = a; else, s = b; end
 end
 
 %% emptyHistory - No cluster edits to undo

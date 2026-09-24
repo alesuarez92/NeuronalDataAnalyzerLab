@@ -24,6 +24,19 @@
 %   UIKit.emptyAxes(ax, msg)                 Placeholder text on empty axes.
 %   UIKit.footer(parent)
 %
+% Sessions and reports (see core/Session.m, core/Report.m):
+%   B = UIKit.sessionButtons(parent, app)
+%       'Save session…', 'Open session…' (row 1) and 'Report (PDF)…'
+%       (row 2) in a 2x2 grid placed in parent (set B.Grid.Layout);
+%       the row needs UIKit.sessionButtonsHeight() pixels. The buttons
+%       call the dialog wrappers below, which call the window's public
+%       methods saveSessionTo / openSession / makeReport.
+%   UIKit.setSessionEnable(B, canSave)   Save / Report need data; Open is
+%       always enabled (call from the window's updateControls).
+%   UIKit.saveSessionDialog(app) / openSessionDialog(app) / reportDialog(app)
+%   txt = UIKit.askText(title, subtitle, helpTopic, default, okText)
+%       Modal multi-line text dialog; [] when cancelled.
+%
 % All colors and sizes come from UITheme. Requires R2021a (uifigure,
 % uigridlayout, uihyperlink, uiprogressdlg).
 % =========================================================================
@@ -252,6 +265,146 @@ classdef UIKit
             uihyperlink(g, 'Text', sprintf('© Copyrights by Alejandro Suarez, Ph.D.  ·  v%s', T.version), ...
                 'URL', 'https://github.com/alesuarez92', 'FontSize', T.fontSmall, ...
                 'FontColor', T.mutedColor, 'HorizontalAlignment', 'right');
+        end
+
+        %% sessionButtons - Save session / Open session / Report (PDF) buttons
+        % Creates a 2x2 grid in parent (place it with B.Grid.Layout.Row /
+        % Column; it needs UIKit.sessionButtonsHeight() pixels). B.Save,
+        % B.Open and B.Report are the buttons. Enable them from the
+        % window's updateControls with UIKit.setSessionEnable(B, hasData).
+        function B = sessionButtons(parent, app)
+            T = UITheme;
+            B.Grid = uigridlayout(parent, [2 2], 'RowHeight', {T.buttonHeight, T.buttonHeight}, ...
+                'ColumnWidth', {'1x', '1x'}, 'Padding', [0 0 0 0], 'RowSpacing', 6, ...
+                'ColumnSpacing', 8, 'BackgroundColor', T.cardBg);
+            B.Save = UIKit.button(B.Grid, ['Save session' char(8230)], ...
+                @(~,~)UIKit.saveSessionDialog(app), 'secondary', ...
+                ['Save the input file paths (with size, date and MD5), every setting, the results ' ...
+                 'and your notes to a .nasession.mat file, to reopen or share this analysis']);
+            B.Save.Layout.Row = 1; B.Save.Layout.Column = 1;
+            B.Open = UIKit.button(B.Grid, ['Open session' char(8230)], ...
+                @(~,~)UIKit.openSessionDialog(app), 'secondary', ...
+                ['Reopen a .nasession.mat saved by this window: reloads the input files (checking ' ...
+                 'that they did not change), re-applies the settings and re-runs the analysis']);
+            B.Open.Layout.Row = 1; B.Open.Layout.Column = 2;
+            B.Report = UIKit.button(B.Grid, ['Report (PDF)' char(8230)], ...
+                @(~,~)UIKit.reportDialog(app), 'secondary', ...
+                ['One-page A4 PDF: an image of this window plus the versions, date, input files ' ...
+                 'with MD5, settings and key results (for lab notebooks and methods sections)']);
+            B.Report.Layout.Row = 2; B.Report.Layout.Column = [1 2];
+        end
+
+        %% sessionButtonsHeight - Pixel height of the sessionButtons grid
+        function h = sessionButtonsHeight()
+            h = 2 * UITheme.buttonHeight + 6;
+        end
+
+        %% setSessionEnable - Save / Report need data; Open is always available
+        function setSessionEnable(B, canSave)
+            if isempty(B) || ~isstruct(B) || ~isfield(B, 'Save') || ~isvalid(B.Save), return; end
+            if canSave, st = 'on'; else, st = 'off'; end
+            B.Save.Enable = st;
+            B.Report.Enable = st;
+            B.Open.Enable = 'on';
+        end
+
+        %% saveSessionDialog - Pick a .nasession.mat, ask for notes, app.saveSessionTo
+        function saveSessionDialog(app)
+            lbl = Session.statusLabel(app);
+            UIKit.setStatus(lbl, 'Choose where to save the session...', 'busy');
+            [~, defName] = fileparts(class(app));
+            defName = sprintf('%s_%s%s', regexprep(defName, 'App$', ''), ...
+                datestr(now, 'yyyymmdd_HHMM'), Session.Extension);
+            [f, d] = uiputfile({['*' Session.Extension], 'NeuroAnalyzer session (*.nasession.mat)'}, ...
+                'Save session', fullfile(UIKit.sessionFolder(app), defName));
+            figure(app.UIFig);
+            if isequal(f, 0)
+                UIKit.setStatus(lbl, 'Session not saved.', 'info');
+                return;
+            end
+            notes = UIKit.askText('Session notes', ...
+                'Optional: what this analysis is (animal, condition, why these settings)', ...
+                'Sessions and reports', Session.lastNotes(app), 'Save session');
+            figure(app.UIFig);
+            if isnumeric(notes) && isempty(notes)
+                UIKit.setStatus(lbl, 'Session not saved.', 'info');
+                return;
+            end
+            app.saveSessionTo(fullfile(d, f), notes);
+        end
+
+        %% openSessionDialog - Pick a .nasession.mat and app.openSession (interactive)
+        function openSessionDialog(app)
+            lbl = Session.statusLabel(app);
+            UIKit.setStatus(lbl, 'Choose a session file...', 'busy');
+            [f, d] = uigetfile({['*' Session.Extension], 'NeuroAnalyzer session (*.nasession.mat)'; ...
+                '*.mat', 'MAT files (*.mat)'}, 'Open session', UIKit.sessionFolder(app));
+            figure(app.UIFig);
+            if isequal(f, 0)
+                UIKit.setStatus(lbl, 'No session opened.', 'info');
+                return;
+            end
+            app.openSession(fullfile(d, f), true);
+        end
+
+        %% reportDialog - Pick a .pdf and app.makeReport
+        function reportDialog(app)
+            lbl = Session.statusLabel(app);
+            UIKit.setStatus(lbl, 'Choose where to save the report...', 'busy');
+            [~, base] = fileparts(Session.lastPath(app));
+            base = regexprep(base, '\.nasession$', '');
+            if isempty(base)
+                base = sprintf('%s_%s', regexprep(class(app), 'App$', ''), datestr(now, 'yyyymmdd_HHMM'));
+            end
+            [f, d] = uiputfile({'*.pdf', 'PDF (*.pdf)'}, 'Report (PDF)', ...
+                fullfile(UIKit.sessionFolder(app), [base '_report.pdf']));
+            figure(app.UIFig);
+            if isequal(f, 0)
+                UIKit.setStatus(lbl, 'No report written.', 'info');
+                return;
+            end
+            UIKit.setStatus(lbl, 'Writing the report...', 'busy');
+            app.makeReport(fullfile(d, f));
+        end
+
+        %% askText - Modal multi-line text dialog; returns char ('' allowed) or [] if cancelled
+        function txt = askText(titleText, subtitle, helpTopic, defaultText, okText)
+            T = UITheme;
+            if nargin < 4 || isempty(defaultText), defaultText = ''; end
+            if nargin < 5 || isempty(okText), okText = 'OK'; end
+            D = UIKit.dialog(titleText, subtitle, helpTopic, [460 320]);
+            D.Body.ColumnWidth = {'1x'};
+            D.Body.RowHeight = {'1x'};
+            ta = uitextarea(D.Body, 'Value', strsplit(char(defaultText), newline), ...
+                'FontSize', T.fontBody, 'Tooltip', 'Free text; leave empty for no notes');
+            D.Buttons.ColumnWidth = {'1x', 100, 120};
+            D.Fig.UserData = [];
+            D.Fig.CloseRequestFcn = @(~,~)uiresume(D.Fig);
+            b = UIKit.button(D.Buttons, 'Cancel', @(~,~)uiresume(D.Fig), 'secondary', 'Do not continue');
+            b.Layout.Column = 2;
+            b = UIKit.button(D.Buttons, okText, @(~,~)UIKit.askTextDone(D.Fig, ta), 'primary', ...
+                'Continue with this text');
+            b.Layout.Column = 3;
+            uiwait(D.Fig);
+            txt = [];
+            if isvalid(D.Fig)
+                if isstruct(D.Fig.UserData), txt = D.Fig.UserData.text; end
+                delete(D.Fig);
+            end
+        end
+
+        %% askTextDone - OK in askText: store the text, resume
+        function askTextDone(fig, ta)
+            fig.UserData = struct('text', strtrim(strjoin(cellstr(ta.Value), newline)));
+            uiresume(fig);
+        end
+
+        %% sessionFolder - Start folder for session / report dialogs
+        function d = sessionFolder(app)
+            d = fileparts(Session.lastPath(app));
+            if isempty(d) || ~isfolder(d), d = ProjectManager.getExportDir(); end
+            if isempty(d) || ~isfolder(d), d = Exporter.getLastUsedPath(); end
+            if isempty(d) || ~isfolder(d), d = pwd; end
         end
 
         %% centeredPosition - [x y w h] centered on the primary screen

@@ -76,6 +76,7 @@ function testLFPAnalysis(tests),            openAndCapture(tests, 'LFPAnalysisAp
 function testMUAAnalysis(tests),            openAndCapture(tests, 'MUAAnalysisApp', @() MUAAnalysisApp()); end
 function testROIAnalysis(tests),            openAndCapture(tests, 'ROIAnalysisApp', @() ROIAnalysisApp()); end
 function testSignalCharacterization(tests), openAndCapture(tests, 'SignalCharacterizationApp', @() SignalCharacterizationApp()); end
+function testBatch(tests),                  openAndCapture(tests, 'BatchApp', @() BatchApp()); end
 function testLDFParams(tests),              openAndCapture(tests, 'LDFProcessingParamsApp', @() LDFProcessingParamsApp(@(p) [], 1000)); end
 function testLFPParams(tests),              openAndCapture(tests, 'LFPProcessingParamsApp', @() LFPProcessingParamsApp()); end
 function testMUAParams(tests),              openAndCapture(tests, 'MUAProcessingParamsApp', @() MUAProcessingParamsApp()); end

@@ -14,6 +14,10 @@
 % "Try demo data" (loadDemo) replaces the trials with DemoData's
 % synthetic trials (relative to baseline on). Programmatic use (no dialogs):
 % openFiles(paths), setRelative(tf), plotGrandAverage().
+% Sessions (step 3 buttons; core/Session.m, core/Report.m):
+% saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
+% sessionState(), restoreSession(s). A session stores every trial file
+% (with MD5), "Relative to baseline" and the grand average.
 % =========================================================================
 
 classdef LDFGrandAverageApp < handle
@@ -37,6 +41,8 @@ classdef LDFGrandAverageApp < handle
         SegmentedTime  % time axis (s, 0 = onset)
         FileNames = {} % loaded file names (one per accepted file)
         FileCounts = [] % trials contributed by each file
+        FilePaths = {}  % full path of each accepted file (session provenance)
+        SessionBtns     % Step 3: Save session / Open session / Report (UIKit.sessionButtons)
     end
 
     methods
@@ -94,11 +100,13 @@ classdef LDFGrandAverageApp < handle
             note.Layout.Row = 3; note.Layout.Column = [1 2];
 
             % --- 3 Grand average ---
-            [p, g, heights{3}] = stepCard(left, 3, 'Grand average', {T.buttonHeight});
+            [p, g, heights{3}] = stepCard(left, 3, 'Grand average', {T.buttonHeight, UIKit.sessionButtonsHeight()});
             p.Layout.Row = 3;
             app.PlotBtn = UIKit.button(g, 'Plot grand average', @(~,~)app.plotGrandAverage(), ...
                 'secondary', 'Plot the mean ± SD across all loaded trials');
             app.PlotBtn.Layout.Row = 2; app.PlotBtn.Layout.Column = [1 2];
+            app.SessionBtns = UIKit.sessionButtons(g, app);
+            app.SessionBtns.Grid.Layout.Row = 3; app.SessionBtns.Grid.Layout.Column = [1 2];
 
             heights{4} = '1x';
             left.RowHeight = heights;
@@ -123,6 +131,7 @@ classdef LDFGrandAverageApp < handle
             app.ClearBtn.Enable = onoff(hasData);
             app.RelativeCheck.Enable = onoff(hasData);
             app.PlotBtn.Enable = onoff(hasData);
+            UIKit.setSessionEnable(app.SessionBtns, hasData);
             setButtonStyle(app.LoadBtn, ifelse(~hasData, 'primary', 'secondary'));
             setButtonStyle(app.PlotBtn, ifelse(hasData && ~hasAvg, 'primary', 'secondary'));
             if hasData
@@ -201,6 +210,7 @@ classdef LDFGrandAverageApp < handle
                     continue;
                 end
                 app.FileNames{end+1} = files{i};
+                app.FilePaths{end+1} = paths{i};
                 app.FileCounts(end+1) = size(data.segmentedLDF, 1);
             end
             UIKit.done(dlg);
@@ -297,6 +307,7 @@ classdef LDFGrandAverageApp < handle
             app.SegmentedTime = [];
             app.FileNames = {};
             app.FileCounts = [];
+            app.FilePaths = {};
             app.GrandPlot = [];
             app.ShadedArea = [];
             app.showPlaceholders();
@@ -338,6 +349,83 @@ classdef LDFGrandAverageApp < handle
             UIKit.styleAxes(ax, sprintf('Grand average (n = %d)', size(segments, 1)), 'Time from onset (s)', yl);
             app.updateControls();
             UIKit.setStatus(app.StatusLabel, sprintf('Grand average of %d trials plotted.', size(segments, 1)), 'success');
+        end
+
+        %% ----------------------------------------------------------------
+        %% Sessions and reports (core/Session.m, core/Report.m)
+        %% saveSessionTo - Save inputs (path, size, date, MD5), settings, results and notes (no dialog)
+        function ok = saveSessionTo(app, filePath, notes)
+            if nargin < 3, notes = []; end
+            ok = Session.saveApp(app, filePath, notes);
+        end
+
+        %% openSession - Reopen a .nasession.mat saved by this window
+        % interactive (default false, no dialogs): ask for missing inputs
+        % and show warnings as alerts. Returns true when restored.
+        function ok = openSession(app, filePath, interactive)
+            if nargin < 3, interactive = false; end
+            ok = Session.openInApp(app, filePath, interactive);
+        end
+
+        %% makeReport - One-page PDF: window image + versions, inputs (MD5), settings, results
+        function ok = makeReport(app, pdfPath)
+            ok = Report.forApp(app, pdfPath);
+        end
+
+        %% sessionState - Settings, results and inputs for Session.capture
+        % inputs: every accepted trial file. settings: Relative to baseline,
+        % whether the grand average is shown. results: trials per file,
+        % time window and the grand average (mean, SD) with its peak.
+        function st = sessionState(app)
+            st.inputs = [];
+            for k = 1:numel(app.FilePaths)
+                in = Session.fileInfo(app.FilePaths{k}, sprintf('Trial file %d', k));
+                if isempty(st.inputs), st.inputs = in; else, st.inputs(end+1) = in; end
+            end
+            hasAvg = ~isempty(app.GrandPlot) && isgraphics(app.GrandPlot);
+            st.settings = struct('relativeToBaseline', logical(app.RelativeCheck.Value), ...
+                'grandAverageShown', hasAvg);
+            st.results = struct();
+            st.summary = {};
+            if isempty(app.SegmentedData), return; end
+            t = app.SegmentedTime(:)';
+            st.results = struct('nTrials', size(app.SegmentedData, 1), 'fileCounts', app.FileCounts, ...
+                'window', [t(1) t(end)], 'nSamples', numel(t));
+            st.summary{end+1} = sprintf('%d trials from %d file(s), %.2f to %.2f s around onset', ...
+                size(app.SegmentedData, 1), numel(app.FileNames), t(1), t(end));
+            if hasAvg
+                [segments, ok] = app.correctedSegments();
+                if ok
+                    avg = mean(segments, 1);
+                    st.results.mean = avg;
+                    st.results.sd = std(segments, 0, 1);
+                    post = t >= 0;
+                    if any(post)
+                        [pk, i] = max(avg(post));
+                        tp = t(post);
+                        st.results.peak = pk;
+                        st.results.peakLatency = tp(i);
+                        st.summary{end+1} = sprintf('Grand average peak %.4g at %.3g s after onset%s', pk, tp(i), ...
+                            ifelse(app.RelativeCheck.Value, ' (relative to baseline)', ''));
+                    end
+                end
+            end
+        end
+
+        %% restoreSession - Reload the trial files, set the option, redraw the average
+        function ok = restoreSession(app, s)
+            ok = false;
+            if ~isempty(app.SegmentedData), app.clearSegments(); end
+            if isfield(s.settings, 'relativeToBaseline')
+                app.RelativeCheck.Value = logical(s.settings.relativeToBaseline);
+            end
+            if isempty(s.inputs), ok = true; return; end
+            added = app.openFiles({s.inputs.path});
+            if added == 0, return; end
+            if isfield(s.settings, 'grandAverageShown') && s.settings.grandAverageShown
+                app.plotGrandAverage();
+            end
+            ok = true;
         end
     end
 

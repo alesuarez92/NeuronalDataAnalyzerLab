@@ -37,6 +37,11 @@
 % loadDemo(format), setChannels(stim, raw), plotRAWData(),
 % processLFPData(params), processMUAData(params), saveLFPTo(path, sel),
 % saveMUATo(path, sel), exportNWB(path).
+% Sessions (step 4 buttons; core/Session.m, core/Report.m):
+% saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
+% sessionState(), restoreSession(s). A session stores the recording (file
+% or folder, with MD5) and format, the channel selection and the LFP / MUA
+% settings; LFP and MUA are re-computed from the recording when it is opened.
 % =========================================================================
 
 classdef ExtractEphysApp < handle
@@ -81,6 +86,8 @@ classdef ExtractEphysApp < handle
         LFPSaved = false     % LastProcessedLFP written to disk
         MUASaved = false     % LastProcessedMUA written to disk
         LastNWBExport = ''   % Path of the last NWB export
+        RecordingPath = ''   % File or folder of the loaded recording (session provenance)
+        SessionBtns          % Step 4: Save session / Open session / Report (UIKit.sessionButtons)
     end
 
     methods
@@ -102,7 +109,7 @@ classdef ExtractEphysApp < handle
             W.Body.RowHeight = {'1x'};
 
             left = uigridlayout(W.Body, [4 1], 'RowHeight', ...
-                {136 + T.controlHeight + 14, '1x', 116, 124 + T.buttonHeight + 6}, ...
+                {136 + T.controlHeight + 14, '1x', 116, 124 + T.buttonHeight + 6 + UIKit.sessionButtonsHeight() + 6}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 10, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
             left.Layout.Row = 1; left.Layout.Column = 1;
@@ -164,7 +171,7 @@ classdef ExtractEphysApp < handle
             app.PlotRAWBtn.Layout.Column = [1 2];
 
             % --- 4 Save ---
-            g = cardGrid(left, {22, bh, bh, '1x'}, 2);
+            g = cardGrid(left, {22, bh, bh, UIKit.sessionButtonsHeight(), '1x'}, 2);
             lbl = UIKit.step(g, 4, 'Save');
             lbl.Layout.Column = [1 2];
             app.SaveLFPBtn = UIKit.button(g, 'Save LFP…', @(~,~)app.saveLFPData(), 'secondary', ...
@@ -175,9 +182,11 @@ classdef ExtractEphysApp < handle
                 ['Export the processed LFP (volts, at the LFP rate) and the stimulus channel as an ' ...
                 'NWB 2.x file. Uses matnwb when installed; otherwise an NWB-style export ' ...
                 '(not validated) by the built-in writer']);
-            app.ExportNWBBtn.Layout.Column = [1 2];
+            app.ExportNWBBtn.Layout.Row = 3; app.ExportNWBBtn.Layout.Column = [1 2];
+            app.SessionBtns = UIKit.sessionButtons(g, app);
+            app.SessionBtns.Grid.Layout.Row = 4; app.SessionBtns.Grid.Layout.Column = [1 2];
             app.FsLabel = infoLabel(g, '');
-            app.FsLabel.Layout.Column = [1 2];
+            app.FsLabel.Layout.Row = 5; app.FsLabel.Layout.Column = [1 2];
 
             % --- Plots ---
             app.PlotCard = UIKit.card(W.Body, 'Signals');
@@ -201,6 +210,7 @@ classdef ExtractEphysApp < handle
             app.SaveLFPBtn.Enable = onOff(hasLFP);
             app.SaveMUABtn.Enable = onOff(hasMUA);
             app.ExportNWBBtn.Enable = onOff(hasLFP);
+            UIKit.setSessionEnable(app.SessionBtns, hasData);
 
             % Recommended next action: load -> process LFP -> save LFP -> process MUA -> save MUA
             if ~hasData
@@ -361,6 +371,7 @@ classdef ExtractEphysApp < handle
                 return;
             end
             app.Data = data;
+            app.RecordingPath = char(p);
             if isTDT || ~isfield(data.info, 'blockname') || isempty(data.info.blockname)
                 app.TankName = name;
             else
@@ -921,6 +932,87 @@ classdef ExtractEphysApp < handle
             end
             UIKit.setStatus(app.StatusLabel, sprintf('Exported %s: LFP (%d channel(s), %.2f Hz) + stimulus to %s%s.', ...
                 kind, numel(app.LastLFPChannels), app.LastLFPfs, fname, fext), 'success');
+        end
+
+        %% ----------------------------------------------------------------
+        %% Sessions and reports (core/Session.m, core/Report.m)
+        %% saveSessionTo - Save inputs (path, size, date, MD5), settings, results and notes (no dialog)
+        function ok = saveSessionTo(app, filePath, notes)
+            if nargin < 3, notes = []; end
+            ok = Session.saveApp(app, filePath, notes);
+        end
+
+        %% openSession - Reopen a .nasession.mat saved by this window
+        % interactive (default false, no dialogs): ask for missing inputs
+        % and show warnings as alerts. Returns true when restored.
+        function ok = openSession(app, filePath, interactive)
+            if nargin < 3, interactive = false; end
+            ok = Session.openInApp(app, filePath, interactive);
+        end
+
+        %% makeReport - One-page PDF: window image + versions, inputs (MD5), settings, results
+        function ok = makeReport(app, pdfPath)
+            ok = Report.forApp(app, pdfPath);
+        end
+
+        %% sessionState - Settings, results and inputs for Session.capture
+        % inputs: the recording (file or folder). settings: format, stimulus
+        % and RAW channels, and for each processed signal its parameters,
+        % channels and stimulus channel. results: rate, samples and RMS per
+        % channel of the processed LFP / MUA (the signals themselves are
+        % re-computed from the recording when the session is opened).
+        function st = sessionState(app)
+            st.inputs = [];
+            st.settings = struct('format', app.SourceFormat, 'stimChannel', [], 'rawChannels', [], ...
+                'lfp', [], 'mua', []);
+            st.results = struct();
+            st.summary = {};
+            if isempty(app.Data), return; end
+            st.inputs = Session.fileInfo(app.RecordingPath, sprintf('%s recording', EphysSource.label(app.SourceFormat)));
+            st.settings.stimChannel = app.WhisChannelMenu.Value;
+            st.settings.rawChannels = reshape(app.RAWList.Value, 1, []);
+            st.summary{end+1} = sprintf('Recording %s: %d RAW channels at %.2f Hz', app.TankName, ...
+                size(app.Data.streams.xRAW.data, 1), app.Data.streams.xRAW.fs);
+            kinds = {'lfp', 'LFP'; 'mua', 'MUA'};
+            for k = 1:2
+                sig = app.(sprintf('LastProcessed%s', kinds{k, 2}));
+                if isempty(sig), continue; end
+                if k == 1
+                    prm = app.LastLFPParams; chans = app.LastLFPChannels; stimCh = app.LastLFPStimChannel; fs = app.LastLFPfs;
+                else
+                    prm = app.LastMUAFilterParams; chans = app.LastMUAChannels; stimCh = app.LastMUAStimChannel; fs = app.LastMUAfs;
+                end
+                st.settings.(kinds{k, 1}) = struct('params', prm, 'channels', chans, 'stimChannel', stimCh);
+                rmsCh = cellfun(@(x) sqrt(mean(double(x(:)).^2)), sig);
+                st.results.(kinds{k, 1}) = struct('fs', fs, 'channels', chans, 'nSamples', numel(sig{1}), ...
+                    'rms', rmsCh);
+                st.summary{end+1} = sprintf('%s: channels %s at %.2f Hz, %d samples, RMS %s V', kinds{k, 2}, ...
+                    mat2str(chans), fs, numel(sig{1}), mat2str(rmsCh, 3));
+            end
+        end
+
+        %% restoreSession - Reopen the recording, re-run LFP / MUA, restore the selection
+        function ok = restoreSession(app, s)
+            ok = false;
+            if isempty(s.inputs), ok = true; return; end
+            cfg = s.settings;
+            fmt = '';
+            if isfield(cfg, 'format'), fmt = cfg.format; end
+            if ~app.openRecording(s.inputs(1).path, fmt), return; end
+            if isfield(cfg, 'lfp') && ~isempty(cfg.lfp)
+                app.setChannels(cfg.lfp.stimChannel, cfg.lfp.channels);
+                app.processLFPData(cfg.lfp.params);
+                if isempty(app.LastProcessedLFP), return; end
+            end
+            if isfield(cfg, 'mua') && ~isempty(cfg.mua)
+                app.setChannels(cfg.mua.stimChannel, cfg.mua.channels);
+                app.processMUAData(cfg.mua.params);
+                if isempty(app.LastProcessedMUA), return; end
+            end
+            if isfield(cfg, 'rawChannels') && ~isempty(cfg.rawChannels)
+                app.setChannels(cfg.stimChannel, cfg.rawChannels);
+            end
+            ok = true;
         end
     end
 

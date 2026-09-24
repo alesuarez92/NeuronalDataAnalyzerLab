@@ -41,6 +41,11 @@
 % exportResults(path), loadOscillationDemo(), runSpectrum(ch),
 % runSpectrogram(ch, fRange), runERSP(ch, fRange, baseline),
 % runBandPower(ch, bands); the run* methods return true on success.
+% Sessions (step 5 buttons; core/Session.m, core/Report.m):
+% saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
+% sessionState(), restoreSession(s). A session stores the LFP file (with
+% MD5), the channel selection, ERP / CSD / time-frequency settings and
+% results; opening it re-runs every analysis that had been run.
 % =========================================================================
 
 classdef LFPAnalysisApp < handle
@@ -106,6 +111,7 @@ classdef LFPAnalysisApp < handle
         Fs_lfp
         Fs_stim
         FileName = ''
+        FilePath = ''    % Full path of the loaded file (session provenance)
         LFPChannelIDs    % lfp_channels from the file (TDT numbers), if present
 
         % Analysis
@@ -128,6 +134,7 @@ classdef LFPAnalysisApp < handle
         LastBandPower    % TimeFrequency.eventBandPower result + channel, names
         TFDone = struct('spectrum', false, 'spectrogram', false, 'ersp', false, 'bandpower', false)
         TFFocus = false  % next-step hints follow step 6 (oscillation demo / after a TF run)
+        SessionBtns      % Step 5: Save session / Open session / Report (UIKit.sessionButtons)
     end
 
     properties (Constant, Access = private)
@@ -156,7 +163,7 @@ classdef LFPAnalysisApp < handle
             % Fixed row heights: the column scrolls, so a '1x' row could collapse
             tfRows = {22, bh, ch, ch, ch, ch, ch, 34, 134, bh, bh};
             tfH = sum([tfRows{:}]) + 6 * (numel(tfRows) - 1) + 18;
-            left = uigridlayout(W.Body, [6 1], 'RowHeight', {124 + bh + 6, 170, 112, 142, 78, tfH}, ...
+            left = uigridlayout(W.Body, [6 1], 'RowHeight', {124 + bh + 6, 170, 112, 142, 78 + UIKit.sessionButtonsHeight() + 6, tfH}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 10, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
             left.Layout.Row = 1; left.Layout.Column = 1;
@@ -209,10 +216,12 @@ classdef LFPAnalysisApp < handle
             app.CSDBtn.Layout.Column = [1 2];
 
             % --- 5 Export ---
-            g = cardGrid(left, {22, bh});
+            g = cardGrid(left, {22, bh, UIKit.sessionButtonsHeight()});
             UIKit.step(g, 5, 'Export');
             app.ExportBtn = UIKit.button(g, 'Export ERP / CSD…', @(~,~)app.exportResults(), 'secondary', ...
                 'Save ERP mean/SD, time axis, epoch count and (if computed) CSD to .mat');
+            app.SessionBtns = UIKit.sessionButtons(g, app);
+            app.SessionBtns.Grid.Layout.Row = 3;
 
             % --- 6 Time-frequency ---
             g = cardGrid(left, tfRows, 2);
@@ -302,6 +311,7 @@ classdef LFPAnalysisApp < handle
             app.ERBBtn.Enable = onOff(nSel > 0);
             setEnable({app.SpacingEdit, app.ChannelOrderEdit, app.CSDBtn}, hasERP);
             app.ExportBtn.Enable = onOff(hasERP);
+            UIKit.setSessionEnable(app.SessionBtns, hasData);
             setEnable({app.TFChannelDrop, app.TFFminEdit, app.TFFmaxEdit, app.TFCyclesEdit, ...
                 app.TFEpochFromEdit, app.TFEpochToEdit, app.TFBaseFromEdit, app.TFBaseToEdit, ...
                 app.BandTable, app.SpectrumBtn, app.SpectrogramBtn, app.ERSPBtn, app.BandPowerBtn}, hasData);
@@ -380,6 +390,7 @@ classdef LFPAnalysisApp < handle
             app.Fs_lfp = s.lfp_fs;
             app.Fs_stim = s.stim_fs;
             app.FileName = file;
+            app.FilePath = filePath;
 
             % Drop results from a previously loaded file
             app.SelectedChannels = [];
@@ -925,9 +936,172 @@ classdef LFPAnalysisApp < handle
                 max(r.nTrials), baseline(1), baseline(2), names{b}, r.mean(b, find(post, 1) - 1 + iPk(b)), ...
                 tPost(iPk(b))), 'success');
         end
+
+        %% ----------------------------------------------------------------
+        %% Sessions and reports (core/Session.m, core/Report.m)
+        %% saveSessionTo - Save inputs (path, size, date, MD5), settings, results and notes (no dialog)
+        function ok = saveSessionTo(app, filePath, notes)
+            if nargin < 3, notes = []; end
+            ok = Session.saveApp(app, filePath, notes);
+        end
+
+        %% openSession - Reopen a .nasession.mat saved by this window
+        % interactive (default false, no dialogs): ask for missing inputs
+        % and show warnings as alerts. Returns true when restored.
+        function ok = openSession(app, filePath, interactive)
+            if nargin < 3, interactive = false; end
+            ok = Session.openInApp(app, filePath, interactive);
+        end
+
+        %% makeReport - One-page PDF: window image + versions, inputs (MD5), settings, results
+        function ok = makeReport(app, pdfPath)
+            ok = Report.forApp(app, pdfPath);
+        end
+
+        %% sessionState - Settings, results and inputs for Session.capture
+        % settings: channel selection, ERP parameters and channels, CSD
+        % spacing / order, step-6 fields and band table, and the arguments of
+        % each time-frequency analysis that was run (tfRuns). results: ERP,
+        % CSD and time-frequency result structs.
+        function st = sessionState(app)
+            st.inputs = [];
+            st.settings = struct();
+            st.results = struct();
+            st.summary = {};
+            if isempty(app.LFP), return; end
+            st.inputs = Session.fileInfo(app.FilePath, 'LFP file');
+            [bn, br, bp] = app.tableBands();
+            st.settings.channels = reshape(app.ChannelList.Value, 1, []);
+            st.settings.erp = [];
+            if ~isempty(app.LastERP)
+                st.settings.erp = struct('params', app.ERPParams, 'channels', app.SelectedChannels);
+            end
+            st.settings.csd = struct('spacingUm', app.SpacingEdit.Value, 'order', app.ChannelOrderEdit.Value, ...
+                'computed', ~isempty(app.LastCSD), 'usedOrder', app.LastCSDOrder, 'usedSpacingUm', app.LastCSDSpacing);
+            st.settings.tf = struct('channel', app.TFChannelDrop.Value, ...
+                'fRange', [app.TFFminEdit.Value, app.TFFmaxEdit.Value], 'cycles', app.TFCyclesEdit.Value, ...
+                'epoch', [app.TFEpochFromEdit.Value, app.TFEpochToEdit.Value], ...
+                'baseline', [app.TFBaseFromEdit.Value, app.TFBaseToEdit.Value], ...
+                'bandNames', {bn}, 'bandRanges', br, 'bandPlot', bp, 'focus', app.TFFocus);
+            runs = struct('spectrum', [], 'spectrogram', [], 'ersp', [], 'bandpower', []);
+            if ~isempty(app.LastSpectrum), runs.spectrum = struct('channel', app.LastSpectrum.channel); end
+            if ~isempty(app.LastSpectrogram)
+                runs.spectrogram = struct('channel', app.LastSpectrogram.channel, 'fRange', app.LastSpectrogram.fRange);
+            end
+            if ~isempty(app.LastERSP)
+                e = app.LastERSP;
+                runs.ersp = struct('channel', e.channel, 'fRange', e.freqs([1 end]), 'window', e.window, ...
+                    'baseline', e.baseline, 'nCycles', e.nCycles);
+            end
+            if ~isempty(app.LastBandPower)
+                r = app.LastBandPower;
+                runs.bandpower = struct('channel', r.channel, 'names', {r.names}, 'ranges', r.bands, ...
+                    'window', [r.t(1) r.t(end)], 'baseline', r.baselineWindow);
+            end
+            st.settings.tfRuns = runs;
+            st.settings.tab = app.Tabs.SelectedTab.Title;
+            st.summary{end+1} = sprintf('LFP: %d channels at %.2f Hz, %.1f s', size(app.LFP, 1), app.Fs_lfp, ...
+                size(app.LFP, 2) / app.Fs_lfp);
+            if ~isempty(app.LastERP)
+                st.results.erp = struct('mean', app.LastERP, 'sd', app.LastERPStd, 't', app.LastTime, ...
+                    'nValid', app.LastNValid, 'onsetTimes', app.LastOnsetTimes, 'channels', app.SelectedChannels);
+                [mn, iMin] = min(app.LastERP, [], 2);
+                st.summary{end+1} = sprintf('ERP: %d of %d epochs, channels %s, -%g to +%g s', app.LastNValid, ...
+                    numel(app.LastOnsetTimes), mat2str(app.SelectedChannels), app.ERPParams.preTime, app.ERPParams.postTime);
+                st.summary{end+1} = sprintf('ERP minimum per channel: %s at %s s', mat2str(mn(:)', 3), ...
+                    mat2str(app.LastTime(iMin(:)'), 3));
+            end
+            if ~isempty(app.LastCSD)
+                st.results.csd = struct('csd', app.LastCSD, 'order', app.LastCSDOrder, 'spacingUm', app.LastCSDSpacing);
+                [~, idx] = min(app.LastCSD(:));
+                [row, col] = ind2sub(size(app.LastCSD), idx);
+                st.summary{end+1} = sprintf('CSD: order %s, %g um; strongest sink at Ch %d, %.3g s', ...
+                    mat2str(app.LastCSDOrder), app.LastCSDSpacing, app.LastCSDOrder(row), app.LastTime(col));
+            end
+            if ~isempty(app.LastSpectrum)
+                st.results.spectrum = app.LastSpectrum;
+                st.summary{end+1} = sprintf('Spectrum: Ch %d (Welch, %.3g s segments)', app.LastSpectrum.channel, ...
+                    app.LastSpectrum.segSec);
+            end
+            if ~isempty(app.LastSpectrogram)
+                st.results.spectrogram = app.LastSpectrogram;
+                st.summary{end+1} = sprintf('Spectrogram: Ch %d, %g-%g Hz', app.LastSpectrogram.channel, ...
+                    app.LastSpectrogram.fRange(1), app.LastSpectrogram.fRange(2));
+            end
+            if ~isempty(app.LastERSP)
+                st.results.ersp = app.LastERSP;
+                st.summary{end+1} = sprintf('ERSP / ITPC: Ch %d, %g-%g Hz, %d trials, baseline %s s', ...
+                    app.LastERSP.channel, app.LastERSP.freqs(1), app.LastERSP.freqs(end), ...
+                    app.LastERSP.info.nTrials, mat2str(app.LastERSP.baseline));
+            end
+            if ~isempty(app.LastBandPower)
+                st.results.bandPower = app.LastBandPower;
+                st.summary{end+1} = sprintf('Band power: Ch %d, bands %s', app.LastBandPower.channel, ...
+                    strjoin(app.LastBandPower.names, ', '));
+            end
+        end
+
+        %% restoreSession - Reload the LFP, re-apply settings and re-run the analyses
+        function ok = restoreSession(app, s)
+            ok = false;
+            if isempty(s.inputs), ok = true; return; end
+            if ~app.openFile(s.inputs(1).path), return; end
+            cfg = s.settings;
+            if isfield(cfg, 'tf'), app.applyTFFields(cfg.tf); end
+            if isfield(cfg, 'erp') && ~isempty(cfg.erp)
+                app.setChannels(cfg.erp.channels);
+                app.runERP(cfg.erp.params);
+                if isempty(app.LastERP), return; end
+                if isfield(cfg, 'csd') && cfg.csd.computed
+                    app.computeCSD(cfg.csd.usedSpacingUm, cfg.csd.usedOrder);
+                end
+            end
+            if isfield(cfg, 'tfRuns')
+                r = cfg.tfRuns;
+                if ~isempty(r.spectrum), app.runSpectrum(r.spectrum.channel); end
+                if ~isempty(r.spectrogram), app.runSpectrogram(r.spectrogram.channel, r.spectrogram.fRange); end
+                if ~isempty(r.ersp)
+                    app.TFEpochFromEdit.Value = r.ersp.window(1); app.TFEpochToEdit.Value = r.ersp.window(2);
+                    app.TFCyclesEdit.Value = r.ersp.nCycles(1);
+                    app.runERSP(r.ersp.channel, r.ersp.fRange, r.ersp.baseline);
+                end
+                if ~isempty(r.bandpower)
+                    b = r.bandpower;
+                    app.TFEpochFromEdit.Value = b.window(1); app.TFEpochToEdit.Value = b.window(2);
+                    app.TFBaseFromEdit.Value = b.baseline(1); app.TFBaseToEdit.Value = b.baseline(2);
+                    app.runBandPower(b.channel, struct('name', b.names(:)', 'range', num2cell(b.ranges, 2)'));
+                end
+            end
+            % Show the fields as they were saved
+            if isfield(cfg, 'tf'), app.applyTFFields(cfg.tf); end
+            if isfield(cfg, 'channels'), app.ChannelList.Value = cfg.channels(ismember(cfg.channels, app.ChannelList.ItemsData)); end
+            if isfield(cfg, 'csd')
+                app.SpacingEdit.Value = cfg.csd.spacingUm;
+                app.ChannelOrderEdit.Value = cfg.csd.order;
+            end
+            if isfield(cfg, 'tab')
+                tab = findobj(app.Tabs, 'Type', 'uitab', 'Title', cfg.tab);
+                if ~isempty(tab), app.Tabs.SelectedTab = tab(1); end
+            end
+            app.updateControls();
+            ok = true;
+        end
     end
 
     methods (Access = private)
+        %% applyTFFields - Step-6 fields, band table and focus from a session's settings.tf
+        function applyTFFields(app, tf)
+            if ismember(tf.channel, app.TFChannelDrop.ItemsData), app.TFChannelDrop.Value = tf.channel; end
+            app.TFFminEdit.Value = tf.fRange(1); app.TFFmaxEdit.Value = tf.fRange(2);
+            app.TFCyclesEdit.Value = tf.cycles;
+            app.TFEpochFromEdit.Value = tf.epoch(1); app.TFEpochToEdit.Value = tf.epoch(2);
+            app.TFBaseFromEdit.Value = tf.baseline(1); app.TFBaseToEdit.Value = tf.baseline(2);
+            if ~isempty(tf.bandNames)
+                app.BandTable.Data = [tf.bandNames(:), num2cell(tf.bandRanges), num2cell(logical(tf.bandPlot(:)))];
+            end
+            app.TFFocus = logical(tf.focus);
+        end
+
         %% tfPrepare - Data loaded? Apply optional channel / fRange / baseline to the step-6 fields
         function ok = tfPrepare(app, ch, fRange, baseline)
             ok = false;

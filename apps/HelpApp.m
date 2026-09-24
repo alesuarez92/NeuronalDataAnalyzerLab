@@ -430,7 +430,7 @@ classdef HelpApp < handle
                 'Filtering', 'ProcessingLDFApp'; 'LDF Average', 'LDFGrandAverageApp'; ...
                 'Ephys Extract', 'ExtractEphysApp'; 'LFP Analysis', 'LFPAnalysisApp'; ...
                 'MUA Analysis', 'MUAAnalysisApp'; 'ROI Analysis', 'ROIAnalysisApp'; ...
-                'Signal Characterization', 'SignalCharacterizationApp'};
+                'Signal Characterization', 'SignalCharacterizationApp'; 'Batch processing', 'BatchApp'};
             k = find(strcmpi(map(:, 1), strtrim(char(topic))), 1);
             if isempty(k), cls = ''; else, cls = map{k, 2}; end
         end
@@ -444,7 +444,7 @@ classdef HelpApp < handle
                 HelpApp.topicWelcome(), HelpApp.topicLDFExtract(), HelpApp.topicLDFProcess(), ...
                 HelpApp.topicFiltering(), HelpApp.topicLDFAverage(), HelpApp.topicEphysExtract(), ...
                 HelpApp.topicLFPAnalysis(), HelpApp.topicMUAAnalysis(), HelpApp.topicROIAnalysis(), ...
-                HelpApp.topicSignalCharacterization()];
+                HelpApp.topicSignalCharacterization(), HelpApp.topicBatch(), HelpApp.topicSessions()];
         end
 
         %% topicWelcome - Overview of the four pipelines, project folders, help
@@ -519,7 +519,8 @@ classdef HelpApp < handle
                 '**1 Load LDF export**: click **Load file...** and choose the LabChart .mat export. Stimulus (channel 6) and LDF (channel 8) are plotted; file name, sampling rate and duration are shown.'
                 '**2 Choose time range**: type **Start** and **End** (s), click **Pick on plot** and click twice (start, end) on either plot, or click **Full range**.'
                 '**3 Crop**: click **Crop to range**. The cropped signals replace the full recording in the plots.'
-                '**4 Save**: click **Save cropped data...** and choose a file name. Open this file next in **LDF Process**.'};
+                '**4 Save**: click **Save cropped data...** and choose a file name. Open this file next in **LDF Process**.'
+                '**Session / report (optional)**: in step 4, **Save session…** stores the export file (with checksum), the range and the crop; **Open session…** redoes them; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: LabChart-style export, 8 channels, 300 s at 1000 Hz. Channel 6 = stimulus: 9 pulses of 5 s every 30 s from t = 30 s. Channel 8 = LDF: ~120 PU baseline with slow drift, vasomotion (0.1 Hz), a cardiac ripple (6 Hz) and noise.'
                 '* **What you should see**: after each stimulus pulse the LDF rises by about **+30 PU**, peaking about **4 s after the onset**, and returns to baseline within ~12 s.'
@@ -550,7 +551,8 @@ classdef HelpApp < handle
                 '**1 Load cropped LDF**: click **Load file...** and choose the file saved by LDF Extract.'
                 '**2 Filter / downsample (optional)**: click **Settings...**, choose downsampling and filter, click **Apply**. The Filter response tab shows the filter; **Undo** returns to the loaded data. See the **Filtering** topic.'
                 '**3 Segment trials**: set **Stim threshold** (shown as a dashed line on the stimulus), **Pre-onset** and **Post-onset** (s) and **Min interval** (s), then click **Segment trials**. All trials and the mean ± SD appear in the Trials tab.'
-                '**4 Save trials**: click **Save trials...**. Choosing an existing trials file appends the new trials to it (time axes must match). Open the file(s) next in **LDF Average**.'};
+                '**4 Save trials**: click **Save trials...**. Choosing an existing trials file appends the new trials to it (time axes must match). Open the file(s) next in **LDF Average**.'
+                '**Session / report (optional)**: in step 4, **Save session…** stores the file (with checksum), filter and segmentation settings; **Open session…** re-runs them; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: the cropped demo recording (20–280 s of the LDF export, 1000 Hz): 9 stimulus pulses of 5 s, the first at 10 s, then every 30 s.'
                 '* **Try**: downsample 10x, low-pass ~1 Hz (removes the 6 Hz cardiac ripple), then segment with pre = 5 s and post = 20 s.'
@@ -614,7 +616,8 @@ classdef HelpApp < handle
             t.quick = {
                 '**1 Load trial files**: click **Add files...** and select one or more files saved by LDF Process (multi-select). You can add more files later; **Clear all** starts over.'
                 '**2 Options**: tick **Relative to baseline** to subtract each trial''s pre-stimulus mean.'
-                '**3 Grand average**: click **Plot grand average** to see the mean ± SD across all trials.'};
+                '**3 Grand average**: click **Plot grand average** to see the mean ± SD across all trials.'
+                '**Session / report (optional)**: in step 3, **Save session…** stores every trial file (with checksum) and the option; **Open session…** reloads them and redraws the average; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: `demo_ldf_trials.mat`, 8 trials from −5 to 20 s at 10 Hz (0 = stimulus onset).'
                 '* **What you should get**: the grand average is flat before 0 s (~120 PU), rises after onset and **peaks ~4 s after onset at ~+30 PU**, then returns to baseline by ~12–15 s. The SD band shows the trial-to-trial vasomotion (a few PU).'
@@ -639,7 +642,8 @@ classdef HelpApp < handle
                 '**1 Load recording**: choose the **Source** (TDT tank, Intan .rhd, Open Ephys folder or NWB file), click **Load recording…** and select the tank / block folder, the .rhd file, the Open Ephys recording folder (or any folder above it) or the .nwb file. The channel lists are filled from the recording.'
                 '**2 Choose channels**: pick the **Stimulus channel** (TDT: Whis; Intan: DIGITAL-IN / ANALOG-IN; Open Ephys: TTL line / ADC; NWB: stimulus TimeSeries or trials) and one or more raw channels (**All** / **None** help).'
                 '**3 Process**: optionally **Plot RAW**; then **Process LFP…** (low-pass, 60 Hz notch, downsample) and/or **Process MUA…** (band-pass, default 300–3000 Hz).'
-                '**4 Save**: **Save LFP…** / **Save MUA…**, choose which channels to keep and a file name (default `<recording>_LFP.mat` / `<recording>_MUA.mat`). Open these files in **LFP analysis** / **MUA analysis**. **Export NWB…** writes the processed LFP and its stimulus channel as an NWB 2.x file (default `<recording>_LFP.nwb`).'};
+                '**4 Save**: **Save LFP…** / **Save MUA…**, choose which channels to keep and a file name (default `<recording>_LFP.mat` / `<recording>_MUA.mat`). Open these files in **LFP analysis** / **MUA analysis**. **Export NWB…** writes the processed LFP and its stimulus channel as an NWB 2.x file (default `<recording>_LFP.nwb`).'
+                '**Session / report (optional)**: in step 4, **Save session…** stores the recording (with checksum), channels and LFP / MUA settings; **Open session…** re-processes them; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: a TDT-like demo block (30 s): 8 raw channels (`xRAW`, 24414 Hz, electrodes 100 µm apart) and the whisker stimulus (`Whis`: 20 ms pulses every 2 s from 1 s, 15 stimuli). The demo tank is read by a built-in stand-in, so the TDT SDK is not needed for it.'
                 '* **Process LFP** (low-pass, downsample to ~1017 Hz): each stimulus evokes a negative deflection at **15 ms** and a positive one at **40 ms**, largest on **channel 4** and weaker with distance from it.'
@@ -697,7 +701,8 @@ classdef HelpApp < handle
                 '**4 CSD**: enter **Spacing (µm)** and the **Channel order** from top to bottom (at least 3 channels of the last ERP), then click **Compute CSD**.'
                 '**5 Export**: click **Export ERP / CSD…** to save a .mat that Signal Characterization can read.'
                 '**6 Time–frequency**: choose the **Channel**, **Frequencies (Hz)** (lowest – highest), **Wavelet cycles**, **Epoch (s)** and **Baseline (s)**. The band table (delta 1–4, theta 4–8, alpha 8–13, beta 13–30, gamma 30–80 Hz) holds common conventions: edit the limits for your preparation and tick **Plot** for the bands to show. **Try oscillation demo** loads a demo with known theta and gamma oscillations and selects channel 4.'
-                '**7 Time–frequency plots**: click **Spectrum** (power spectrum of the whole recording), **Spectrogram** (power over time with the stimuli marked), **ERSP / ITPC** (power change in dB and phase locking around each stimulus) and **Band power** (% change of each ticked band around the stimulus, mean ± SEM). Each opens its tab. ERSP and Band power use the stimulus onsets found with the ERP threshold (0.5 until you run the ERP).'};
+                '**7 Time–frequency plots**: click **Spectrum** (power spectrum of the whole recording), **Spectrogram** (power over time with the stimuli marked), **ERSP / ITPC** (power change in dB and phase locking around each stimulus) and **Band power** (% change of each ticked band around the stimulus, mean ± SEM). Each opens its tab. ERSP and Band power use the stimulus onsets found with the ERP threshold (0.5 until you run the ERP).'
+                '**Session / report (optional)**: in step 5, **Save session…** stores the file (with checksum) and the ERP, CSD and time–frequency settings and results; **Open session…** re-runs them; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: `demo_lfp.mat`, 8 channels at 1017.25 Hz, 30 s, 100 µm spacing; 15 stimuli every 2 s from 1 s.'
                 '* **ERP** (e.g. pre 0.05 s, post 0.2 s): 15 epochs; **N1 (negative) at ~15 ms** (about −120 µV at channel 4) and **P2 (positive) at ~40 ms**; both are **largest at channel 4** and fall off over ~150 µm (channels 2–6).'
@@ -750,7 +755,8 @@ classdef HelpApp < handle
                 '**4 Clusters**: select the clusters to show (**Select all** / **Clear**) and read the quality summary. Select two or more units and click **Merge selected** when they are the same neuron; select one unit and click **Split selected** to cut it in two; **Undo** reverses the last merge, split or auto-merge.'
                 '**5 Raster & PSTH** tab: spikes of each selected unit (up to 4) around every stimulus onset (raster) and the mean firing rate ± SEM (PSTH). Set **From (s)**, **To (s)** and **Bin (ms)**; onsets use the threshold and minimum ISI of **Segment by stimulation onsets** (default 0.5, 1 s).'
                 '**6 Correlograms** tab: autocorrelograms (diagonal) and cross-correlograms of up to 4 selected units; set **Max lag (ms)** and **Bin (ms)**. The shaded band is ± the refractory period: a clean unit has (almost) no spikes there.'
-                '**7 Export**: click **Save results...** to write spike times, cluster IDs, the sorting parameters, quality measures and the list of merges / splits (`info.clusterEdits`) to .mat.'};
+                '**7 Export**: click **Save results...** to write spike times, cluster IDs, the sorting parameters, quality measures and the list of merges / splits (`info.clusterEdits`) to .mat.'
+                '**Session / report (optional)**: in step 5, **Save session…** stores the file (with checksum), all settings and the sorted clusters with your edits; **Open session…** restores them as saved (Undo still works); **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: `demo_mua.mat`, channels 3–5 at 24414 Hz, 30 s, stimulus every 2 s from 1 s. Three units with negative spikes: **unit 1 (~90 µV) and unit 2 (~50 µV) on channel 4**, **unit 3 (~110 µV) on channel 5** (seen weaker on channel 4). Noise ~10 µV.'
                 '* The demo selects **channel 4** and detection **MAD, k = 4, negative polarity**; click **Run**.'
@@ -796,7 +802,8 @@ classdef HelpApp < handle
                 '**2 Preprocess (optional)**: tick **Motion correction (rigid)** if the frames jitter: the shifts are estimated once (max shift shown next to the box, per-frame plot in the **Motion correction** tab) and applied before everything else. Then optionally **B&W 256 levels**, **Smooth** and/or **Normalize each frame**, applied in that order when you click Run.'
                 '**3 ROIs and line**: click **Add ROI** and drag a rectangle (repeat for more ROIs), or **Detect cells** to add one ROI per active cell automatically. ROIs are listed next to the image (double-click a name to rename, **Remove ROI** to delete). For line methods click **Draw line** (across the vessel for diameter). **Clear ROIs and line** starts over.'
                 '**4 Analysis**: choose the **Method** (for ΔF/F also the baseline frames; for Vessel diameter optionally **Robust diameter (ignore blood cells)**) and click **Run**. ROI methods give one trace per ROI, in the ROI''s colour.'
-                '**5 Export**: click **Export results** to save a .csv (time + one column per measure and ROI) or a .mat (all series, ROI masks and names, line, shifts and settings).'};
+                '**5 Export**: click **Export results** to save a .csv (time + one column per measure and ROI) or a .mat (all series, ROI masks and names, line, shifts and settings).'
+                '**Session / report (optional)**: in step 5, **Save session…** stores the stack (with checksum), ROIs, line and settings; **Open session…** re-runs motion correction and the analysis; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: `demo_imaging.mat`, 96 × 96 px, 150 frames at 10 Hz (15 s). A dark vertical **vessel at x = 60** whose **diameter oscillates 12 ± 3 px (9–15 px) every 5 s**; a bright **red blood cell moving down 2 px/frame** (20 px/s); a **cell at (24, 30), radius 6 px** with calcium transients (ΔF/F ≈ 1) at **3, 7 and 11 s**. The cell''s `roiMask` is in the file.'
                 '* The demo selects **ΔF/F** with that mask (baseline = first 30 frames) and a line across the vessel from (45, 70) to (75, 70).'
@@ -859,7 +866,8 @@ classdef HelpApp < handle
                 '**4 Export**: check the table (click a row to plot that series) and click **Export to CSV / MAT**. **Export figure…** above the plot saves the selected trace as a publication figure.'
                 '**5 Groups & statistics** tab (or **Try group demo**): in **1 Files and groups** type a **Group** name and click **Add files…** (one .mat per animal); repeat for each group. The **#** column is the subject number: paired designs match #1 with #1, #2 with #2 (fix with **▲ Move up** / **▼ Move down**).'
                 '**6 Feature and test**: choose the **Feature**, **Value per** (File (mean trace) recommended: one animal = one file), **Onset t0 (s)**, **Baseline (s)** and **Direction**; then the **Design** (Paired, Unpaired or ANOVA for 2+ groups), the **Method** (Parametric or Nonparametric) and, for two groups, **Compare** A vs B (difference = B − A). Click **Run test**: the **Plot** tab shows every animal, pair lines, mean ± SEM (or **Box plot**) and the significance bracket; the **Results** tab lists test, statistic, df, p, effect size, 95% CI, n, a robustness check with the other test family, assumptions and a copy-ready report.'
-                '**7 Export**: choose a format and click **Export figure…** (PDF / SVG / EPS vector, or PNG / TIFF at 300 or 600 dpi; 8.5 cm wide, 8 pt Helvetica, the window is not changed). **Export values & report…** saves the per-animal values (.csv plus a _report.txt) or the full result (.mat).'};
+                '**7 Export**: choose a format and click **Export figure…** (PDF / SVG / EPS vector, or PNG / TIFF at 300 or 600 dpi; 8.5 cm wide, 8 pt Helvetica, the window is not changed). **Export values & report…** saves the per-animal values (.csv plus a _report.txt) or the full result (.mat).'
+                '**Session / report (optional)**: in step 4 of either tab, **Save session…** stores the single file and every group file (with checksums), all settings and results; **Open session…** re-extracts the features and re-runs the test; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: `demo_ldf_trials.mat`, 8 LDF trials from −5 to 20 s at 10 Hz (0 = stimulus onset). The demo sets t0 = 0, direction Auto, the baseline to −5–0 s and selects every feature.'
                 '* **Expected per trial** (true response: ~120 PU baseline + 30 PU gamma-shaped hyperemia): **peak latency ≈ 4 s**, **peak amplitude ≈ 30 PU**, onset delay (50%) ≈ 1.9 s, FWHM ≈ 5.5 s, rise time (10–90%) ≈ 2.2 s, decay to 50% ≈ 3.4 s; positive direction.'
@@ -902,6 +910,96 @@ classdef HelpApp < handle
                 '**Export figure…** is disabled', 'Run a test first (Groups & statistics), or load a file (Single file).'
                 'The journal wants Arial or another size', 'Export as PDF or SVG (vector) and change the font or size in Illustrator or Inkscape; the text stays editable.'};
             t.images = {'SignalCharacterizationWorkflow.png', 'SignalCharacterizationPrinciple.png'};
+        end
+
+
+        %% topicBatch - Batch processing: one pipeline on many files
+        function t = topicBatch()
+            t = mkTopic('Batch processing', 'All pipelines · many files', ...
+                'Run one analysis with the same settings on a whole folder and get one summary table.');
+            t.quick = {
+                '**1 Pipeline**: choose what to run on every file: **LDF: trials + response features**, **LFP: ERP (+ CSD) per channel**, **MUA: spike sorting per channel**, **Imaging: ROI dF/F and vessel diameter** or **Response features (any trace file)**. The line below says which files it reads. **Try demo batch** adds a few synthetic files with known answers and fills the settings.'
+                '**2 Input files**: click **Add folder...** (every file of the folder that this pipeline reads) or **Add files...** (multi-select). Select files and click **Remove** to drop them; **Clear** empties the list. Files are processed in list order.'
+                '**3 Settings**: one set of settings for every file (hover a field for its unit and meaning). They are the settings of the matching window: e.g. downsampling, filter and trial window for LDF; epoch, N1 window and electrode spacing for LFP; detection, clustering and random seed for MUA.'
+                '**4 Run**: choose the **Output folder...** and click **Run batch**. The table and the status bar show which file is being processed; **Cancel** stops before the next file. A file that fails does not stop the batch: it gets a red row with the reason.'
+                '**5 Results**: one row per file (LFP and MUA: per channel; imaging: per ROI). Green = ok, orange = warning (some channels failed), red = error, gray = skipped. **Open folder** shows the summary (.csv and .mat), the log (.txt) and, for LDF, the trial files; **Export...** saves a copy of the table (.csv, .xlsx or .mat).'};
+            t.demo = {
+                '* **Data**: **Try demo batch** writes synthetic files for the chosen pipeline, each with slightly different known answers, and fills the settings.'
+                '* **LDF**: 4 cropped recordings (200 s, 7 stimuli of 5 s). **What you should get**: 7 onsets and **6 trials** per file (the last stimulus is too close to the end); peak latency **~3, 3.5, 4 and 4.5 s** and peak amplitude **~20, 25, 30 and 35 PU** (within ~2 PU); one trial file per recording in the trials folder.'
+                '* **LFP**: 3 recordings, 8 channels 100 µm apart. **What you should get**: 8 rows per file; the N1 is largest and the CSD sink (SinkChannel) is on **channel 3, 4 and 5**, with the N1 at **~12, 15 and 18 ms** (about −90, −115 and −135 µV).'
+                '* **MUA**: the demo MUA recording and a copy recorded at twice the gain, channel 4. **What you should get**: **2–3 units** and the **same spike count in both files** (sorting does not depend on the gain); the evoked rate (5–55 ms after each stimulus) is several times the baseline rate.'
+                '* **Imaging**: 3 stacks with a cell (roiMask) and a vessel crossed by the line 25 50 63 50. **What you should get**: peak ΔF/F **~0.5, 1.0 and 1.5** at ~3.2 s and mean vessel diameter **~10, 12 and 14 px**.'
+                '* **Response features**: 4 trial files. **What you should get**: peak latency ~3, 3.5, 4, 4.5 s and peak amplitude ~20, 25, 30, 35 PU (one row per file); Series = Each series gives one row per trial (32 rows).'};
+            t.inputs = {
+                'LDF: cropped `.mat` files from LDF Extract (`stim`, `LDF`, `t`, `Fs`)'
+                'LFP: `.mat` files from Extract Ephys (`lfp_data`, `stim_data`, `lfp_fs`, `stim_fs`; `t_lfp`, `lfp_channels` optional)'
+                'MUA: `.mat` files from Extract Ephys (`mua_data`, `mua_fs`; `t_mua`, `mua_channels`, `stim_data` + `t_stim` optional)'
+                'Imaging: `.mat` with `stack` (or `frames`), optional `timeVec` / `t` and `roiMask` / `roiMasks`, or a multi-frame TIFF'
+                'Response features: any file Signal Characterization reads (`segmentedLDF` + `segmentedTime`, `lfp_data` + `t_lfp`, `t` + `y`, `t` + `LDF`)'};
+            t.outputs = {
+                '`<name>_summary.csv` and `<name>_summary.mat` (table `summary` + struct `batch` with the settings, files, statuses and log): columns File, Status, Message, then the pipeline''s results'
+                '`<name>_log.txt`: date, settings and one line per file (result or error)'
+                'LDF: `trials/<file>_segments.mat` per recording (`segmentedLDF`, `segmentedTime`, `Fs`), ready for LDF Average'};
+            t.details = {
+                '## What each pipeline measures'
+                '* **LDF**: the LDF Process steps (decimate, filter, cut trials around each onset), then the response features of the **mean trial** (onset 0 s, baseline = the pre-onset part): peak latency and amplitude, onset delay, FWHM, AUC, rise and decay time, integral.'
+                '* **LFP**: ERP per channel as in LFP Analysis (onsets on the mean-subtracted stimulus). **N1** = minimum in the N1 window, **P2** = maximum in the P2 window; latency in ms after the stimulus, amplitude relative to the pre-stimulus mean, multiplied by Amplitude scale (1e6: V to µV). With **Compute CSD** (≥ 3 channels, in the listed order, top to bottom): the CSD minimum in the N1 window per channel (AmpUnit / mm²) and the sink channel of the file.'
+                '* **MUA**: spike sorting per channel as in MUA Analysis. The random generator is set to **Random seed** before every channel, so the same file always gives the same clusters, whatever its position in the list. Per channel: spikes in units, units (good / rejected by the quality check: SNR < 2 or > 2% ISIs below the refractory period), mean rate and rate per unit, mean SNR, worst ISI violation and, with a stimulus, the rate in the response window vs the baseline window.'
+                '* **Imaging**: per ROI the mean brightness and ΔF/F (F0 = mean of the first baseline frames) with its peak and peak time; with a line, the vessel diameter (FWHM; **Robust diameter** ignores red blood cells) as mean, min and max. No smoothing or normalisation is applied; **Motion correction** registers every frame onto the mean image first.'
+                '* **Response features**: the nine features of Signal Characterization, for the mean of the series in each file or for every series.'
+                '## Good to know'
+                '* Channels are the numbers saved in the file (`lfp_channels` / `mua_channels`), otherwise the row numbers. Empty = all channels.'
+                '* Vector fields take numbers separated by spaces, e.g. `5 50` for a window or `45 70 75 70` for a line.'
+                '* The same pipelines run from scripts: `R = Batch.run(''ldf'', folder, params, outFolder)`; `Batch.defaults(''ldf'')` lists the settings.'};
+            t.trouble = {
+                'A row is red with "Missing variable(s)"', 'The file was not saved by the step this pipeline expects (e.g. a raw LabChart export in the LDF pipeline). Use the files named under Inputs, or choose the matching pipeline.'
+                'A row is red with "Unable to read" / "not a binary MAT-file"', 'The file is damaged or not a MAT file. Remove it (select it, **Remove**) or re-export it; the other files are not affected.'
+                'LDF: "No stimulus onsets found above threshold"', 'The stimulus never crosses **Stim threshold**: lower it (e.g. 0.5 for a 1 V trigger, 2.5 for 5 V TTL).'
+                'LDF: "no complete trial fits"', 'Pre-onset + Post-onset is longer than the recording around the stimuli: shorten the windows.'
+                'LFP: "Channel(s) … not in the file"', 'The Channels field lists numbers the file does not have: clear it (all channels) or use the numbers shown in LFP Analysis.'
+                'MUA: a red channel row (file orange) with "Too few spikes for clustering"', 'That channel has almost no spikes at this threshold: lower Threshold (k) or Min spikes / cluster, or leave the channel out; the other channels of the file are kept.'
+                'Imaging: "needs a line" or no diameter columns', 'Type the line across the vessel in **Line x1 y1 x2 y2 (px)** (read the coordinates in ROI Analysis).'
+                'Imaging: "No ROI"', 'The stacks have no `roiMask`: draw and export ROIs in ROI Analysis, or measure Vessel diameter only.'
+                'The batch takes long', 'MUA sorting is the slowest part (seconds per channel): select only the channels you need. **Cancel** stops after the current file and still writes the summary of the files done.'};
+            t.images = {};
+        end
+
+        %% topicSessions - Save / reopen an analysis and write a PDF report
+        function t = topicSessions()
+            t = mkTopic('Sessions and reports', 'All windows', ...
+                'Save everything needed to repeat an analysis, reopen it later, and write a one-page PDF report.');
+            t.quick = {
+                '**Save session…** (last step card of every analysis window): choose a file name, type optional notes (animal, condition, why these settings) and click **Save session**. The `.nasession.mat` file stores the input file paths with their size, date and MD5 checksum, every setting, the results and your notes.'
+                '**Open session…**: choose a `.nasession.mat` saved by the **same window**. The input files are reloaded and checked; the settings are applied and the analysis is re-run, so the window looks as it did when you saved.'
+                'If an input file has moved, put it next to the session file (it is found automatically) or choose it when asked. If a file has **changed** since the session was saved, the session still opens and the status bar warns you.'
+                '**Report (PDF)…**: writes one A4 page with a picture of the window and, below it, the NeuroAnalyzer and MATLAB versions, the date, every input file with its MD5, the settings and the key results. Attach it to your lab notebook or use it for the methods section.'};
+            t.demo = {
+                '* **Try**: in any window click **Try demo data**, run the analysis, then **Save session…**. Close the window, open it again from the launcher and click **Open session…**: the same plots and numbers come back.'
+                '* **What you should get**: the status bar says "Session … opened (saved … with NeuroAnalyzer v…)" and shows your notes. **Report (PDF)…** writes a one-page PDF of about 0.2–1 MB.'};
+            t.inputs = {
+                'A `.nasession.mat` file saved by the same window (Open session)'
+                'The input files the session refers to, at their saved location, next to the session file, or chosen when asked'};
+            t.outputs = {
+                '`<name>.nasession.mat`: variable `session` with `app`, `toolboxVersion`, `matlabVersion`, `os`, `created` (ISO 8601), `inputs` (role, path, name, bytes, modified, md5), `settings`, `results`, `summary`, `notes`'
+                '`<name>_report.pdf`: one A4 page (window image + versions, inputs with MD5, settings, key results)'};
+            t.details = {
+                '## What is stored'
+                '* **Inputs**: the full path, size in bytes, modification date and MD5 checksum of every input file (for folders such as TDT tanks: one checksum over all files in the folder).'
+                '* **Settings**: every parameter of the window (filters, ERP window and threshold, CSD order, time–frequency settings, spike-sorting settings, ROIs and line, features, statistical design, …).'
+                '* **Results**: the result structs of the window. Large signals (e.g. filtered LFP / MUA, cropped LDF) are not stored: they are re-computed from the checked input when the session is opened. Arrays larger than 100 MB are replaced by a note.'
+                '## Opening a session'
+                '* The input files are checked first. **ok**: unchanged; **moved**: found next to the session file with the same checksum; **changed**: the checksum differs (the session opens with a warning, results may differ); **missing**: you are asked to locate it (the session does not open without it).'
+                '* The analysis is re-run with the saved settings. MUA Analysis is the exception: the sorted clusters, your merges and splits and the Undo history are restored as saved, because K-means and manual edits cannot be repeated exactly.'
+                '* A session saved by one window cannot be opened in another window.'
+                '## The PDF report'
+                '* One page: base MATLAB cannot join several PDF pages without a toolbox, so the window picture and the summary share one A4 page. Long lists are shortened on the page; the session file keeps everything.'
+                '* The window picture is taken with `exportapp` (MATLAB R2020b or later); if that fails, the largest plot is used instead.'};
+            t.trouble = {
+                '"This session was saved by …, not by this window"', 'Open the session in the window named in the message (each window saves its own kind of session).'
+                '"Session not opened: … not found at …"', 'The input file was moved or renamed. Copy it next to the session file, or use Open session… again and locate it when asked.'
+                '"… has CHANGED since the session was saved (MD5 differs)"', 'The input file is not the one used when the session was saved (edited, re-exported or overwritten). The results may differ; use the original file if you still have it.'
+                'Report not written', 'Check that the folder is writable and that the PDF is not open in another program. The analysis itself is not affected.'
+                'The window picture in the PDF shows only one plot', '`exportapp` is not available (MATLAB older than R2020b or no display); the largest plot was used instead.'};
         end
     end
 end
