@@ -69,11 +69,26 @@ classdef LFPProcessingParamsApp < handle
             end
         end
 
+        %% applyParams - Validate inputs; on error show errordlg and keep dialog open
         function applyParams(app)
-            app.Params.lowCutoff = str2double(app.FreqLowEdit.String);
+            lowCutoff = str2double(app.FreqLowEdit.String);
+            doDownsample = app.DownsampleCheckbox.Value;
+            downsampleRate = str2double(app.DownsampleRateEdit.String);
+
+            % Lowpass is optional (empty = skip), but if given it must be valid
+            if ~isempty(strtrim(app.FreqLowEdit.String)) && (isnan(lowCutoff) || lowCutoff <= 0)
+                errordlg('Lowpass cutoff must be a positive number (or empty to skip).', 'Invalid Parameters');
+                return;
+            end
+            if doDownsample && (isnan(downsampleRate) || downsampleRate <= 0)
+                errordlg('Downsample rate must be a positive number (Hz).', 'Invalid Parameters');
+                return;
+            end
+
+            app.Params.lowCutoff = lowCutoff;
             app.Params.notch60 = app.NotchCheckbox.Value;
-            app.Params.downsample = app.DownsampleCheckbox.Value;
-            app.Params.downsampleRate = str2double(app.DownsampleRateEdit.String);
+            app.Params.downsample = doDownsample;
+            app.Params.downsampleRate = downsampleRate;
             delete(app.UIFig);
         end
 

@@ -163,11 +163,22 @@ classdef ExtractLDFApp < handle
             % Send app window to back so file dialog opens on top
             uistack(app.UIFig, 'bottom');
             drawnow;
+            prevPath = app.AppData.FilePath;
+            prevStim = app.AppData.RawStim;
             app.AppData = DataLoader.load(app.AppData);
             figure(app.UIFig);  % Bring app back to front
             if isempty(app.AppData.RawStim)
                 return;
             end
+            if isequal(app.AppData.FilePath, prevPath) && isequal(app.AppData.RawStim, prevStim)
+                return;  % Cancelled or failed: previous data (and crop) unchanged
+            end
+            % New file: drop the previous crop so Save cannot write stale data
+            app.AppData.ProcessedStim = [];
+            app.AppData.ProcessedLDF  = [];
+            app.AppData.TimeVector    = [];
+            app.StartInput.Value = '';
+            app.EndInput.Value   = '';
             [~, name, ~] = fileparts(app.AppData.FilePath);
             Exporter.setLastUsedPath(fileparts(app.AppData.FilePath));
             app.SamplingRateText.Text = sprintf('%d Hz', app.AppData.SamplingRate);
@@ -194,8 +205,10 @@ classdef ExtractLDFApp < handle
                 return;
             end
             Fs = app.AppData.SamplingRate;
-            startIdx = round(startTime * Fs);
-            endIdx   = round(endTime * Fs);
+            % Sample k (1-based) is at time (k-1)/Fs
+            N = min(length(app.AppData.RawStim), length(app.AppData.RawLDF));
+            startIdx = round(startTime * Fs) + 1;
+            endIdx   = min(round(endTime * Fs) + 1, N);
             app.AppData = Processor.crop(app.AppData, startIdx, endIdx);
             figure('Name', 'Cropped Signals');
             t = app.AppData.TimeVector;
@@ -224,10 +237,13 @@ classdef ExtractLDFApp < handle
             set(0, 'CurrentFigure', app.UIFig);
             title(app.AxStim, 'Click START then END on the plot');
             [x, ~] = ginput(2);
+            title(app.AxStim, 'Stimulus (Channel 6)');
+            if numel(x) < 2
+                return;  % Selection aborted (e.g. Enter/Esc before two clicks)
+            end
             x = sort(x);
             app.StartInput.Value = num2str(x(1));
             app.EndInput.Value   = num2str(x(2));
-            title(app.AxStim, 'Stimulus (Channel 6)');
             hold(app.AxStim, 'on');
             yl = ylim(app.AxStim);
             plot(app.AxStim, [x(1) x(1)], yl, 'r--', 'LineWidth', 1.5);

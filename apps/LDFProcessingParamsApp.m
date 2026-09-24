@@ -51,7 +51,8 @@ classdef LDFProcessingParamsApp < handle
                 'Position',[30 250 80 20]);
             app.DSMenu = uicontrol(app.UIFig,'Style','popupmenu',...
                 'String',{'1x','2x','5x','10x'},...
-                'Position',[120 250 100 25]);
+                'Position',[120 250 100 25],...
+                'Callback', @(~,~)app.updateCutoffFields(app.FilterTypeMenu.Value));
 
             uicontrol(app.UIFig,'Style','text','String','Filter Type:',...
                 'Position',[30 210 80 20]);
@@ -137,10 +138,13 @@ classdef LDFProcessingParamsApp < handle
         % -------------------------------------------------------------
         % filterType: 1=None, 2=Low-pass, 3=High-pass, 4=Band-pass, 5=Notch.
         % Low-pass: only High cutoff; High-pass: only Low; Band/Notch: both.
-        % Defaults use Nyquist (Fs/2): e.g. low-pass high = 0.5*nyq.
+        % Defaults use the effective Nyquist after downsampling
+        % (Fs/factor/2), since filtering runs after downsampling: e.g.
+        % low-pass high = 0.5*nyq. Also called when Downsample changes.
         % -------------------------------------------------------------
         function updateCutoffFields(app, filterType)
-            Fs = app.SamplingRate;
+            dsOptions = [1, 2, 5, 10];
+            Fs = app.SamplingRate / dsOptions(app.DSMenu.Value);
             nyq = Fs / 2;
 
             switch filterType

@@ -64,13 +64,32 @@ classdef ERPConfigApp < handle
                 'BackgroundColor', T.bgGray, 'Callback', @(~,~)web('https://github.com/alesuarez92', '-browser'));
         end
 
-        %% confirm - Read edits into Params struct and close dialog
+        %% confirm - Validate edits, fill Params struct and close dialog
+        % On invalid input show errordlg and keep the dialog open (Params unset).
         function confirm(app)
+            preTime   = str2double(app.PreEdit.String);
+            postTime  = str2double(app.PostEdit.String);
+            threshold = str2double(app.ThresholdEdit.String);
+            minISI    = str2double(app.ISIEdit.String);
+
+            if any(isnan([preTime postTime threshold minISI]))
+                errordlg('All fields must be numeric.', 'Invalid ERP Settings'); return;
+            end
+            if preTime < 0
+                errordlg('Pre-stimulus time must be >= 0.', 'Invalid ERP Settings'); return;
+            end
+            if postTime <= 0
+                errordlg('Post-stimulus time must be > 0.', 'Invalid ERP Settings'); return;
+            end
+            if minISI < 0
+                errordlg('Min ISI must be >= 0.', 'Invalid ERP Settings'); return;
+            end
+
             app.Params = struct( ...
-                'preTime', str2double(app.PreEdit.String), ...
-                'postTime', str2double(app.PostEdit.String), ...
-                'threshold', str2double(app.ThresholdEdit.String), ...
-                'minISI', str2double(app.ISIEdit.String) ...
+                'preTime', preTime, ...
+                'postTime', postTime, ...
+                'threshold', threshold, ...
+                'minISI', minISI ...
             );
             close(app.UIFig);
         end

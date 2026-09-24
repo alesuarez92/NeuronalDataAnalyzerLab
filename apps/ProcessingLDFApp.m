@@ -26,9 +26,11 @@ classdef ProcessingLDFApp < handle
         Stim
         LDF
         RawLDF
+        RawStim          % stimulus as loaded (processing always starts from Raw*)
         t
         tRaw
         Fs
+        RawFs            % sampling rate as loaded
         FsLabel          % uicontrol handle for the sampling rate display
         SegmentedLDF     % ← store segmented LDF trials
         SegmentedTime    % ← time axis for each segment
@@ -89,7 +91,8 @@ classdef ProcessingLDFApp < handle
                     errordlg('Please load a dataset first.', 'Missing Sampling Rate');
                     return;
                 end
-                LDFProcessingParamsApp(@(params)app.receiveProcessingParams(params), app.Fs);
+                % Raw Fs: processing is always applied to the loaded (raw) signal
+                LDFProcessingParamsApp(@(params)app.receiveProcessingParams(params), app.RawFs);
             end
             uicontrol(ctrlPanel, 'Style','pushbutton','String','Segment by Onsets', ...
                 'Units', 'normalized', 'Position', [0.21 0.15 0.12 0.7], ...
@@ -149,13 +152,28 @@ classdef ProcessingLDFApp < handle
             if isequal(file, 0), return; end
             data = load(fullfile(path, file));
 
-            % Assume correct vars exist
+            % Validate required variables (as saved by Exporter.saveCropped)
+            required = {'stim', 'LDF', 't', 'Fs'};
+            missing = required(~isfield(data, required));
+            if ~isempty(missing)
+                errordlg(sprintf('Invalid LDF file. Missing variable(s): %s', ...
+                    strjoin(missing, ', ')), 'Invalid File');
+                return;
+            end
+
             app.Stim = data.stim;
             app.LDF  = data.LDF;
             app.t    = data.t;
             app.Fs   = data.Fs;
-            app.RawLDF = app.LDF;
-            app.tRaw = data.t;
+            % Keep untouched copies so re-running processing never compounds
+            app.RawLDF  = app.LDF;
+            app.RawStim = app.Stim;
+            app.tRaw    = data.t;
+            app.RawFs   = data.Fs;
+            % Results from a previous file no longer apply
+            app.ProcessingParams = [];
+            app.SegmentedLDF = [];
+            app.SegmentedTime = [];
             app.updateSamplingRateLabel();
 
             % Plot
@@ -174,22 +192,29 @@ classdef ProcessingLDFApp < handle
         end
         
         function applyFilter(app)
-            if isempty(app.LDF) || isempty(app.ProcessingParams)
+            if isempty(app.RawLDF) || isempty(app.ProcessingParams)
                 errordlg('Missing data or parameters.');
                 return;
             end
         
-            LDF = app.LDF;
-            t = app.t;
-            stim = app.Stim;
-            Fs = app.Fs;
+            % Always start from the loaded (raw) data, not a previous result
+            LDF = app.RawLDF;
+            t = app.tRaw;
+            stim = app.RawStim;
+            Fs = app.RawFs;
             p = app.ProcessingParams;
         
             % Downsample
             if p.downsample > 1
-                LDF = downsample(LDF, p.downsample);
+                % decimate = anti-alias lowpass + downsample (length ceil(N/r))
+                LDFdec = decimate(double(LDF(:)), p.downsample);
+                if isrow(LDF), LDFdec = LDFdec.'; end  % keep original orientation
+                LDF = LDFdec;
+                % Stim is a TTL: plain sample picking keeps edges sharp
                 stim = downsample(stim, p.downsample);
                 t = downsample(t, p.downsample);
+                n = min([numel(LDF), numel(stim), numel(t)]);
+                LDF = LDF(1:n); stim = stim(1:n); t = t(1:n);
                 Fs = Fs / p.downsample;
             end
         
@@ -314,6 +339,15 @@ classdef ProcessingLDFApp < handle
                 preSec    = str2double(preEdit.String);
                 postSec   = str2double(postEdit.String);
                 minISI    = str2double(isiEdit.String);
+
+                % Validate; keep dialog open on error
+                if any(isnan([threshold preSec postSec minISI]))
+                    errordlg('All fields must be numeric.', 'Invalid Segmentation Settings'); return;
+                end
+                if preSec < 0 || postSec <= 0 || minISI < 0
+                    errordlg('Pre must be >= 0, Post > 0 and Min ISI >= 0 (seconds).', ...
+                        'Invalid Segmentation Settings'); return;
+                end
             
                 close(d);
                 app.segmentLDFByOnsets(threshold, preSec, postSec, minISI);

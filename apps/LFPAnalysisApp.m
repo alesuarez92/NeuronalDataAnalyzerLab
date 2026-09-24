@@ -124,6 +124,14 @@ classdef LFPAnalysisApp < handle
             end
 
             s = load(fullfile(path, file));
+            % Validate that the file was saved by ExtractEphysApp (Save LFP Data)
+            required = {'lfp_data', 'stim_data', 't_lfp', 't_stim', 'lfp_fs', 'stim_fs'};
+            missing = required(~isfield(s, required));
+            if ~isempty(missing)
+                errordlg(sprintf('Invalid LFP file. Missing variable(s): %s', ...
+                    strjoin(missing, ', ')), 'Invalid File');
+                return;
+            end
             app.LFP = s.lfp_data;
             app.Stim = s.stim_data;
             app.t_lfp = s.t_lfp;
@@ -143,8 +151,8 @@ classdef LFPAnalysisApp < handle
         end
 
         function openERPConfig(app)
-            app.SelectedChannels = app.ChannelList.Value;
-            if isempty(app.SelectedChannels)
+            sel = app.ChannelList.Value;
+            if isempty(sel)
                 errordlg('Please select at least one channel for ERP analysis.');
                 return;
             end
@@ -154,6 +162,9 @@ classdef LFPAnalysisApp < handle
             if isempty(cfg.Params)
                 return;
             end
+            % Commit selection only once the dialog is confirmed, so a cancel
+            % does not desync SelectedChannels from LastERP (used by CSD)
+            app.SelectedChannels = sel;
             app.ERPParams = cfg.Params;
 
             % Next: computeERP()
@@ -177,32 +188,43 @@ classdef LFPAnalysisApp < handle
             isi = diff(onsets) / app.Fs_stim;
             validIdx = [true, isi > minISI];
             onsets = onsets(validIdx);
-            onsetTimes = onsets / app.Fs_stim;
+            if isempty(onsets)
+                errordlg('No stimulus onsets detected. Check the threshold.', 'ERP Analysis');
+                return;
+            end
+            onsetTimes = (onsets - 1) / app.Fs_stim;  % sample k is at (k-1)/Fs
         
             % Convert to LFP indices
             preSamples = round(preS * fs);
             postSamples = round(postS * fs);
             totalSamples = preSamples + postSamples + 1;
-            erpMat = zeros(length(chIdx), totalSamples, length(onsetTimes));
+            % NaN-filled so skipped (edge) epochs are ignored by 'omitnan'
+            erpMat = nan(length(chIdx), totalSamples, length(onsetTimes));
+            nValid = 0;
         
             for t = 1:length(onsetTimes)
-                centerIdx = round(onsetTimes(t) * fs);
+                centerIdx = round(onsetTimes(t) * fs) + 1;
                 idxRange = centerIdx - preSamples : centerIdx + postSamples;
                 if idxRange(1) < 1 || idxRange(end) > size(app.LFP, 2)
                     continue;
                 end
                 erpMat(:,:,t) = app.LFP(chIdx, idxRange);
+                nValid = nValid + 1;
+            end
+            if nValid == 0
+                errordlg('No complete epochs: all onsets are too close to the recording edges.', 'ERP Analysis');
+                return;
             end
         
             % Average and standard deviation ERP
             erpAvg = mean(erpMat, 3, 'omitnan');
             erpStd = std(erpMat, 0, 3, 'omitnan');
-            t = linspace(-preS, postS, totalSamples);
+            t = (-preSamples:postSamples) / fs;
         
             % Replace previous epoch-count annotation (avoid stacking on re-run)
             delete(findall(app.UIFig, 'Tag', 'epochCount'));
             annotation(app.UIFig, 'textbox', [0.01 0.66 0.3 0.03], ...
-                'String', sprintf('Averaged %d epochs', size(erpMat, 3)), ...
+                'String', sprintf('Averaged %d epochs', nValid), ...
                 'Tag', 'epochCount', 'EdgeColor','none', 'FontWeight','bold');
 
             % Clear previous plots (axes and tiled layouts inside the panel)
@@ -274,8 +296,24 @@ classdef LFPAnalysisApp < handle
             if isempty(answer), return; end
         
             spacing_um = str2double(answer{1}) * 1e-6;  % meters
-            chan_order = str2num(answer{2});           %#ok<ST2NM>
-            [~, reorder] = ismember(chan_order, app.SelectedChannels);
+            if ~isfinite(spacing_um) || spacing_um <= 0
+                errordlg('Inter-electrode spacing must be a positive number.', 'CSD Parameters');
+                return;
+            end
+            chan_order = str2double(regexp(strtrim(answer{2}), '[\s,;]+', 'split'));
+            if isempty(chan_order) || any(~isfinite(chan_order))
+                errordlg('Channel order must be a list of channel numbers.', 'CSD Parameters');
+                return;
+            end
+            [isMember, reorder] = ismember(chan_order, app.SelectedChannels);
+            if ~all(isMember)
+                errordlg('Channel order may only contain channels used in the last ERP analysis.', 'CSD Parameters');
+                return;
+            end
+            if numel(chan_order) < 3
+                errordlg('CSD needs at least 3 channels.', 'CSD Parameters');
+                return;
+            end
         
             % Reorder ERP to match user input
             erp = app.LastERP(reorder, :);
@@ -284,7 +322,7 @@ classdef LFPAnalysisApp < handle
             % Compute second spatial derivative (discrete Laplacian)
             dz  = spacing_um;
             csd = -diff(erp, 2, 1) / dz^2;
-            csd = padarray(csd, [1 0], 'replicate', 'both');
+            csd = [csd(1,:); csd; csd(end,:)];  % replicate edge rows (no padarray dependency)
         
             % Plot
             figure('Name', 'CSD Map', 'Position', [200 100 800 600]);

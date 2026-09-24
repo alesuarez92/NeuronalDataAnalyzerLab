@@ -39,6 +39,7 @@ classdef Main < handle
     methods
         function app = Main()
             app.buildUI();
+            app.checkSignalToolbox();
             % Prompt for project directories if not set (optional: only when no dirs)
             if ~ProjectManager.hasProject()
                 ProjectManager.promptForProjectDirs();
@@ -226,6 +227,18 @@ classdef Main < handle
                 'FontColor', T.mutedColor, 'HorizontalAlignment', 'right');
 
             app.updateProjectLabels();
+        end
+
+        %% checkSignalToolbox - Non-blocking warning if Signal Processing Toolbox is missing
+        % Filtering, downsampling and spike detection (butter, filtfilt,
+        % decimate, iirnotch, findpeaks) all depend on it.
+        function checkSignalToolbox(app)
+            hasSPT = license('test', 'Signal_Toolbox') && exist('butter', 'file') > 0;
+            if ~hasSPT
+                uialert(app.UIFig, ['Signal Processing Toolbox was not found or is not licensed. ' ...
+                    'LDF/LFP/MUA filtering, downsampling and spike detection will fail.'], ...
+                    'Missing Toolbox', 'Icon', 'warning');
+            end
         end
 
         function onSetDirectories(app)
