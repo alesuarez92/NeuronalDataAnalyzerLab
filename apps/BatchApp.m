@@ -249,10 +249,7 @@ classdef BatchApp < handle
             if changed
                 app.ExtraParams = struct();
                 app.buildSettings();
-                app.Result = [];
-                app.showQueue();
-                app.ResultsInfoLabel.Text = 'No results yet';
-                app.ProgressLabel.Text = 'Not run yet';
+                app.resetResults();
             end
             app.updateControls();
             ok = true;
@@ -267,8 +264,7 @@ classdef BatchApp < handle
             app.Files = [app.Files, new];
             n = numel(new);
             app.refreshFileList();
-            app.Result = [];
-            app.showQueue();
+            app.resetResults();
             app.updateControls();
             if n == 0
                 UIKit.setStatus(app.StatusLabel, 'No new files added (already in the list or none found).', 'warning');
@@ -292,8 +288,7 @@ classdef BatchApp < handle
             end
             app.Files(idx) = [];
             app.refreshFileList();
-            app.Result = [];
-            app.showQueue();
+            app.resetResults();
             app.updateControls();
             UIKit.setStatus(app.StatusLabel, sprintf('Removed %d file(s); %d left.', numel(idx), numel(app.Files)), 'info');
         end
@@ -302,8 +297,7 @@ classdef BatchApp < handle
         function clearFiles(app)
             app.Files = {};
             app.refreshFileList();
-            app.Result = [];
-            app.showQueue();
+            app.resetResults();
             app.updateControls();
             UIKit.setStatus(app.StatusLabel, 'File list cleared. Add files (step 2).', 'info');
         end
@@ -591,12 +585,36 @@ classdef BatchApp < handle
                 names{i} = [nm ex];
             end
             app.Table.Data = table(names, status(:), messages(:), 'VariableNames', {'File', 'Status', 'Message'});
+            app.Table.ColumnWidth = {150, 62, 'auto'};
             app.colourRows();
         end
 
+        %% resetResults - Forget the last run: queue table, result lines and log
+        function resetResults(app)
+            app.Result = [];
+            app.showQueue();
+            app.ResultsInfoLabel.Text = 'No results yet';
+            app.ProgressLabel.Text = 'Not run yet';
+            app.LogArea.Value = {''};
+        end
+
         %% showSummary - The summary table of the last batch
+        % Display only: the results come right after File / Status and the
+        % (long) Message goes last with a fixed width, so the numbers are
+        % visible without scrolling. The saved summary keeps its order.
         function showSummary(app)
-            app.Table.Data = app.Result.summary;
+            d = app.Result.summary;
+            v = d.Properties.VariableNames;
+            if ismember('Message', v)
+                d = d(:, [v(~strcmp(v, 'Message')), {'Message'}]);
+                v = d.Properties.VariableNames;
+            end
+            w = repmat({'auto'}, 1, numel(v));
+            w(strcmp(v, 'File')) = {150};
+            w(strcmp(v, 'Status')) = {62};
+            w(strcmp(v, 'Message')) = {220};
+            app.Table.Data = d;
+            app.Table.ColumnWidth = w;
             app.colourRows();
         end
 
@@ -605,6 +623,7 @@ classdef BatchApp < handle
             T = UITheme;
             tbl = app.Table;
             try removeStyle(tbl); catch, end
+            try addStyle(tbl, uistyle('HorizontalAlignment', 'left')); catch, end   % text and numbers alike
             d = tbl.Data;
             if ~istable(d) || height(d) == 0 || ~ismember('Status', d.Properties.VariableNames), return; end
             kinds = {'ok', T.success; 'warning', T.warning; 'error', T.danger; ...

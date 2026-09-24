@@ -27,7 +27,7 @@
 
 classdef Report
     properties(Constant)
-        LinesPerColumn = 50
+        LinesPerColumn = 44
         CharsPerLine = 66
     end
 
@@ -181,7 +181,7 @@ classdef Report
                 'Color', T.bodyColor, 'Interpreter', 'none', 'VerticalAlignment', 'top');
             plot(page, [0.05 0.95], [0.938 0.938], '-', 'Color', T.cardBorder);
 
-            imAx = axes(fig, 'Position', [0.05 0.53 0.90 0.40]);
+            imAx = axes(fig, 'Position', [0.03 0.44 0.94 0.51]);   % larger image: it was hard to read
             if isempty(img)
                 axis(imAx, 'off');
                 text(imAx, 0.5, 0.5, 'Window image not available on this system', ...
@@ -195,10 +195,10 @@ classdef Report
             [left, right] = Report.lines(s);
             left = Report.fit(left);
             right = Report.fit(right);
-            plot(page, [0.05 0.95], [0.517 0.517], '-', 'Color', T.cardBorder);
-            text(page, 0.05, 0.508, left, 'FontName', 'FixedWidth', 'FontSize', 6.2, ...
+            plot(page, [0.05 0.95], [0.432 0.432], '-', 'Color', T.cardBorder);
+            text(page, 0.05, 0.423, left, 'FontName', 'FixedWidth', 'FontSize', 6.2, ...
                 'Interpreter', 'none', 'VerticalAlignment', 'top', 'Color', [0.1 0.1 0.1]);
-            text(page, 0.515, 0.508, right, 'FontName', 'FixedWidth', 'FontSize', 6.2, ...
+            text(page, 0.515, 0.423, right, 'FontName', 'FixedWidth', 'FontSize', 6.2, ...
                 'Interpreter', 'none', 'VerticalAlignment', 'top', 'Color', [0.1 0.1 0.1]);
             text(page, 0.95, 0.012, sprintf('© Alejandro Suarez, Ph.D. · NeuroAnalyzer v%s', s.toolboxVersion), ...
                 'FontSize', 6, 'Color', T.mutedColor, 'HorizontalAlignment', 'right', 'Interpreter', 'none');
@@ -208,10 +208,10 @@ classdef Report
         function printPage(fig, pdfPath)
             Report.deleteIfExists(pdfPath);
             try
-                print(fig, pdfPath, '-dpdf', '-r200');
+                print(fig, pdfPath, '-dpdf', '-r300');   % >= the window's pixel density: no blurring
             catch ME
                 try
-                    exportgraphics(fig, pdfPath, 'ContentType', 'image', 'Resolution', 200);
+                    exportgraphics(fig, pdfPath, 'ContentType', 'image', 'Resolution', 300);
                 catch
                     rethrow(ME);
                 end
@@ -227,15 +227,24 @@ classdef Report
             end
         end
 
-        %% wrap - Hard-wrap each line at width characters (continuation indented)
+        %% wrap - Wrap each line at width characters (continuation indented)
+        % Breaks at the last space before width when there is one in the
+        % second half of the line, else mid-word (paths, long numbers).
         function out = wrap(lines, width)
             out = {};
             for k = 1:numel(lines)
                 t = char(lines{k});
                 first = true;
                 while numel(t) > width
-                    out{end+1} = t(1:width); %#ok<AGROW>
-                    t = ['     ' t(width + 1:end)];
+                    cut = find(t(1:width + 1) == ' ', 1, 'last');
+                    if isempty(cut) || cut <= width / 2
+                        out{end+1} = t(1:width); %#ok<AGROW>
+                        rest = t(width + 1:end);
+                    else
+                        out{end+1} = t(1:cut - 1); %#ok<AGROW>
+                        rest = t(cut + 1:end);
+                    end
+                    t = ['     ' rest];
                     first = false;
                 end
                 if first || ~isempty(strtrim(t)), out{end+1} = t; end %#ok<AGROW>

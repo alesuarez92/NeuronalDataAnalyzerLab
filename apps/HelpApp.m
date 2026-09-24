@@ -926,7 +926,7 @@ classdef HelpApp < handle
             t.demo = {
                 '* **Data**: **Try demo batch** writes synthetic files for the chosen pipeline, each with slightly different known answers, and fills the settings.'
                 '* **LDF**: 4 cropped recordings (200 s, 7 stimuli of 5 s). **What you should get**: 7 onsets and **6 trials** per file (the last stimulus is too close to the end); peak latency **~3, 3.5, 4 and 4.5 s** and peak amplitude **~20, 25, 30 and 35 PU** (within ~2 PU); one trial file per recording in the trials folder.'
-                '* **LFP**: 3 recordings, 8 channels 100 µm apart. **What you should get**: 8 rows per file; the N1 is largest and the CSD sink (SinkChannel) is on **channel 3, 4 and 5**, with the N1 at **~12, 15 and 18 ms** (about −90, −115 and −135 µV).'
+                '* **LFP**: 3 recordings, 8 channels 100 µm apart. **What you should get**: 8 rows per file; the N1 is largest and the CSD sink (SinkChannel) is on **channel 3, 4 and 5**, with the N1 at **~12, 15 and 18 ms** (roughly −100 to −140 µV on the sink channel).'
                 '* **MUA**: the demo MUA recording and a copy recorded at twice the gain, channel 4. **What you should get**: **2–3 units** and the **same spike count in both files** (sorting does not depend on the gain); the evoked rate (5–55 ms after each stimulus) is several times the baseline rate.'
                 '* **Imaging**: 3 stacks with a cell (roiMask) and a vessel crossed by the line 25 50 63 50. **What you should get**: peak ΔF/F **~0.5, 1.0 and 1.5** at ~3.2 s and mean vessel diameter **~10, 12 and 14 px**.'
                 '* **Response features**: 4 trial files. **What you should get**: peak latency ~3, 3.5, 4, 4.5 s and peak amplitude ~20, 25, 30, 35 PU (one row per file); Series = Each series gives one row per trial (32 rows).'};
@@ -975,7 +975,7 @@ classdef HelpApp < handle
                 '**Report (PDF)…**: writes one A4 page with a picture of the window and, below it, the NeuroAnalyzer and MATLAB versions, the date, every input file with its MD5, the settings and the key results. Attach it to your lab notebook or use it for the methods section.'};
             t.demo = {
                 '* **Try**: in any window click **Try demo data**, run the analysis, then **Save session…**. Close the window, open it again from the launcher and click **Open session…**: the same plots and numbers come back.'
-                '* **What you should get**: the status bar says "Session … opened (saved … with NeuroAnalyzer v…)" and shows your notes. **Report (PDF)…** writes a one-page PDF of about 0.2–1 MB.'};
+                '* **What you should get**: the status bar says "Session … opened (saved … with NeuroAnalyzer v…)" and shows your notes. **Report (PDF)…** writes a one-page PDF (a few hundred kB).'};
             t.inputs = {
                 'A `.nasession.mat` file saved by the same window (Open session)'
                 'The input files the session refers to, at their saved location, next to the session file, or chosen when asked'};

@@ -495,6 +495,7 @@ classdef ExtractLDFApp < handle
             showCrop = strcmp(app.ViewDropDown.Value, 'Cropped segment') && ...
                 ~isempty(app.AppData.ProcessedStim);
             axs = [app.AxStim app.AxLDF];
+            try linkaxes(axs, 'off'); catch, end   % re-linked below; stale links kept old limits
             for ax = axs
                 cla(ax);
                 ax.YLimMode = 'auto'; ax.XLimMode = 'auto';
@@ -523,6 +524,8 @@ classdef ExtractLDFApp < handle
             plot(app.AxLDF, tLDF, ldf, 'Color', T.plotColors(1, :), 'HitTest', 'off');
             UIKit.styleAxes(app.AxStim, ttl{1}, xl, 'Amplitude');
             UIKit.styleAxes(app.AxLDF, ttl{2}, xl, 'Amplitude');
+            tEnd = max([tStim(end), tLDF(end)]);
+            if tEnd > 0, xlim(app.AxStim, [0 tEnd]); xlim(app.AxLDF, [0 tEnd]); end
             try linkaxes(axs, 'x'); catch, end
             if ~showCrop
                 app.drawRange();

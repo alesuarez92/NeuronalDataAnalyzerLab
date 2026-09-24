@@ -145,6 +145,7 @@ function testExtractLDFSession(tests)
     tests.verifyEqual(b.CropRange, a.CropRange);
     tests.verifyEqual(b.AppData.ProcessedLDF, a.AppData.ProcessedLDF);
     tests.verifyEqual(b.currentRange(), [30 200]);
+    tests.verifyGreaterThan(b.AxLDF.XLim(2), 200, 'reopened plot must show the whole crop');
     % A session of another window is refused
     g = LDFGrandAverageApp(); c3 = onCleanup(@() delete(g.UIFig));
     tests.verifyFalse(logical(g.openSession(p)));
