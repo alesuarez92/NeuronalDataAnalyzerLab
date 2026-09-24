@@ -98,3 +98,43 @@ function testLFPAnalysis(tests)
     app.computeCSD(100, 1:8);
     shot(tests, app, 'LFPAnalysisApp_04_csd', 'CSD');
 end
+
+function testMUAAnalysis(tests)
+    app = MUAAnalysisApp(); c = onCleanup(@() delete(app.UIFig));
+    tests.verifyTrue(logical(app.loadDemo()));
+    shot(tests, app, 'MUAAnalysisApp_01_demo_loaded', 'Signal & spikes');
+    tests.verifyTrue(logical(app.runSorting([])));
+    shot(tests, app, 'MUAAnalysisApp_02_spikes', 'Signal & spikes');
+    shot(tests, app, 'MUAAnalysisApp_03_waveforms', 'Waveforms');
+    shot(tests, app, 'MUAAnalysisApp_04_clusters', 'Clusters (feature space)');
+    shot(tests, app, 'MUAAnalysisApp_05_spike_rate', 'Spike rate');
+    shot(tests, app, 'MUAAnalysisApp_06_quality', 'Quality');
+end
+
+function testROIAnalysis(tests)
+    app = ROIAnalysisApp(); c = onCleanup(@() delete(app.UIFig));
+    tests.verifyTrue(logical(app.loadDemo()));
+    shot(tests, app, 'ROIAnalysisApp_01_demo_loaded');
+    tests.verifyTrue(logical(app.runAnalysis('dff')));
+    shot(tests, app, 'ROIAnalysisApp_02_dff');
+    tests.verifyTrue(logical(app.runAnalysis('Vessel')));
+    shot(tests, app, 'ROIAnalysisApp_03_vessel_diameter');
+    tests.verifyTrue(logical(app.runAnalysis('Kymo')));
+    shot(tests, app, 'ROIAnalysisApp_04_kymograph');
+end
+
+function testSignalCharacterization(tests)
+    app = SignalCharacterizationApp(); c = onCleanup(@() delete(app.UIFig));
+    tests.verifyTrue(logical(app.loadDemo()));
+    shot(tests, app, 'SignalCharacterizationApp_01_demo_loaded');
+    tests.verifyTrue(logical(app.extract()));
+    shot(tests, app, 'SignalCharacterizationApp_02_features');
+end
+
+function testHelpTryDemo(tests)
+    h = HelpApp('LDF Average'); c = onCleanup(@() delete(h.UIFig));
+    shot(tests, h, 'HelpApp_01_topic_with_demo_button');
+    win = h.tryDemo('LDF Average');
+    c2 = onCleanup(@() delete(win.UIFig));
+    tests.verifyTrue(isvalid(win.UIFig));
+end
