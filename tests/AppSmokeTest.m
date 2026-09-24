@@ -35,7 +35,15 @@ function teardownOnce(tests)
 end
 
 function setup(tests)
-    tests.assumeTrue(usejava('jvm') && feature('ShowFigureWindows'), 'No display available');
+    % Skip (not fail) when uifigures cannot be created, e.g. no display
+    try
+        f = uifigure('Visible', 'off');
+        delete(f);
+        canDraw = true;
+    catch
+        canDraw = false;
+    end
+    tests.assumeTrue(canDraw, 'uifigure not available (no display)');
 end
 
 %% openAndCapture - Build app, screenshot its UIFig, close it

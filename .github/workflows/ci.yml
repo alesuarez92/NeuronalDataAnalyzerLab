@@ -20,6 +20,12 @@ jobs:
             Statistics_and_Machine_Learning_Toolbox
             Image_Processing_Toolbox
 
+      - name: Start virtual display (for window smoke tests)
+        run: |
+          sudo apt-get install -y -qq xvfb > /dev/null
+          Xvfb :99 -screen 0 1600x1000x24 &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+
       - name: Code analysis (fail on errors)
         uses: matlab-actions/run-command@v2
         with:
