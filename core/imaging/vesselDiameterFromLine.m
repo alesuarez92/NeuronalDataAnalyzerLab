@@ -20,6 +20,11 @@ function [diameter, t, profile] = vesselDiameterFromLine(stack, lineStart, lineE
 %
 if nargin < 4, timeVec = []; end
 if nargin < 5, method = 'fwhm'; end
+if numel(lineStart) == 4
+    lineEnd = lineStart(3:4);
+    lineStart = lineStart(1:2);
+end
+lineLen = sqrt((lineEnd(1)-lineStart(1))^2 + (lineEnd(2)-lineStart(2))^2);
 
 [profile, xOrY, t] = kymograph(stack, lineStart, lineEnd, timeVec);
 N = size(profile, 2);
@@ -48,7 +53,7 @@ for k = 1:N
         end
         i1 = find(idx, 1);
         i2 = find(idx, 1, 'last');
-        diameter(k) = (i2 - i1 + 1) / nPix * sqrt((lineEnd(1)-lineStart(1))^2 + (lineEnd(2)-lineStart(2))^2);
+        diameter(k) = (i2 - i1 + 1) / nPix * lineLen;
     else
         % FWHM
         half = 0.5 * max(p);
@@ -59,7 +64,6 @@ for k = 1:N
         end
         ii = find(above);
         lenPix = ii(end) - ii(1) + 1;
-        lineLen = sqrt((lineEnd(1)-lineStart(1))^2 + (lineEnd(2)-lineStart(2))^2);
         diameter(k) = lenPix / nPix * lineLen;
     end
 end

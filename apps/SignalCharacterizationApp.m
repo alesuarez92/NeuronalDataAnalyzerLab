@@ -219,10 +219,10 @@ classdef SignalCharacterizationApp < handle
                     peakLat(end+1) = lat; %#ok<AGROW>
                 else, peakLat(end+1) = NaN; end %#ok<AGROW>
                 if ismember('Onset delay (50%)', selected)
-                    onsetD(end+1) = SignalFeatures.onsetDelay(t, y, app.T0, 0.5, 'max'); %#ok<AGROW>
+                    onsetD(end+1) = SignalFeatures.onsetDelay(t, y, app.T0, 0.5, 'max', baseVal); %#ok<AGROW>
                 else, onsetD(end+1) = NaN; end %#ok<AGROW>
                 if ismember('FWHM', selected)
-                    fwhm_(end+1) = SignalFeatures.fwhm(t, y, app.T0, 'max'); %#ok<AGROW>
+                    fwhm_(end+1) = SignalFeatures.fwhm(t, y, app.T0, 'max', baseVal); %#ok<AGROW>
                 else, fwhm_(end+1) = NaN; end %#ok<AGROW>
                 if ismember('AUC positive', selected)
                     aucP(end+1) = SignalFeatures.aucPositive(t, y, baseVal); %#ok<AGROW>
@@ -231,10 +231,10 @@ classdef SignalCharacterizationApp < handle
                     aucN(end+1) = SignalFeatures.aucNegative(t, y, baseVal); %#ok<AGROW>
                 else, aucN(end+1) = NaN; end %#ok<AGROW>
                 if ismember('Rise time', selected)
-                    riseT(end+1) = SignalFeatures.riseTime(t, y, app.T0, 'max'); %#ok<AGROW>
+                    riseT(end+1) = SignalFeatures.riseTime(t, y, app.T0, 'max', baseVal); %#ok<AGROW>
                 else, riseT(end+1) = NaN; end %#ok<AGROW>
                 if ismember('Decay time', selected)
-                    decT(end+1) = SignalFeatures.decayTime(t, y, app.T0, 'max'); %#ok<AGROW>
+                    decT(end+1) = SignalFeatures.decayTime(t, y, app.T0, 'max', baseVal); %#ok<AGROW>
                 else, decT(end+1) = NaN; end %#ok<AGROW>
                 if ismember('Peak amplitude', selected)
                     [amp, ~] = SignalFeatures.peakAmplitude(t, y, app.T0, 'max', baseVal);

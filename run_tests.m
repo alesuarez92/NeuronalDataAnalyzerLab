@@ -8,6 +8,7 @@ function run_tests
     root = fileparts(mfilename('fullpath'));
     addpath(root);
     addpath(fullfile(root, 'core'));
+    addpath(fullfile(root, 'core', 'imaging'));
     addpath(fullfile(root, 'apps'));
     addpath(fullfile(root, 'tests'));
 
@@ -24,5 +25,7 @@ function run_tests
                 fprintf('  FAIL: %s\n', result(k).Name);
             end
         end
+        % Non-zero exit under "matlab -batch run_tests" (used by CI)
+        error('NeuroAnalyzer:tests:failed', '%d test(s) failed.', nFail);
     end
 end

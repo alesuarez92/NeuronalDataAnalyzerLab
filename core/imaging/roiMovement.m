@@ -33,7 +33,11 @@ end
 if strcmpi(method, 'variance')
     movement = zeros(1, N);
     for k = 1:N
-        frame = stack(:, :, k);
+        if ndims(stack) == 4
+            frame = stack(:, :, :, k);
+        else
+            frame = stack(:, :, k);
+        end
         if ndims(frame) == 3
             frame = mean(frame, 3);
         end

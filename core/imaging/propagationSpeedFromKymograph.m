@@ -2,8 +2,9 @@ function [speedPixPerFrame, angleRad, slope] = propagationSpeedFromKymograph(ky,
 % propagationSpeedFromKymograph - Estimate propagation speed from kymograph.
 %
 % ky is space x time. Finds dominant ridge slope (space/time = speed in
-% pixels/frame). method: 'maxgrad' (max gradient direction), 'correlation'
-% (peak of space-time cross-correlation), or 'fit' (fit line to thresholded ridge).
+% pixels/frame). method: 'maxgrad' (least-squares gradient / optical-flow
+% constraint), 'correlation' (median frame-to-frame spatial lag from
+% cross-correlation), or 'fit' (line fitted to the per-frame intensity peak).
 %
 % OUTPUT:
 %   speedPixPerFrame - speed in pixels per frame (positive = one direction).
@@ -22,31 +23,37 @@ end
 
 switch lower(method)
     case 'maxgrad'
-        [gx, gt] = gradient(ky);
-        gmag = sqrt(gx.^2 + gt.^2) + eps;
-        % Dominant slope: weighted mean of (gt/gx) or (gx/gt)
-        slope = -mean(gt(:)) / (mean(gx(:)) + eps);
+        % ky is space (rows) x time (columns). gradient() returns the
+        % column-wise (time) derivative first, then the row-wise (space) one.
+        % Brightness constancy I_t + v * I_x = 0, solved for v in the
+        % least-squares sense over the whole kymograph.
+        [gTime, gSpace] = gradient(double(ky));
+        slope = -sum(gTime(:) .* gSpace(:)) / (sum(gSpace(:).^2) + eps);
     case 'correlation'
-        ref = mean(ky, 2);
-        c = zeros(1, nt);
-        for j = 1:nt
-            c(j) = corr(ref, ky(:, j));
-        end
-        [~, peak] = max(c);
-        slope = (peak - 1) / nt * ns;
-    otherwise
-        % Simple: max variance along diagonal
-        slope = 0;
-        best = -inf;
-        for s = -ns:ns
-            d = diag(ky, s);
-            if numel(d) < 10, continue; end
-            v = var(d);
-            if v > best
-                best = v;
-                slope = s / nt;
+        % Spatial lag that best aligns each column with the next one,
+        % median over frame pairs (pixels per frame).
+        maxLag = max(1, floor(ns / 2));
+        lags = -maxLag:maxLag;
+        best = zeros(1, nt - 1);
+        for j = 1:nt-1
+            a = double(ky(:, j));   a = a - mean(a);
+            b = double(ky(:, j+1)); b = b - mean(b);
+            c = zeros(size(lags));
+            for m = 1:numel(lags)
+                L = lags(m);
+                ia = max(1, 1-L):min(ns, ns-L);
+                c(m) = sum(a(ia) .* b(ia + L)) / numel(ia);
             end
+            [~, iBest] = max(c);
+            best(j) = lags(iBest);
         end
+        slope = median(best);
+    otherwise
+        % 'fit': follow the brightest pixel along space in each frame and
+        % fit a straight line position = slope * frame + offset.
+        [~, ridge] = max(double(ky), [], 1);
+        p = polyfit(1:nt, ridge, 1);
+        slope = p(1);
 end
 
 speedPixPerFrame = slope;

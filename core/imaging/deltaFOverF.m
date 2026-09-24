@@ -34,7 +34,7 @@ switch lower(baselineMode)
         dff = (F - F0) / (F0 + eps);
     case 'percentile'
         p = max(0, min(100, baselineWindow));
-        F0 = prctile(F, p);
+        F0 = pctl(F, p);
         dff = (F - F0) / (F0 + eps);
     case 'mean'
         F0 = mean(F);
@@ -47,4 +47,16 @@ switch lower(baselineMode)
         F0 = mean(F(1:min(30, N)));
         dff = (F - F0) / (F0 + eps);
 end
+end
+
+function v = pctl(x, p)
+% Percentile with linear interpolation; toolbox-free stand-in for prctile.
+x = sort(x(isfinite(x(:))));
+n = numel(x);
+if n == 0, v = NaN; return; end
+if n == 1, v = x; return; end
+pos = 1 + (n - 1) * p / 100;
+lo = floor(pos);
+hi = min(lo + 1, n);
+v = x(lo) + (pos - lo) * (x(hi) - x(lo));
 end
