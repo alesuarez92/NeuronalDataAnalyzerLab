@@ -91,9 +91,14 @@ classdef UIKit
             s.Layout.Row = 2; s.Layout.Column = 1;
             helpBtn = [];
             if ~isempty(helpTopic)
-                helpBtn = UIKit.button(g, '? Help', @(~,~)HelpApp(helpTopic), 'header', ...
+                % Fixed-height button, vertically centred in the header
+                hg = uigridlayout(g, [3 1], 'RowHeight', {'1x', T.buttonHeight, '1x'}, ...
+                    'Padding', [0 0 0 0], 'RowSpacing', 0, 'BackgroundColor', T.headerBg);
+                hg.Layout.Row = [1 2]; hg.Layout.Column = 2;
+                uilabel(hg, 'Text', '');
+                helpBtn = UIKit.button(hg, '? Help', @(~,~)HelpApp(helpTopic), 'header', ...
                     'Step-by-step guide for this window');
-                helpBtn.Layout.Row = [1 2]; helpBtn.Layout.Column = 2;
+                helpBtn.Layout.Row = 2;
             end
         end
 
