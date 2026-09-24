@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: MATLAB tests and code analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: matlab-actions/setup-matlab@v2
+        with:
+          release: latest
+          products: >
+            Signal_Processing_Toolbox
+            Statistics_and_Machine_Learning_Toolbox
+            Image_Processing_Toolbox
+
+      - name: Code analysis (fail on errors)
+        uses: matlab-actions/run-command@v2
+        with:
+          command: >
+            issues = codeIssues({'core', 'apps', 'tests', 'NeuroAnalyzer.m', 'run_tests.m'});
+            errs = issues.Issues(issues.Issues.Severity == "error", :);
+            disp(errs);
+            assert(isempty(errs), '%d code-analysis error(s).', height(errs));
+
+      - name: Unit tests
+        uses: matlab-actions/run-command@v2
+        with:
+          command: run_tests
