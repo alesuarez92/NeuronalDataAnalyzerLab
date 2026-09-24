@@ -29,7 +29,7 @@ end
 
 function testLdfTrialsResponse(tests)
     s = DemoData.ldfTrials();
-    y = mean(s.segmentedLDF, 1);
+    y = movmean(mean(s.segmentedLDF, 1), 11);   % trial average, 1 s smoothing
     [lat, ~] = SignalFeatures.peakLatency(s.segmentedTime, y, 0, 'max');
     amp = SignalFeatures.peakAmplitude(s.segmentedTime, y, 0, 'max');
     verifyEqual(tests, lat, s.truth.responsePeakDelay, 'AbsTol', 0.5);

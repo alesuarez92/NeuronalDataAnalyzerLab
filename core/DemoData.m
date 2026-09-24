@@ -124,7 +124,7 @@ classdef DemoData
 
         %% ldfExport - 8-channel export; ch 6 = stimulus TTL, ch 8 = LDF
         % 300 s at 1000 Hz. Stimulus: 5 s pulses every 30 s from t = 30 s.
-        % LDF: baseline ~120 PU + slow drift + vasomotion (0.1 Hz) + cardiac
+        % LDF: baseline ~120 PU + slow drift + vasomotion (0.13 Hz) + cardiac
         % ripple (6 Hz) + noise, plus a gamma-shaped hyperemia (+30 PU,
         % peak 4 s after onset) per stimulus.
         function d = ldfExport()
@@ -180,8 +180,11 @@ classdef DemoData
             ons = c.truth.onsets(c.truth.onsets - pre >= 0 & c.truth.onsets + post <= c.t(end));
             seg = zeros(numel(ons), numel(segT));
             for k = 1:numel(ons)
+                % Block-average dsF raw samples per output sample (anti-aliasing)
                 idx = round((ons(k) + segT) * c.Fs) + 1;
-                seg(k, :) = c.LDF(idx);
+                blk = idx(:) + (-floor(dsF/2):ceil(dsF/2) - 1);
+                blk = min(max(blk, 1), numel(c.LDF));
+                seg(k, :) = mean(c.LDF(blk), 2).';
             end
             c.truth.onsets = ons;
             s.segmentedLDF = seg;
@@ -289,7 +292,7 @@ classdef DemoData
 
         %% ldfTrace - Baseline + drift + vasomotion + cardiac + noise + responses
         function ldf = ldfTrace(t, onsets, rs)
-            ldf = 120 + 5 * sin(2 * pi * t / 400) + 3 * sin(2 * pi * 0.1 * t) ...
+            ldf = 120 + 5 * sin(2 * pi * t / 400) + 3 * sin(2 * pi * 0.13 * t) ...
                 + 1.5 * sin(2 * pi * 6 * t) + 2 * randn(rs, size(t));
             tp = 4; a = 3;
             for k = 1:numel(onsets)
