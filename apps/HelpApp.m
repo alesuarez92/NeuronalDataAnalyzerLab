@@ -456,7 +456,8 @@ classdef HelpApp < handle
                 'Find the card for your data (LDF, Electrophysiology, Imaging, Response features) and click its numbered steps **in order**.'
                 'In every window, work down the numbered step cards on the left: **Load** → **Settings** → **Run** → **Save**. The teal button is the recommended next action; greyed-out buttons are not possible yet.'
                 'Read the **status bar** at the bottom of each window: it says what happened and what to do next.'
-                'Stuck? Click **? Help** in the window header for its quick start and troubleshooting.'};
+                'Stuck? Click **? Help** in the window header for its quick start and troubleshooting.'
+                'Many files with the same settings? Use **Batch processing** in the launcher. To keep an analysis, click **Save session…** (and **Report (PDF)…**) in the last step of any window.'};
             t.demo = {
                 'Every window can load **synthetic data with known answers** (made by `DemoData`, always the same), so you can learn the workflow and check that you get the right numbers before using your own recordings.'
                 '| File | Open it in | What it contains |'
@@ -485,9 +486,12 @@ classdef HelpApp < handle
                 '## The four pipelines'
                 '| Pipeline | Windows, in order | Starts from | Ends with |'
                 '| LDF (Laser Doppler Flowmetry) | 1 Extract → 2 Process → 3 Average | LabChart .mat export | Trials .mat; grand average (mean ± SD) |'
-                '| Electrophysiology | 1 Extract (TDT) → 2 LFP analysis or 2 MUA analysis | TDT tank folder | ERP and CSD; spike times, clusters, rates |'
+                '| Electrophysiology | 1 Extract → 2 LFP analysis or 2 MUA analysis | TDT tank, Intan .rhd, Open Ephys folder or .nwb | ERP, CSD, time–frequency; spike times, clusters, rasters, rates |'
                 '| Imaging | ROI analysis | Image stack (.mat or TIFF) | Brightness, movement, ΔF/F, speed, kymograph, vessel diameter |'
-                '| Response features | Signal Characterization | LDF trials, LFP / ERP .mat, or any t and y | Feature table: latency, FWHM, AUC, rise/decay |'
+                '| Response features | Signal Characterization | LDF trials, LFP / ERP .mat, or any t and y | Feature table: latency, FWHM, AUC, rise/decay; group statistics and figures |'
+                '| Batch | Batch processing | A folder of files for any of the pipelines above | One summary table (CSV / MAT) and a log |'
+                '## Sessions and reports'
+                '* Every analysis window can save a **session** (inputs with checksums, settings, results, notes), reopen it later, and write a one-page **PDF report**. See **Sessions and reports**.'
                 '## Typical order'
                 'Each step saves a .mat file that the next step loads, so run the steps of a card from left to right. Signal Characterization comes last: use it on the trials saved by **LDF Process**, on the ERP exported by **LFP analysis**, or on the LFP saved by **Extract Ephys**, to turn responses into numbers.'
                 '## Project folders'

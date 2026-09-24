@@ -11,13 +11,20 @@
 > [v0.1.0](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.1.0)).
 > Full walk-through below in [Install](#install).
 
-![Main launcher window — three sections: Filtering & Signal Processing (LDF / Electrophysiology), Imaging & ROI analysis, Signal Characterization](docs/main-launcher.png)
+![Main launcher window: LDF, electrophysiology, imaging, response features and batch processing](docs/main-launcher.png)
 
 Neuroscience analysis toolbox (NMD Lab) for **Laser Doppler Flowmetry**,
-**electrophysiology** (LFP, MUA), **ROI / coregistered image analysis**
-(brightness, movement, ΔF/F, blood-flow speed, kymograph, vessel diameter),
-and **signal characterization** (peak latency, onset delay, FWHM, AUC,
-rise/decay time, stim–response integration).
+**electrophysiology** (LFP: ERP, CSD, time–frequency; MUA: spike detection,
+sorting with cluster merge/split, raster/PSTH, correlograms; TDT, Intan,
+Open Ephys and NWB recordings), **ROI / coregistered image analysis**
+(motion correction, multiple ROIs, cell detection, ΔF/F, blood-flow speed,
+kymograph, robust vessel diameter), and **signal characterization**
+(response features, group statistics, publication figures).
+
+Every analysis can run on a whole folder (**batch processing**), be saved
+and reopened as a **session** with input-file checksums, and produce a
+one-page **PDF report**. Every window has **synthetic demo data with known
+answers**, so results can be checked before using real recordings.
 
 > **Status: early release (v0.1.0).** The UI works end-to-end on the lab's
 > data formats, but the public surface is not yet stable. See
@@ -69,8 +76,11 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | --- | --- |
 | `NeuroAnalyzer.m` | Entry point; run this to open the launcher. |
 | `core/` | `Main.m` launcher, `UITheme`, project-path manager, data loader, validation, processing, signal-feature library. |
-| `core/imaging/` | ROI / line-based image analysis: ΔF/F, kymograph, flow speed, vessel diameter, intensity, movement, B&W 256. |
-| `apps/` | Sub-app windows: Extract / Process / Average LDF, Extract Ephys, LFP & MUA processing and analysis, ROI Analysis, Signal Characterization, Help. |
+| `core/imaging/` | ROI / line-based image analysis: ΔF/F, kymograph, flow speed, vessel diameter, intensity, movement, motion correction, cell detection. |
+| `core/io/` | Readers for Intan RHD, Open Ephys binary and NWB; NWB export. |
+| `core/demo/`, `core/DemoData.m` | Synthetic demo recordings with ground truth. |
+| `core/Batch.m`, `core/Session.m`, `core/Report.m` | Batch processing, session files, PDF reports. |
+| `apps/` | Sub-app windows: Extract / Process / Average LDF, Extract Ephys, LFP & MUA processing and analysis, ROI Analysis, Signal Characterization, Batch Processing, Help. |
 | `docs/` | Workflow and principle figures shown in the Help window. |
 | `tests/` | Unit tests. Run via `run_tests`. |
 | `Utilities/` | Third-party utilities (e.g. TDT MATLAB SDK). |
