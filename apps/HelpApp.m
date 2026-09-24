@@ -20,6 +20,12 @@
 % if uihtml is unavailable a plain uitextarea is used instead. An open
 % Help window is reused (switched to the requested topic) rather than
 % opening a second one.
+%
+% Demo data: every page has a "Demo data" section (what the synthetic
+% dataset from DemoData contains and the results to expect), and the
+% "Try it with demo data" button under the topic list opens the matching
+% window and calls its loadDemo() (tryDemo). On Welcome the button writes
+% every demo file to a folder instead (generateDemoFiles).
 % =========================================================================
 
 classdef HelpApp < handle
@@ -31,6 +37,7 @@ classdef HelpApp < handle
         Content     % uihtml (or uitextarea fallback) showing the topic page
         PrevBtn
         NextBtn
+        DemoBtn     % "Try it with demo data" (Welcome: "Generate all demo files...")
         Tabs        % Cell of topic titles (kept name: other code may index topics by it)
         Topics      % Struct array of topic content (see HelpApp.topicData)
         UseHtml = true
@@ -53,7 +60,7 @@ classdef HelpApp < handle
             openFigs = findall(groot, 'Type', 'figure', 'Tag', 'NeuroAnalyzerHelp');
             if ~isempty(openFigs) && isa(openFigs(1).UserData, 'HelpApp') && isvalid(openFigs(1).UserData)
                 prev = openFigs(1).UserData;
-                for p = {'UIFig', 'W', 'TopicList', 'Content', 'PrevBtn', 'NextBtn', ...
+                for p = {'UIFig', 'W', 'TopicList', 'Content', 'PrevBtn', 'NextBtn', 'DemoBtn', ...
                         'Tabs', 'Topics', 'UseHtml', 'ImageCache'}
                     app.(p{1}) = prev.(p{1});
                 end
@@ -104,8 +111,8 @@ classdef HelpApp < handle
 
             % --- Left: navigation ---
             nav = UIKit.card(body);
-            ng = uigridlayout(nav, [5 2], ...
-                'RowHeight', {'fit', '1x', 'fit', T.buttonHeight, T.buttonHeight}, ...
+            ng = uigridlayout(nav, [6 2], ...
+                'RowHeight', {'fit', '1x', T.buttonHeight + 6, 'fit', T.buttonHeight, T.buttonHeight}, ...
                 'ColumnWidth', {'1x', '1x'}, 'Padding', [10 10 10 10], 'RowSpacing', 8, ...
                 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
             lbl = uilabel(ng, 'Text', 'Topics', 'FontSize', T.fontBody, 'FontWeight', 'bold', ...
@@ -118,19 +125,23 @@ classdef HelpApp < handle
                 'Tooltip', 'Topics in workflow order: LDF, electrophysiology, imaging, response features', ...
                 'ValueChangedFcn', @(~,~)app.showTopic(app.TopicList.Value));
             app.TopicList.Layout.Row = 2; app.TopicList.Layout.Column = [1 2];
+            app.DemoBtn = UIKit.button(ng, [char(9654) ' Try it with demo data'], ...
+                @(~,~)app.tryDemo(app.TopicList.Value), 'primary', ...
+                'Open this window with synthetic data whose answers are known');
+            app.DemoBtn.Layout.Row = 3; app.DemoBtn.Layout.Column = [1 2];
             note = uilabel(ng, 'Text', ['Same order as the launcher cards. Each window''s ' ...
                 '"? Help" button opens its topic here.'], 'FontSize', T.fontTiny, ...
                 'FontColor', T.mutedColor, 'WordWrap', 'on');
-            note.Layout.Row = 3; note.Layout.Column = [1 2];
+            note.Layout.Row = 4; note.Layout.Column = [1 2];
             app.PrevBtn = UIKit.button(ng, [char(8249) ' Previous'], @(~,~)app.step(-1), ...
                 'secondary', 'Previous topic');
-            app.PrevBtn.Layout.Row = 4; app.PrevBtn.Layout.Column = 1;
+            app.PrevBtn.Layout.Row = 5; app.PrevBtn.Layout.Column = 1;
             app.NextBtn = UIKit.button(ng, ['Next ' char(8250)], @(~,~)app.step(1), ...
                 'secondary', 'Next topic');
-            app.NextBtn.Layout.Row = 4; app.NextBtn.Layout.Column = 2;
+            app.NextBtn.Layout.Row = 5; app.NextBtn.Layout.Column = 2;
             issues = UIKit.button(ng, 'Report a problem', @(~,~)web(HelpApp.IssuesURL, '-browser'), ...
                 'secondary', ['Open GitHub issues in your browser: ' HelpApp.IssuesURL]);
-            issues.Layout.Row = 5; issues.Layout.Column = [1 2];
+            issues.Layout.Row = 6; issues.Layout.Column = [1 2];
 
             % --- Right: topic page ---
             page = UIKit.card(body);
@@ -171,12 +182,100 @@ classdef HelpApp < handle
             onOff = {'off', 'on'};
             app.PrevBtn.Enable = onOff{(idx > 1) + 1};
             app.NextBtn.Enable = onOff{(idx < numel(app.Tabs)) + 1};
+            win = HelpApp.demoWindow(tp.title);
+            if isempty(win)
+                app.DemoBtn.Text = ['Generate all demo files' char(8230)];
+                app.DemoBtn.Tooltip = ['Write every synthetic demo file (LDF, TDT tank, LFP, MUA, imaging) ' ...
+                    'to a folder of your choice, e.g. to use it as the Import folder'];
+            else
+                app.DemoBtn.Text = [char(9654) ' Try it with demo data'];
+                app.DemoBtn.Tooltip = sprintf(['Open %s with synthetic data whose answers are known ' ...
+                    '(see "Demo data" on this page)'], tp.title);
+            end
             if app.UseHtml
                 app.Content.HTMLSource = app.topicHtml(tp);
             else
                 app.Content.Value = HelpApp.topicPlain(tp);
             end
             UIKit.setStatus(app.W.Status, sprintf('%s  ·  %s', tp.title, tp.summary), 'info');
+        end
+
+        %% tryDemo - Open the window of a topic and load its demo data
+        % Returns the opened app ([] for Welcome, which generates the demo
+        % files instead, or on error). Windows without loadDemo are just opened.
+        function win = tryDemo(app, topic)
+            win = [];
+            if nargin < 2 || isempty(topic), topic = app.TopicList.Value; end
+            cls = HelpApp.demoWindow(topic);
+            if isempty(cls)
+                app.generateDemoFiles();
+                return;
+            end
+            UIKit.setStatus(app.W.Status, sprintf('Opening %s with demo data', topic), 'busy');
+            try
+                win = feval(cls);
+                if ismethod(win, 'loadDemo')
+                    win.loadDemo();
+                    UIKit.setStatus(app.W.Status, sprintf(['Opened %s with demo data. Compare your ' ...
+                        'results with "Demo data" on this page.'], topic), 'success');
+                else
+                    UIKit.setStatus(app.W.Status, sprintf(['Opened %s. Its demo is not available yet: ' ...
+                        'use Welcome → Generate all demo files and load the file by hand.'], topic), 'warning');
+                end
+            catch ME
+                UIKit.setStatus(app.W.Status, sprintf('Could not open %s with demo data', topic), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not open %s with demo data: %s', topic, ME.message), ...
+                    'Demo data');
+            end
+        end
+
+        %% generateDemoFiles - Write every demo file to a folder (DemoData.writeAll)
+        % folder omitted/empty: ask with uigetdir (default DemoData.folder()).
+        % offerImport (default true): afterwards offer to make the folder the
+        % project Import folder. Returns the DemoData.writeAll file struct ([] if cancelled / failed).
+        function files = generateDemoFiles(app, folder, offerImport)
+            files = [];
+            if nargin < 3, offerImport = true; end
+            if nargin < 2 || isempty(folder)
+                start = DemoData.folder();
+                if ~exist(start, 'dir')
+                    try mkdir(start); catch, start = pwd; end
+                end
+                folder = uigetdir(start, 'Choose a folder for the demo files');
+                figure(app.UIFig);
+                if isequal(folder, 0)
+                    UIKit.setStatus(app.W.Status, 'Demo files: cancelled', 'info');
+                    return;
+                end
+            end
+            dlg = UIKit.busy(app.UIFig, sprintf('Writing the demo files to %s%s', folder, char(8230)));
+            UIKit.setStatus(app.W.Status, 'Writing the demo files', 'busy');
+            try
+                files = DemoData.writeAll(folder);
+            catch ME
+                UIKit.done(dlg);
+                files = [];
+                UIKit.setStatus(app.W.Status, 'Could not write the demo files', 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not write the demo files: %s', ME.message), 'Demo data');
+                return;
+            end
+            UIKit.done(dlg);
+            UIKit.setStatus(app.W.Status, sprintf(['Demo files written to %s (LDF export, cropped LDF, ' ...
+                'LDF trials, TDT tank, LFP, MUA, imaging stack).'], folder), 'success');
+            if offerImport
+                uiconfirm(app.UIFig, sprintf(['The demo files are in\n%s\n\nUse this folder as the ' ...
+                    'project Import folder, so every Load dialog starts there?'], folder), 'Demo files written', ...
+                    'Options', {'Use as Import folder', 'Not now'}, 'DefaultOption', 1, 'CancelOption', 2, ...
+                    'Icon', 'success', 'CloseFcn', @(~, evt)app.onImportChoice(evt, folder));
+            end
+        end
+
+        %% onImportChoice - uiconfirm answer of generateDemoFiles
+        function onImportChoice(app, evt, folder)
+            if strcmp(evt.SelectedOption, 'Use as Import folder')
+                ProjectManager.setImportDir(folder);
+                UIKit.setStatus(app.W.Status, sprintf('Import folder set to %s', folder), 'success');
+            end
         end
 
         %% topicHtml - Full HTML page for one topic
@@ -190,11 +289,15 @@ classdef HelpApp < handle
                 '.lead{font-size:13.5px;color:%s;margin:0 0 14px 0}' ...
                 'h2{font-size:15px;color:%s;border-bottom:1px solid %s;padding-bottom:3px;margin:22px 0 8px 0}' ...
                 'h3{font-size:13px;color:%s;margin:14px 0 4px 0}' ...
-                'ol.steps{list-style:none;counter-reset:s;padding:0;margin:0}' ...
-                'ol.steps li{counter-increment:s;position:relative;padding:6px 10px 6px 40px;margin:0 0 6px 0;' ...
+                'ol.steps{list-style:none;padding:0;margin:0}' ...
+                'ol.steps li{display:flex;align-items:flex-start;padding:6px 10px;margin:0 0 6px 0;' ...
                 'background:%s;border:1px solid %s;border-radius:6px}' ...
-                'ol.steps li:before{content:counter(s);position:absolute;left:10px;top:6px;width:20px;height:20px;' ...
-                'border-radius:10px;background:%s;color:#fff;font-weight:bold;text-align:center;line-height:20px;font-size:12px}' ...
+                'ol.steps span.num{flex:0 0 22px;display:inline-block;width:22px;height:22px;margin:0 10px 0 0;' ...
+                'border-radius:11px;background-color:%s;color:#ffffff;font-weight:bold;text-align:center;' ...
+                'line-height:22px;font-size:12px}' ...
+                'ol.steps span.txt{flex:1 1 auto}' ...
+                '.demo{background:%s;border:1px solid %s;border-radius:6px;padding:2px 14px 6px 14px}' ...
+                '.demo p.try{font-weight:bold;color:%s}' ...
                 '.io{display:flex;gap:12px;flex-wrap:wrap}' ...
                 '.io div{flex:1 1 260px;border:1px solid %s;border-radius:6px;padding:6px 12px}' ...
                 '.io h3{margin-top:4px}' ...
@@ -212,7 +315,8 @@ classdef HelpApp < handle
                 '.missing{color:%s;font-style:italic}a{color:%s}'], ...
                 hex(T.sectionTitleColor), hex(T.mutedColor), hex(T.headerBg), hex(T.bodyColor), ...
                 hex(T.headerBg), hex(T.cardBorder), hex(T.sectionTitleColor), ...
-                hex(T.hintBg), hex(T.hintBorder), hex(T.accent), hex(T.cardBorder), ...
+                hex(T.hintBg), hex(T.hintBorder), hex(T.accent), ...
+                hex(T.hintBg), hex(T.hintBorder), hex(T.info), hex(T.cardBorder), ...
                 hex(T.secondaryBg), hex(T.cardBorder), hex(T.danger), hex(T.secondaryBg), ...
                 hex(T.cardBorder), hex(T.cardBorder), hex(T.mutedColor), hex(T.mutedColor), hex(T.info));
 
@@ -220,9 +324,20 @@ classdef HelpApp < handle
             parts{end+1} = sprintf('<div class="crumb">%s</div><h1>%s</h1><p class="lead">%s</p>', ...
                 esc(tp.group), esc(tp.title), esc(tp.summary));
             if ~isempty(tp.quick)
-                parts{end+1} = ['<h2>Quick start</h2><ol class="steps">' ...
-                    strjoin(cellfun(@(s) ['<li>' fmt(dropStepNo(s)) '</li>'], tp.quick, 'UniformOutput', false), '') ...
-                    '</ol>'];
+                % Step numbers as literal text (CSS counters / ::before did not render in uihtml)
+                items = arrayfun(@(k) sprintf('<li><span class="num">%d</span><span class="txt">%s</span></li>', ...
+                    k, fmt(dropStepNo(tp.quick{k}))), 1:numel(tp.quick), 'UniformOutput', false);
+                parts{end+1} = ['<h2>Quick start</h2><ol class="steps">' strjoin(items, '') '</ol>'];
+            end
+            if ~isempty(tp.demo)
+                if isempty(HelpApp.demoWindow(tp.title))
+                    try_ = ['Click <b>Generate all demo files' char(8230) '</b> (left) to write them to a folder.'];
+                else
+                    try_ = sprintf(['Click <b>%s Try it with demo data</b> (left) to open this window with the ' ...
+                        'synthetic dataset, then check your results against the expected values.'], char(9654));
+                end
+                parts{end+1} = ['<h2>Demo data</h2><div class="demo"><p class="try">' try_ '</p>' ...
+                    markup(tp.demo) '</div>'];
             end
             if ~isempty(tp.inputs) || ~isempty(tp.outputs)
                 parts{end+1} = ['<h2>Inputs and outputs</h2><div class="io">' ...
@@ -289,6 +404,13 @@ classdef HelpApp < handle
                 end
                 s{end+1} = '';
             end
+            if ~isempty(tp.demo)
+                s{end+1} = 'DEMO DATA';
+                for k = 1:numel(tp.demo)
+                    s{end+1} = ['  ' strip(regexprep(tp.demo{k}, '^## |^\* |\|', ' '))]; %#ok<AGROW>
+                end
+                s{end+1} = '';
+            end
             s = [s; {'INPUTS'}; strcat({'  - '}, strip(tp.inputs(:))); ...
                 {'OUTPUTS'}; strcat({'  - '}, strip(tp.outputs(:))); {''}; {upper(tp.detailsTitle)}];
             for k = 1:numel(tp.details)
@@ -299,6 +421,17 @@ classdef HelpApp < handle
             for k = 1:size(tp.trouble, 1)
                 s{end+1} = sprintf('  - %s: %s', strip(tp.trouble{k, 1}), strip(tp.trouble{k, 2})); %#ok<AGROW>
             end
+        end
+
+        %% demoWindow - Class of the window a topic's "Try it" opens ('' = Welcome)
+        function cls = demoWindow(topic)
+            map = {'LDF Extract', 'ExtractLDFApp'; 'LDF Process', 'ProcessingLDFApp'; ...
+                'Filtering', 'ProcessingLDFApp'; 'LDF Average', 'LDFGrandAverageApp'; ...
+                'Ephys Extract', 'ExtractEphysApp'; 'LFP Analysis', 'LFPAnalysisApp'; ...
+                'MUA Analysis', 'MUAAnalysisApp'; 'ROI Analysis', 'ROIAnalysisApp'; ...
+                'Signal Characterization', 'SignalCharacterizationApp'};
+            k = find(strcmpi(map(:, 1), strtrim(char(topic))), 1);
+            if isempty(k), cls = ''; else, cls = map{k, 2}; end
         end
 
         %% topicData - Content of every topic, in navigation order
@@ -323,6 +456,17 @@ classdef HelpApp < handle
                 'In every window, work down the numbered step cards on the left: **Load** → **Settings** → **Run** → **Save**. The teal button is the recommended next action; greyed-out buttons are not possible yet.'
                 'Read the **status bar** at the bottom of each window: it says what happened and what to do next.'
                 'Stuck? Click **? Help** in the window header for its quick start and troubleshooting.'};
+            t.demo = {
+                'Every window can load **synthetic data with known answers** (made by `DemoData`, always the same), so you can learn the workflow and check that you get the right numbers before using your own recordings.'
+                '| File | Open it in | What it contains |'
+                '| demo_ldf_export.mat | LDF Extract | LabChart-style export, 300 s at 1000 Hz: stimulus on channel 6 (5 s pulses every 30 s from 30 s), LDF on channel 8 (~120 PU) with a +30 PU response peaking ~4 s after each onset |'
+                '| demo_ldf_cropped.mat | LDF Process | The same recording cropped to 20–280 s (`stim`, `LDF`, `t`, `Fs`) |'
+                '| demo_ldf_trials.mat | LDF Average, Signal Characterization | 8 trials from −5 to 20 s at 10 Hz (`segmentedLDF`, `segmentedTime`) |'
+                '| demo_tank/ | Ephys Extract | 30 s TDT-like block: 8 raw channels at 24414 Hz and a whisker stimulus (20 ms pulses every 2 s from 1 s) |'
+                '| demo_lfp.mat | LFP Analysis, Signal Characterization | 8-channel LFP at 1017 Hz, 100 µm spacing: ERP with N1 at 15 ms and P2 at 40 ms, largest at channel 4 |'
+                '| demo_mua.mat | MUA Analysis | Channels 3–5 at 24414 Hz with three units that fire more for 50 ms after each stimulus |'
+                '| demo_imaging.mat | ROI Analysis | 96 × 96 × 150 frames at 10 Hz: a pulsing vessel, a moving red blood cell and a cell with calcium transients (`roiMask` included) |'
+                'Each file also stores the ground truth in a `truth` variable. Use **Generate all demo files…** to write them to a folder (and optionally make it your Import folder), or the **Try it with demo data** button on any topic to open that window with its demo already loaded.'};
             t.inputs = {
                 'LabChart .mat export (LDF)'
                 'TDT tank / block folder (electrophysiology; needs the TDT MATLAB SDK)'
@@ -371,6 +515,10 @@ classdef HelpApp < handle
                 '**2 Choose time range**: type **Start** and **End** (s), click **Pick on plot** and click twice (start, end) on either plot, or click **Full range**.'
                 '**3 Crop**: click **Crop to range**. The cropped signals replace the full recording in the plots.'
                 '**4 Save**: click **Save cropped data...** and choose a file name. Open this file next in **LDF Process**.'};
+            t.demo = {
+                '* **Data**: LabChart-style export, 8 channels, 300 s at 1000 Hz. Channel 6 = stimulus: 9 pulses of 5 s every 30 s from t = 30 s. Channel 8 = LDF: ~120 PU baseline with slow drift, vasomotion (0.1 Hz), a cardiac ripple (6 Hz) and noise.'
+                '* **What you should see**: after each stimulus pulse the LDF rises by about **+30 PU**, peaking about **4 s after the onset**, and returns to baseline within ~12 s.'
+                '* **Try**: crop **20 to 280 s** (this is exactly what the LDF Process demo file contains) and save; the cropped plots start at t = 0 with the first pulse at 10 s.'};
             t.inputs = {
                 'LabChart export `.mat` with `data` (all channels, concatenated), `datastart` and `dataend` (start / end index of each channel)'
                 'Optional: `samplerate` (Hz; 1000 Hz is assumed when missing), `titles`, `unittext`, comments'
@@ -398,6 +546,10 @@ classdef HelpApp < handle
                 '**2 Filter / downsample (optional)**: click **Settings...**, choose downsampling and filter, click **Apply**. The Filter response tab shows the filter; **Undo** returns to the loaded data. See the **Filtering** topic.'
                 '**3 Segment trials**: set **Stim threshold** (shown as a dashed line on the stimulus), **Pre-onset** and **Post-onset** (s) and **Min interval** (s), then click **Segment trials**. All trials and the mean ± SD appear in the Trials tab.'
                 '**4 Save trials**: click **Save trials...**. Choosing an existing trials file appends the new trials to it (time axes must match). Open the file(s) next in **LDF Average**.'};
+            t.demo = {
+                '* **Data**: the cropped demo recording (20–280 s of the LDF export, 1000 Hz): 9 stimulus pulses of 5 s, the first at 10 s, then every 30 s.'
+                '* **Try**: downsample 10x, low-pass ~1 Hz (removes the 6 Hz cardiac ripple), then segment with pre = 5 s and post = 20 s.'
+                '* **What you should get**: 8 complete trials (the last pulse is too close to the end for a 20 s window). The mean response rises after 0 s and **peaks ~4 s after onset at ~+30 PU** above a ~120 PU baseline.'};
             t.inputs = {
                 '`.mat` from LDF Extract with `stim`, `LDF`, `t`, `Fs` (all four are required)'};
             t.outputs = {
@@ -428,6 +580,10 @@ classdef HelpApp < handle
                 'Choose **Downsample** first: it sets the new sampling rate and therefore the highest usable cutoff (Nyquist = half the rate).'
                 'Pick the **filter type** and enter the **cutoff(s)** in Hz; start with order 4.'
                 'Click **Apply** and compare the filtered trace with the original in the plots; use **Undo** to try other settings.'};
+            t.demo = {
+                '* **Data**: the cropped demo LDF (1000 Hz). Besides the ~+30 PU responses it contains a slow drift (period 400 s), vasomotion at **0.1 Hz** (±3 PU), a cardiac ripple at **6 Hz** (±1.5 PU) and white noise.'
+                '* **Low-pass 1 Hz** (after 10x downsampling): the 6 Hz ripple and most noise disappear, the responses keep their shape and timing (zero-phase filtering: the peak stays ~4 s after onset).'
+                '* **High-pass 0.2 Hz**: removes drift and vasomotion but also shrinks and distorts the slow (~5 s wide) responses, a good example of a cutoff that is too high for LDF.'};
             t.inputs = {'A signal and its sampling rate (after downsampling)'};
             t.outputs = {'The filtered signal (zero-phase filtering: no time shift)'};
             t.details = {
@@ -454,6 +610,10 @@ classdef HelpApp < handle
                 '**1 Load trial files**: click **Add files...** and select one or more files saved by LDF Process (multi-select). You can add more files later; **Clear all** starts over.'
                 '**2 Options**: tick **Relative to baseline** to subtract each trial''s pre-stimulus mean.'
                 '**3 Grand average**: click **Plot grand average** to see the mean ± SD across all trials.'};
+            t.demo = {
+                '* **Data**: `demo_ldf_trials.mat`, 8 trials from −5 to 20 s at 10 Hz (0 = stimulus onset).'
+                '* **What you should get**: the grand average is flat before 0 s (~120 PU), rises after onset and **peaks ~4 s after onset at ~+30 PU**, then returns to baseline by ~12–15 s. The SD band shows the trial-to-trial vasomotion (a few PU).'
+                '* With **Relative to baseline** the curve starts at ~0 PU and peaks at ~+30 PU.'};
             t.inputs = {'One or more `.mat` files with `segmentedLDF` and `segmentedTime` (from LDF Process)'};
             t.outputs = {'Plots of all trials and of the grand average (mean ± SD); the file list shows how many trials came from each file'};
             t.details = {
@@ -475,6 +635,10 @@ classdef HelpApp < handle
                 '**2 Choose channels**: pick the stimulus (Whis) channel and one or more raw (xRAW) channels (**All** / **None** help).'
                 '**3 Process**: optionally **Plot RAW**; then **Process LFP…** (low-pass, 60 Hz notch, downsample) and/or **Process MUA…** (band-pass, default 300–3000 Hz).'
                 '**4 Save**: **Save LFP…** / **Save MUA…**, choose which channels to keep and a file name (default `<tank>_LFP.mat` / `<tank>_MUA.mat`). Open these files in **LFP analysis** / **MUA analysis**.'};
+            t.demo = {
+                '* **Data**: a TDT-like demo block (30 s): 8 raw channels (`xRAW`, 24414 Hz, electrodes 100 µm apart) and the whisker stimulus (`Whis`: 20 ms pulses every 2 s from 1 s, 15 stimuli). The demo tank is read by a built-in stand-in, so the TDT SDK is not needed for it.'
+                '* **Process LFP** (low-pass, downsample to ~1017 Hz): each stimulus evokes a negative deflection at **15 ms** and a positive one at **40 ms**, largest on **channel 4** and weaker with distance from it.'
+                '* **Process MUA** (300–3000 Hz): spikes on **channels 3–5** (two units on channel 4, one on channel 5), denser in the 50 ms after each stimulus. Save both to try LFP and MUA Analysis.'};
             t.inputs = {
                 'TDT tank / block folder containing the `Whis` (stimulus) and `xRAW` (raw neural) streams'
                 'Requires the TDT MATLAB SDK (`TDTbin2mat`) under `Utilities/TDTMatlabSDK/`'};
@@ -507,6 +671,10 @@ classdef HelpApp < handle
                 '**3 ERP analysis**: click **Run ERP…**, set pre- and post-stimulus time (s), stimulus threshold and minimum ISI (s), click OK. The number of averaged epochs is reported.'
                 '**4 CSD**: enter **Spacing (µm)** and the **Channel order** from top to bottom (at least 3 channels of the last ERP), then click **Compute CSD**.'
                 '**5 Export**: click **Export ERP / CSD…** to save a .mat that Signal Characterization can read.'};
+            t.demo = {
+                '* **Data**: `demo_lfp.mat`, 8 channels at 1017.25 Hz, 30 s, 100 µm spacing; 15 stimuli every 2 s from 1 s.'
+                '* **ERP** (e.g. pre 0.05 s, post 0.2 s): 15 epochs; **N1 (negative) at ~15 ms** (about −120 µV at channel 4) and **P2 (positive) at ~40 ms**; both are **largest at channel 4** and fall off over ~150 µm (channels 2–6).'
+                '* **CSD** (spacing 100 µm, order 1–8): a **current sink at channel 4** at ~15 ms, flanked by sources above and below (channels 2–3 and 5–6).'};
             t.inputs = {'LFP `.mat` from Extract Ephys: `lfp_data`, `stim_data`, `t_lfp`, `t_stim`, `lfp_fs`, `stim_fs` (all required)'};
             t.outputs = {
                 'Tabs: Stimulus (threshold and detected onsets), ERP overlay, ERP per channel (mean ± SD), CSD map'
@@ -536,6 +704,10 @@ classdef HelpApp < handle
                 '**3 Spike sorting**: click **Configure...** (detection method, threshold, polarity, filtering, features, clustering, drift correction) and then **Run**.'
                 '**4 Clusters**: select the clusters to show (**Select all** / **Clear**) and read the quality summary. Result tabs: Signal & spikes, Waveforms, Clusters (feature space), Spike rate, Quality.'
                 '**5 Export**: click **Save results...** to write spike times, cluster IDs, the sorting parameters and quality measures to .mat.'};
+            t.demo = {
+                '* **Data**: `demo_mua.mat`, channels 3–5 at 24414 Hz, 30 s, stimulus every 2 s from 1 s. Three units with negative spikes: **unit 1 (~90 µV) and unit 2 (~50 µV) on channel 4**, **unit 3 (~110 µV) on channel 5** (seen weaker on channel 4). Noise ~10 µV.'
+                '* The demo selects **channel 4** and detection **MAD, k = 4, negative polarity**; click **Run**.'
+                '* **What you should get**: **2 units on channel 4** with clearly different amplitudes (and 1 on channel 5). In the Spike rate tab (bin ~0.05 s), rates jump **5–55 ms after each stimulus** (baseline ~6–10 Hz, evoked 40–80 Hz); ISI violations should be ~0% (2 ms refractory).'};
             t.inputs = {
                 'MUA `.mat` from Extract Ephys: `mua_data`, `mua_fs`, `t_mua`, `mua_channels`'
                 'Optional `stim_data`, `stim_fs`, `t_stim` (needed to segment by stimulus)'};
@@ -571,6 +743,11 @@ classdef HelpApp < handle
                 '**3 Draw ROI or line**: click **Draw ROI** and drag a rectangle, or **Draw line** and drag a line (across the vessel for diameter). You can move / resize them afterwards.'
                 '**4 Analysis**: choose the **Method** (for ΔF/F also the baseline frames) and click **Run**. The result is plotted below the frame.'
                 '**5 Export**: click **Export results** to save a .csv (time + values) or a .mat (results, ROI / line and settings).'};
+            t.demo = {
+                '* **Data**: `demo_imaging.mat`, 96 × 96 px, 150 frames at 10 Hz (15 s). A dark vertical **vessel at x = 60** whose **diameter oscillates 12 ± 3 px (9–15 px) every 5 s**; a bright **red blood cell moving down 2 px/frame** (20 px/s); a **cell at (24, 30), radius 6 px** with calcium transients (ΔF/F ≈ 1) at **3, 7 and 11 s**. The cell''s `roiMask` is in the file.'
+                '* The demo selects **ΔF/F** with that mask (baseline = first 30 frames) and a line across the vessel from (45, 70) to (75, 70).'
+                '* **ΔF/F**: flat ~0 until 3 s, then **three peaks of ~1 at 3, 7 and 11 s**, each decaying in ~1–2 s.'
+                '* **Vessel diameter** (same line): a sine between **~9 and ~15 px with a 5 s period**. **Kymograph** along the vessel (e.g. from (60, 5) to (60, 90)): slanted streaks with a slope of **2 px per frame**.'};
             t.inputs = {
                 '`.mat` with `stack` or `frames` (H × W × N grayscale or H × W × 3 × N RGB; otherwise the first variable is used)'
                 'Optional in the .mat: `timeVec` or `t` (one time per frame), `roiMask` (logical H × W, used when no ROI is drawn)'
@@ -610,6 +787,10 @@ classdef HelpApp < handle
                 '**2 Parameters**: set the stimulus onset **t0** (s), the **baseline** window (s) and the response **direction**. The plot shows t0 (dashed), the baseline window (shaded) and the detected peak and FWHM, so you can check them before extracting.'
                 '**3 Features**: select the features (Ctrl/Cmd-click for several) and click **Extract features**.'
                 '**4 Export**: check the table (click a row to plot that series) and click **Export to CSV / MAT**.'};
+            t.demo = {
+                '* **Data**: `demo_ldf_trials.mat`, 8 LDF trials from −5 to 20 s at 10 Hz (0 = stimulus onset). The demo sets t0 = 0, direction Auto, the baseline to −5–0 s and selects every feature.'
+                '* **Expected per trial** (true response: ~120 PU baseline + 30 PU gamma-shaped hyperemia): **peak latency ≈ 4 s**, **peak amplitude ≈ 30 PU**, onset delay (50%) ≈ 1.9 s, FWHM ≈ 5.5 s, rise time (10–90%) ≈ 2.2 s, decay to 50% ≈ 3.4 s; positive direction.'
+                '* Trials differ by a few PU / tenths of a second because of vasomotion and noise, which is why the mean over trials is the number to report.'};
             t.inputs = {
                 'LDF trials from LDF Process: `segmentedLDF`, `segmentedTime` (one series per trial)'
                 'LFP from Extract Ephys: `lfp_data`, `t_lfp` (mean over channels = one series)'
@@ -648,7 +829,7 @@ end
 %% mkTopic - Empty topic struct with title, group (breadcrumb) and summary
 function t = mkTopic(title, group, summary)
     t = struct('title', title, 'group', group, 'summary', summary, ...
-        'quick', {{}}, 'inputs', {{}}, 'outputs', {{}}, 'details', {{}}, ...
+        'quick', {{}}, 'demo', {{}}, 'inputs', {{}}, 'outputs', {{}}, 'details', {{}}, ...
         'detailsTitle', 'How it works', ...
         'trouble', {cell(0, 2)}, 'images', {{}});
 end

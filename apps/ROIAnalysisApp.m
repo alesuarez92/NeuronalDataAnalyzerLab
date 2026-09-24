@@ -11,6 +11,8 @@
 %   1 Load stack  2 Preprocess  3 Draw ROI or line  4 Analysis + Run  5 Export
 % and on the right the first frame with the ROI / line overlay above the
 % result plot. One updateControls() sets every enable state.
+% Scriptable (CI walkthroughs, no dialogs): openFile(path), loadDemo(),
+% setROIMask(mask), setLine([x1 y1], [x2 y2]), runAnalysis(methodName).
 % =========================================================================
 
 classdef ROIAnalysisApp < handle
@@ -18,6 +20,7 @@ classdef ROIAnalysisApp < handle
         UIFig
         W                    % UIKit.window struct (Fig, Body, Status, HelpBtn)
         LoadBtn
+        DemoBtn              % Try demo data (synthetic stack with known answers)
         FileLabel
         ConvertBWCb          % Convert to B&W (256 levels)
         DrawROIBtn
@@ -83,9 +86,14 @@ classdef ROIAnalysisApp < handle
             g1 = uigridlayout(UIKit.card(left), [3 1], 'RowHeight', {'fit', T.buttonHeight, '1x'}, ...
                 'Padding', [10 8 10 10], 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
             UIKit.step(g1, 1, 'Load stack');
-            app.LoadBtn = UIKit.button(g1, 'Load stack', @(~,~)app.loadStack(), 'primary', ...
+            b1 = uigridlayout(g1, [1 2], 'ColumnWidth', {'1x', '1x'}, 'Padding', [0 0 0 0], ...
+                'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            app.LoadBtn = UIKit.button(b1, 'Load stack', @(~,~)app.loadStack(), 'primary', ...
                 ['.mat with stack or frames (H x W x N or H x W x 3 x N; optional timeVec or t, ' ...
                  'roiMask), or a multi-frame TIFF']);
+            app.DemoBtn = UIKit.button(b1, 'Try demo data', @(~,~)app.loadDemo(), 'secondary', ...
+                ['Load a synthetic stack with known answers: a cell with calcium transients at ' ...
+                 '3, 7 and 11 s and a vessel whose diameter oscillates 9-15 px']);
             app.FileLabel = uilabel(g1, 'Text', 'No stack loaded', 'FontSize', T.fontSmall, ...
                 'FontColor', T.mutedColor, 'WordWrap', 'on', 'Interpreter', 'none', ...
                 'VerticalAlignment', 'top');
@@ -165,13 +173,13 @@ classdef ROIAnalysisApp < handle
             imgCard = UIKit.card(right, 'First frame with ROI / line');
             ig = uigridlayout(imgCard, [1 1], 'Padding', [8 8 8 8], 'BackgroundColor', T.cardBg);
             app.AxesImage = uiaxes(ig);
-            UIKit.emptyAxes(app.AxesImage, 'Load a stack to begin');
+            UIKit.emptyAxes(app.AxesImage, 'Load a stack (or Try demo data) to begin');
             plotCard = UIKit.card(right, 'Result: time series or kymograph');
             pg = uigridlayout(plotCard, [1 1], 'Padding', [8 6 8 6], 'BackgroundColor', T.cardBg);
             app.AxesPlot = uiaxes(pg);
             UIKit.emptyAxes(app.AxesPlot, 'Results appear here after Run (step 4)');
 
-            UIKit.setStatus(app.W.Status, 'Load an image stack to begin (step 1).', 'info');
+            UIKit.setStatus(app.W.Status, 'Load an image stack (or Try demo data) to begin (step 1).', 'info');
         end
 
         %% updateControls - Enable state and hints from the current data state
@@ -209,6 +217,8 @@ classdef ROIAnalysisApp < handle
             if hasDrawn(app.CurrentLine)
                 p = app.CurrentLine.Position;
                 parts{end+1} = sprintf('Line: %.0f px long.', hypot(p(2,1) - p(1,1), p(2,2) - p(1,2)));
+            elseif hasLine
+                parts{end+1} = sprintf('Line: (%.0f, %.0f) to (%.0f, %.0f).', app.LineStart, app.LineEnd);
             end
             if ~hasStack
                 parts = {'Load a stack first.'};
@@ -232,8 +242,15 @@ classdef ROIAnalysisApp < handle
                 'Load image stack', startDir);
             figure(app.UIFig);
             if isequal(file, 0), return; end
-            fullPath = fullfile(path, file);
-            [~, ~, ext] = fileparts(file);
+            app.openFile(fullfile(path, file));
+        end
+
+        %% openFile - Load a stack (.mat or TIFF) without dialogs and show it
+        % Returns true on success.
+        function ok = openFile(app, fullPath)
+            ok = false;
+            [~, name, ext] = fileparts(fullPath);
+            file = [name ext];
             dlg = UIKit.busy(app.UIFig, sprintf('Loading %s...', file));
             UIKit.setStatus(app.W.Status, sprintf('Loading %s', file), 'busy');
             try
@@ -329,6 +346,97 @@ classdef ROIAnalysisApp < handle
             app.updateControls();
             UIKit.setStatus(app.W.Status, sprintf('Loaded %s (%d frames). Next: draw a ROI or line (step 3).', ...
                 file, nFr), 'success');
+            ok = true;
+        end
+
+        %% loadDemo - Load the synthetic imaging stack and pre-fill a ΔF/F analysis
+        % DemoData 'imaging': 96 x 96 x 150 frames at 10 Hz; a cell at
+        % (24, 30) with calcium transients (ΔF/F ~1) at 3, 7 and 11 s (its
+        % roiMask is in the file) and a vertical vessel at x = 60 whose
+        % diameter oscillates 12 +/- 3 px at 0.2 Hz, with a bright RBC moving
+        % down 2 px/frame. Sets method ΔF/F with the file roiMask and a line
+        % across the vessel from (45, 70) to (75, 70). Returns true on success.
+        function ok = loadDemo(app)
+            ok = false;
+            dlg = UIKit.busy(app.UIFig, sprintf('Preparing demo data (first time only takes a few seconds)%s', char(8230)));
+            UIKit.setStatus(app.W.Status, 'Preparing demo data', 'busy');
+            try
+                p = DemoData.file('imaging');
+            catch ME
+                UIKit.done(dlg);
+                UIKit.setStatus(app.W.Status, sprintf('Demo data failed: %s', ME.message), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not create the demo data: %s', ME.message), 'Demo data');
+                return;
+            end
+            UIKit.done(dlg);
+            if ~app.openFile(p), return; end
+            app.MethodDropdown.Value = 'ΔF/F (gCaMP)';
+            app.BaselineFramesEdit.Value = 30;   % 0-2.9 s, before the first transient
+            if ~isempty(app.ROIMask), app.setROIMask(app.ROIMask); end
+            app.setLine([45 70], [75 70]);
+            app.updateControls();
+            UIKit.setStatus(app.W.Status, ['Demo loaded: 15 s at 10 Hz with a cell (outlined, roiMask) ' ...
+                'and a vessel (line across it). Click Run for ΔF/F: peaks ~1 at 3, 7 and 11 s. Then try ' ...
+                'Vessel diameter (9-15 px, period 5 s) or Kymograph.'], 'success');
+            ok = true;
+        end
+
+        %% setROIMask - Use a logical H x W mask as the ROI (replaces a drawn ROI)
+        function setROIMask(app, mask)
+            if isempty(app.Stack)
+                error('NeuroAnalyzer:ROI:noStack', 'Load a stack before setting a ROI mask.');
+            end
+            if ~isequal(size(mask), [size(app.Stack, 1), size(app.Stack, 2)])
+                error('NeuroAnalyzer:ROI:maskSize', 'The mask must be %d x %d (H x W).', ...
+                    size(app.Stack, 1), size(app.Stack, 2));
+            end
+            linePos = shapePosition(app.CurrentLine);
+            try delete(app.CurrentROI); catch, end
+            app.CurrentROI = [];
+            app.ROIMask = logical(mask);
+            app.MaskFromFile = true;   % outlined, kept by Clear, used by Run
+            app.showFrame();
+            app.restoreShape('line', linePos);
+            app.onShapeMoved();
+        end
+
+        %% setLine - Set the kymograph / vessel line from p1 = [x1 y1] to p2 = [x2 y2] (px)
+        % Shown as an editable line when drawline is available, else as a plain overlay.
+        function setLine(app, p1, p2)
+            if isempty(app.Stack)
+                error('NeuroAnalyzer:ROI:noStack', 'Load a stack before setting a line.');
+            end
+            roiPos = shapePosition(app.CurrentROI);
+            try delete(app.CurrentLine); catch, end
+            app.CurrentLine = [];
+            app.LineStart = double(p1(:)'); app.LineEnd = double(p2(:)');
+            app.showFrame();                         % draws the plain overlay
+            app.restoreShape('roi', roiPos);
+            app.restoreShape('line', [app.LineStart; app.LineEnd]);   % editable if drawline exists
+            app.onShapeMoved();
+        end
+
+        %% runAnalysis - Run a method with the current ROI / line (scripts / CI)
+        % methodName: a Method item ('Brightness', 'Movement', 'Both',
+        % 'ΔF/F (gCaMP)', 'Speed (flow)', 'Kymograph', 'Vessel diameter'),
+        % a case-insensitive prefix of one, or 'dF/F' / 'dff'. Omitted =
+        % the selected method. Returns true when results were computed.
+        function ok = runAnalysis(app, methodName)
+            if nargin >= 2 && ~isempty(methodName)
+                items = app.MethodDropdown.Items;
+                name = char(methodName);
+                if any(strcmpi(name, {'dff', 'df/f', 'deltaf/f'})), name = 'ΔF/F'; end
+                k = find(strcmpi(items, name), 1);
+                if isempty(k), k = find(strncmpi(items, name, numel(name)), 1); end
+                if isempty(k)
+                    error('NeuroAnalyzer:ROI:unknownMethod', 'Unknown method ''%s''. Use one of: %s', ...
+                        name, strjoin(items, ', '));
+                end
+                app.MethodDropdown.Value = items{k};
+                app.onSettingsChanged();
+            end
+            app.computeAndPlot();
+            ok = ~isempty(app.LastMethod);
         end
 
         %% showFrame - First frame with the file roiMask outline (drawn shapes stay on top)
@@ -342,6 +450,13 @@ classdef ROIAnalysisApp < handle
                 hold(ax, 'on');
                 contour(ax, double(app.ROIMask), [0.5 0.5], 'LineColor', T.plotColors(5, :), ...
                     'LineWidth', 1.5);
+                hold(ax, 'off');
+            end
+            % Line set with setLine (no drawline object): plain overlay
+            if ~hasDrawn(app.CurrentLine) && ~isempty(app.LineStart) && ~isempty(app.LineEnd)
+                hold(ax, 'on');
+                plot(ax, [app.LineStart(1) app.LineEnd(1)], [app.LineStart(2) app.LineEnd(2)], '-', ...
+                    'Color', T.plotColors(6, :), 'LineWidth', 2, 'Tag', 'typedLine');
                 hold(ax, 'off');
             end
             title(ax, sprintf('%s (frame 1)', app.FileName), 'Interpreter', 'none', ...
@@ -398,6 +513,7 @@ classdef ROIAnalysisApp < handle
                 app.CurrentLine = drawline(app.AxesImage, 'Label', 'Line', ...
                     'Color', UITheme.plotColors(6, :));
                 app.LineStart = []; app.LineEnd = [];
+                delete(findobj(app.AxesImage, 'Tag', 'typedLine'));
                 addlistener(app.CurrentLine, 'ROIMoved', @(~,~)app.onShapeMoved());
             catch
                 UIKit.setStatus(app.W.Status, 'Could not draw a line', 'error');
@@ -423,6 +539,7 @@ classdef ROIAnalysisApp < handle
                     app.CurrentLine = drawline(app.AxesImage, 'Position', pos, ...
                         'Label', 'Line', 'Color', UITheme.plotColors(6, :));
                     addlistener(app.CurrentLine, 'ROIMoved', @(~,~)app.onShapeMoved());
+                    delete(findobj(app.AxesImage, 'Tag', 'typedLine'));  % editable line replaces the overlay
                 end
             catch
             end

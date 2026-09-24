@@ -12,6 +12,8 @@
 % and on the right the selected series (with t0, baseline and extracted
 % peak / half-maximum marked) above the results table. One updateControls()
 % sets every enable state from the current data.
+% Scriptable (CI walkthroughs, no dialogs): openFile(path), loadDemo(),
+% extract() (= extractFeatures()).
 % =========================================================================
 
 classdef SignalCharacterizationApp < handle
@@ -19,6 +21,7 @@ classdef SignalCharacterizationApp < handle
         UIFig
         W                  % UIKit.window struct (Fig, Body, Status, HelpBtn)
         LoadBtn
+        DemoBtn            % Try demo data (synthetic LDF trials with known answers)
         DataTypeMenu       % 'LDF segments', 'ERP (channel average)', 'Time series (t, y)'
         FileLabel          % What was detected in the loaded file
         T0Edit             % Stimulus onset (s)
@@ -80,10 +83,15 @@ classdef SignalCharacterizationApp < handle
                 'RowHeight', {'fit', T.buttonHeight, T.controlHeight, '1x'}, ...
                 'Padding', [10 8 10 10], 'RowSpacing', 6, 'BackgroundColor', T.cardBg);
             UIKit.step(g1, 1, 'Load data');
-            app.LoadBtn = UIKit.button(g1, 'Load .mat file', @(~,~)app.loadData(), 'primary', ...
+            b1 = uigridlayout(g1, [1 2], 'ColumnWidth', {'1x', '1x'}, 'Padding', [0 0 0 0], ...
+                'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            app.LoadBtn = UIKit.button(b1, 'Load .mat file', @(~,~)app.loadData(), 'primary', ...
                 ['Segmented LDF (segmentedLDF, segmentedTime) from Process LDF, an LFP file ' ...
                  'from Extract Ephys (lfp_data, t_lfp), the ERP export of LFP analysis, ' ...
                  'or any .mat with t and y']);
+            app.DemoBtn = UIKit.button(b1, 'Try demo data', @(~,~)app.loadDemo(), 'secondary', ...
+                ['Load synthetic LDF trials with known answers: hyperemia of about +30 PU ' ...
+                 'peaking about 4 s after stimulus onset']);
             f1 = uigridlayout(g1, [1 2], 'ColumnWidth', {70, '1x'}, 'RowHeight', {'1x'}, ...
                 'Padding', [0 0 0 0], 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
             app.DataTypeMenu = UIKit.field(f1, 'Data type', 'dropdown', ...
@@ -156,7 +164,7 @@ classdef SignalCharacterizationApp < handle
                 'FontSize', T.fontSmall, 'FontColor', T.mutedColor, 'HorizontalAlignment', 'right');
             app.Axes = uiaxes(pg);
             app.Axes.Layout.Row = 2; app.Axes.Layout.Column = [1 3];
-            UIKit.emptyAxes(app.Axes, 'Load a file to begin');
+            UIKit.emptyAxes(app.Axes, 'Load a file (or Try demo data) to begin');
 
             tableCard = UIKit.card(right, 'Results (one row per series; NaN = not computed or not found)');
             tg = uigridlayout(tableCard, [1 1], 'Padding', [6 6 6 6], 'BackgroundColor', T.cardBg);
@@ -166,7 +174,7 @@ classdef SignalCharacterizationApp < handle
                 'Tooltip', 'Click a row to plot that series', ...
                 'CellSelectionCallback', @(~,evt)app.onTableSelect(evt));
 
-            UIKit.setStatus(app.W.Status, 'Load a .mat file to begin (step 1).', 'info');
+            UIKit.setStatus(app.W.Status, 'Load a .mat file (or Try demo data) to begin (step 1).', 'info');
         end
 
         %% updateControls - Enable state of every control from the current data
@@ -203,7 +211,15 @@ classdef SignalCharacterizationApp < handle
             [file, path] = uigetfile(fullfile(startDir, '*.mat'), 'Select processed data');
             figure(app.UIFig);
             if isequal(file, 0), return; end
-            fullPath = fullfile(path, file);
+            app.openFile(fullfile(path, file));
+        end
+
+        %% openFile - Load a .mat without dialogs: detect format, parse series, plot
+        % Returns true on success.
+        function ok = openFile(app, fullPath)
+            ok = false;
+            [~, name, ext] = fileparts(fullPath);
+            file = [name ext];
             UIKit.setStatus(app.W.Status, sprintf('Loading %s', file), 'busy');
             try
                 s = load(fullPath);
@@ -268,6 +284,44 @@ classdef SignalCharacterizationApp < handle
             end
             UIKit.setStatus(app.W.Status, sprintf('Loaded %s: %d series.%s Choose features and click Extract.', ...
                 file, numel(app.SeriesT), msg), 'success');
+            ok = true;
+        end
+
+        %% loadDemo - Load synthetic LDF trials and pre-fill the settings
+        % DemoData 'ldfTrials': trials -5..20 s around each stimulus (10 Hz)
+        % with a hyperemia of ~+30 PU over ~120 PU peaking ~4 s after
+        % onset. Sets t0 = 0, direction Auto, every feature selected (the
+        % baseline becomes -5..0 s on load). Returns true on success.
+        function ok = loadDemo(app)
+            ok = false;
+            dlg = UIKit.busy(app.UIFig, sprintf('Preparing demo data (first time only takes a few seconds)%s', char(8230)));
+            UIKit.setStatus(app.W.Status, 'Preparing demo data', 'busy');
+            try
+                p = DemoData.file('ldfTrials');
+            catch ME
+                UIKit.done(dlg);
+                UIKit.setStatus(app.W.Status, sprintf('Demo data failed: %s', ME.message), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not create the demo data: %s', ME.message), 'Demo data');
+                return;
+            end
+            UIKit.done(dlg);
+            app.T0Edit.Value = 0;
+            app.DirectionMenu.Value = 'Auto';
+            if ~app.openFile(p), return; end
+            app.FeatureList.Value = app.FeatureItems;
+            app.plotSelected();
+            app.updateControls();
+            UIKit.setStatus(app.W.Status, sprintf(['Demo loaded: %d synthetic LDF trials (-5 to 20 s, stimulus at 0 s), ' ...
+                'all features selected. Click Extract features: expect peak latency ~4 s and ' ...
+                'peak amplitude ~30 PU.'], numel(app.SeriesT)), 'success');
+            ok = true;
+        end
+
+        %% extract - Extract the selected features with the current fields (scripts / CI)
+        % Same as the Extract features button. Returns true when results exist.
+        function ok = extract(app)
+            app.extractFeatures();
+            ok = app.HasResults;
         end
 
         %% parseSeries - (Re)build series from Data for the selected data type

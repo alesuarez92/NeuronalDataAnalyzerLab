@@ -6,7 +6,8 @@
 % when no project dirs are set), prompts for Import/Export directories.
 %
 % Layout (top to bottom): header (title, subtitle, Help) | project bar
-% (Import/Export folders, Set folders) | "Getting started" hint | one
+% (Import/Export folders, Set folders) | "Getting started" hint (with a
+% "Try with demo data" button that opens Help on Welcome) | one
 % workflow card per pipeline | status bar (toolbox availability) | footer.
 % Each workflow card holds a one-line description, the pipeline's steps as
 % numbered buttons in order (tooltips say which file goes in and out) and
@@ -27,6 +28,7 @@ classdef Main < handle
         ExportLabel
         ContentPanel
         StatusLabel        % Status bar (toolbox availability, last action)
+        DemoBtn            % "Try with demo data" (opens HelpApp('Welcome'))
         % Workflow cards
         LDFPanel
         EphysPanel
@@ -97,11 +99,19 @@ classdef Main < handle
 
             % === GETTING STARTED HINT ===
             hintPanel = uipanel(mainGrid, 'BorderType', 'none', 'BackgroundColor', T.bgGray);
-            hintGrid = uigridlayout(hintPanel, [1 1], 'Padding', [16 10 16 0], ...
+            hintGrid = uigridlayout(hintPanel, [1 2], 'ColumnWidth', {'1x', 190}, ...
+                'RowHeight', {'1x'}, 'Padding', [16 10 16 0], 'ColumnSpacing', 10, ...
                 'BackgroundColor', T.bgGray);
             UIKit.hint(hintGrid, ['Getting started: pick the card for your data and click its steps ' ...
                 'in order; each step saves a .mat file that the next step loads. Hover a button to see ' ...
                 'which file it needs, and use ? on a card (or ? Help in any window) for a quick start.']);
+            demoGrid = uigridlayout(hintGrid, [3 1], 'RowHeight', {'1x', T.buttonHeight, '1x'}, ...
+                'Padding', [0 0 0 0], 'RowSpacing', 0, 'BackgroundColor', T.bgGray);
+            app.DemoBtn = UIKit.button(demoGrid, [char(9654) ' Try with demo data'], ...
+                @(~,~)app.openDemoHelp(), 'secondary', ...
+                ['New here? Open Help: every topic has a "Try it with demo data" button that opens ' ...
+                 'the window with synthetic data whose answers are known']);
+            app.DemoBtn.Layout.Row = 2;
 
             % === WORKFLOW CARDS ===
             app.ContentPanel = uipanel(mainGrid, 'BackgroundColor', T.bgGray, 'BorderType', 'none');
@@ -220,6 +230,18 @@ classdef Main < handle
             catch ME
                 UIKit.setStatus(app.StatusLabel, sprintf('Could not open %s', name), 'error');
                 UIKit.alert(app.UIFig, sprintf('Could not open %s:\n%s', name, ME.message), name);
+            end
+        end
+
+        %% openDemoHelp - Help on Welcome: demo files and a "Try it" per window
+        function openDemoHelp(app)
+            try
+                HelpApp('Welcome');
+                UIKit.setStatus(app.StatusLabel, ['Help opened: pick a topic and click "Try it with demo ' ...
+                    'data", or "Generate all demo files" on Welcome'], 'success');
+            catch ME
+                UIKit.setStatus(app.StatusLabel, 'Could not open Help', 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not open Help:\n%s', ME.message), 'Help');
             end
         end
 

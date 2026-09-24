@@ -6,6 +6,7 @@
 % mua_fs, t_mua, mua_channels; optional stim_data, stim_fs, t_stim).
 % Window built with UIKit.window; left column of numbered step cards:
 %   1 Load MUA file      - file name, Fs, duration, channels, stimulus yes/no
+%                          (or Try demo data: synthetic MUA with known units)
 %   2 Channel & segments - channel dropdown; optional segmentation by
 %                          stimulation onsets (parameters in a UIKit.dialog)
 %   3 Spike sorting      - Configure... (UIKit.dialog: detection threshold
@@ -21,6 +22,8 @@
 % "MUA Analysis" tab. Analysis: runSpikeSorting (wrapper with busy dialog)
 % -> doSpikeSorting (detection, alignment, features, clustering, QC);
 % cluster merging helpers for drift correction are unchanged.
+% Scriptable (CI walkthroughs, no dialogs): openFile(path), loadDemo(),
+% runSorting(params).
 % =========================================================================
 
 classdef MUAAnalysisApp < handle
@@ -35,6 +38,7 @@ classdef MUAAnalysisApp < handle
         StatusLabel         % Status bar label (UIKit.setStatus)
         % Step 1 - Load
         LoadBtn             % Load MUA .mat
+        DemoBtn             % Try demo data (synthetic MUA with known units)
         FileLabel           % Loaded file name
         FileInfoLabel       % Fs, duration, channels, stimulus yes/no
         % Step 2 - Channel & segments
@@ -85,7 +89,7 @@ classdef MUAAnalysisApp < handle
     end
 
     methods
-        %% Constructor - Build UI; data loaded via Load MUA file
+        %% Constructor - Build UI; data loaded via Load MUA file or loadDemo
         % -------------------------------------------------------------
         % Must not open dialogs or block (CI smoke test screenshots UIFig).
         % -------------------------------------------------------------
@@ -113,13 +117,20 @@ classdef MUAAnalysisApp < handle
             left.Layout.Row = 1; left.Layout.Column = 1;
 
             % --- 1 Load MUA file ---
-            g = stepCard(left, 1, 'Load MUA file', {T.buttonHeight, 'fit', 'fit'});
+            g = stepCard(left, 1, 'Load MUA file', {T.buttonHeight, 'fit', 'fit'}, {'1x', '1x'});
             app.LoadBtn = UIKit.button(g, 'Load MUA file...', @(~,~)app.loadData(), 'primary', ...
                 'Open a .mat file saved by Extract Ephys (MUA channels, optional stimulus)');
+            app.LoadBtn.Layout.Row = 2; app.LoadBtn.Layout.Column = 1;
+            app.DemoBtn = UIKit.button(g, 'Try demo data', @(~,~)app.loadDemo(), 'secondary', ...
+                ['Load synthetic data with known answers: 3 units on channels 4-5 that fire more ' ...
+                 'after each stimulus (every 2 s)']);
+            app.DemoBtn.Layout.Row = 2; app.DemoBtn.Layout.Column = 2;
             app.FileLabel = uilabel(g, 'Text', 'No file loaded', 'FontSize', T.fontBody, ...
                 'FontColor', T.sectionTitleColor, 'FontWeight', 'bold', 'Interpreter', 'none');
+            app.FileLabel.Layout.Row = 3; app.FileLabel.Layout.Column = [1 2];
             app.FileInfoLabel = uilabel(g, 'Text', 'Sampling rate, duration and channels appear here', ...
                 'FontSize', T.fontSmall, 'FontColor', T.mutedColor, 'WordWrap', 'on');
+            app.FileInfoLabel.Layout.Row = 4; app.FileInfoLabel.Layout.Column = [1 2];
 
             % --- 2 Channel & segments ---
             g = stepCard(left, 2, 'Channel & segments', ...
@@ -293,9 +304,7 @@ classdef MUAAnalysisApp < handle
 
         %% loadData - Pick a .mat from Extract Ephys and show it
         % -------------------------------------------------------------
-        % Requires mua_data, mua_fs, t_mua, mua_channels; stim_data,
-        % stim_fs and t_stim are optional. Resets segmentation and any
-        % previous sorting results.
+        % Interactive: asks for the file, then openFile does the rest.
         % -------------------------------------------------------------
         function loadData(app)
             startDir = ProjectManager.getImportDir();
@@ -307,11 +316,25 @@ classdef MUAAnalysisApp < handle
                 UIKit.setStatus(app.StatusLabel, 'Loading cancelled', 'info');
                 return;
             end
+            app.openFile(fullfile(path, file));
+        end
 
+        %% openFile - Load a MUA .mat (no dialogs) and show it
+        % -------------------------------------------------------------
+        % Requires mua_data, mua_fs, t_mua, mua_channels; stim_data,
+        % stim_fs and t_stim are optional. Resets segmentation and any
+        % previous sorting results. rememberFolder (default true) stores
+        % the folder as the last used path. Returns true on success.
+        % -------------------------------------------------------------
+        function ok = openFile(app, fullPath, rememberFolder)
+            if nargin < 3, rememberFolder = true; end
+            ok = false;
+            [path, name, ext] = fileparts(fullPath);
+            file = [name ext];
             UIKit.setStatus(app.StatusLabel, sprintf('Loading %s...', file), 'busy');
             dlg = UIKit.busy(app.UIFig, sprintf('Loading %s...', file));
             try
-                data = load(fullfile(path, file));
+                data = load(fullPath);
                 needed = {'mua_data', 'mua_fs', 't_mua', 'mua_channels'};
                 missing = needed(~isfield(data, needed));
                 if ~isempty(missing)
@@ -328,7 +351,7 @@ classdef MUAAnalysisApp < handle
                 app.MUAData.fs = data.mua_fs;
                 app.MUAData.time = data.t_mua;
                 app.MUAData.channels = data.mua_channels;
-                app.FilePath = fullfile(path, file);
+                app.FilePath = fullPath;
 
                 % Reset segmentation and sorting state from any previous file
                 app.Segments = [];
@@ -360,7 +383,7 @@ classdef MUAAnalysisApp < handle
                 app.FileInfoLabel.Text = sprintf('%s Hz  ·  %s  ·  %d channel%s  ·  stimulus: %s', ...
                     num2str(fs), formatDuration(durSec), numel(app.MUAData.channels), ...
                     plural(numel(app.MUAData.channels)), yesNo(~isempty(app.StimData)));
-                Exporter.setLastUsedPath(path);
+                if rememberFolder, Exporter.setLastUsedPath(path); end
 
                 app.plotSignal();
                 app.refreshResultPlots();
@@ -368,6 +391,7 @@ classdef MUAAnalysisApp < handle
                 app.updateControls();
                 UIKit.setStatus(app.StatusLabel, sprintf('Loaded %s (%s Hz, %s, %d channels) - next: Run spike sorting (step 3)', ...
                     file, num2str(fs), formatDuration(durSec), numel(app.MUAData.channels)), 'success');
+                ok = true;
             catch ME
                 UIKit.done(dlg);
                 app.updateControls();
@@ -375,6 +399,65 @@ classdef MUAAnalysisApp < handle
                     'Cannot load file', 'error');
                 UIKit.setStatus(app.StatusLabel, sprintf('Error loading %s: %s', file, ME.message), 'error');
             end
+        end
+
+        %% loadDemo - Load the synthetic MUA file (known units) and pre-fill settings
+        % -------------------------------------------------------------
+        % DemoData 'mua': channels 3-5 at 24414 Hz; units 1 (~90 uV) and 2
+        % (~50 uV) on ch 4, unit 3 (~110 uV) on ch 5; firing rises for
+        % 50 ms after each stimulus (every 2 s from 1 s). Selects ch 4 and
+        % sets detection to MAD, k = 4, negative spikes. Returns true on success.
+        % -------------------------------------------------------------
+        function ok = loadDemo(app)
+            ok = false;
+            dlg = UIKit.busy(app.UIFig, sprintf('Preparing demo data (first time only takes a few seconds)%s', char(8230)));
+            UIKit.setStatus(app.StatusLabel, 'Preparing demo data', 'busy');
+            try
+                p = DemoData.file('mua');
+            catch ME
+                UIKit.done(dlg);
+                UIKit.alert(app.UIFig, sprintf('Could not create the demo data:\n%s', ME.message), ...
+                    'Demo data', 'error');
+                UIKit.setStatus(app.StatusLabel, sprintf('Demo data failed: %s', ME.message), 'error');
+                return;
+            end
+            UIKit.done(dlg);
+            if ~app.openFile(p, false), return; end
+            ch4 = find(app.MUAData.channels == 4, 1);
+            if ~isempty(ch4), app.ChannelMenu.Value = ch4; end
+            params = defaultSortParams();
+            params.detectMethod = 'MAD';
+            params.threshold = 4;
+            params.polarity = 'negative';
+            app.SpikeSortParams = params;
+            app.updateParamsLabel();
+            app.plotSignal();
+            app.updateControls();
+            UIKit.setStatus(app.StatusLabel, ['Demo loaded: 30 s of synthetic MUA (ch 3-5), stimulus every 2 s; ' ...
+                'ch 4 holds two units (~90 and ~50 uV), ch 5 a third (~110 uV). Channel 4 selected - ' ...
+                'click Run (step 3): expect 2 units whose rate rises 5-55 ms after each stimulus.'], 'success');
+            ok = true;
+        end
+
+        %% runSorting - Spike sorting without the Configure dialog (scripts / CI)
+        % -------------------------------------------------------------
+        % params: full or partial struct of sorting settings (missing
+        % fields come from defaultSortParams); omitted or [] = the current
+        % settings. Returns true when sorting produced results.
+        % -------------------------------------------------------------
+        function ok = runSorting(app, params)
+            if nargin < 2 || isempty(params)
+                params = app.SpikeSortParams;
+            else
+                merged = defaultSortParams();
+                fn = fieldnames(params);
+                for i = 1:numel(fn), merged.(fn{i}) = params.(fn{i}); end
+                params = merged;
+            end
+            app.SpikeSortParams = params;
+            app.updateParamsLabel();
+            app.runSpikeSorting(params);
+            ok = app.hasResults();
         end
 
         %% handleSegmentationToggle - Detect stimulus onsets and build segments
@@ -505,10 +588,10 @@ classdef MUAAnalysisApp < handle
         function plotSignal(app)
             T = UITheme;
             if isempty(app.MUAData)
-                UIKit.emptyAxes(app.AxStim, 'Load a file to begin');
                 UIKit.styleAxes(app.AxStim, 'Stimulus');
-                UIKit.emptyAxes(app.AxMUA, 'Load a MUA file (step 1) to see the signal');
+                UIKit.emptyAxes(app.AxStim, 'Load a MUA file (or Try demo data) to begin');
                 UIKit.styleAxes(app.AxMUA, 'MUA signal');
+                UIKit.emptyAxes(app.AxMUA, 'Load a MUA file (or Try demo data, step 1) to see the signal');
                 return;
             end
             [chIdx, segIdx] = app.currentSelection();
@@ -517,8 +600,8 @@ classdef MUAAnalysisApp < handle
             % Always plot full stimulus trace (if the file has one)
             ax = app.AxStim;
             if isempty(app.StimData)
-                UIKit.emptyAxes(ax, 'No stimulus channel in this file');
                 UIKit.styleAxes(ax, 'Stimulus');
+                UIKit.emptyAxes(ax, 'No stimulus channel in this file');
             else
                 resetAxes(ax);
                 plot(ax, app.StimData.time, app.StimData.signal, 'Color', T.stimColor);
@@ -558,8 +641,8 @@ classdef MUAAnalysisApp < handle
                 x = app.MUAData.data(chIdx, :);
             end
             if isempty(t)
-                UIKit.emptyAxes(ax, 'This segment lies outside the recording');
                 UIKit.styleAxes(ax, sprintf('Segment %d - Channel %d', segIdx, chNum));
+                UIKit.emptyAxes(ax, 'This segment lies outside the recording');
                 return;
             end
             tx = t;
@@ -1415,12 +1498,12 @@ classdef MUAAnalysisApp < handle
             sel = app.selectedClusterPos();
             if ~app.hasResults() || isempty(sel)
                 ax = nexttile(tl);
+                UIKit.styleAxes(ax, 'Waveforms');
                 if app.hasResults()
                     UIKit.emptyAxes(ax, 'Select clusters in step 4 to see their waveforms');
                 else
                     UIKit.emptyAxes(ax, 'Run spike sorting (step 3) to see spike waveforms');
                 end
-                UIKit.styleAxes(ax, 'Waveforms');
                 return;
             end
             maxTiles = 16;
@@ -1457,6 +1540,7 @@ classdef MUAAnalysisApp < handle
             ax = app.AxFeatures;
             sel = app.selectedClusterPos();
             if ~app.hasResults() || isempty(app.DisplayPCs) || isempty(sel)
+                UIKit.styleAxes(ax, 'Clusters in waveform PCA space');
                 if ~app.hasResults()
                     UIKit.emptyAxes(ax, 'Run spike sorting (step 3) to see the clusters');
                 elseif isempty(sel)
@@ -1464,7 +1548,6 @@ classdef MUAAnalysisApp < handle
                 else
                     UIKit.emptyAxes(ax, 'Waveform PCA not available for these spikes');
                 end
-                UIKit.styleAxes(ax, 'Clusters in waveform PCA space');
                 return;
             end
             resetAxes(ax);
@@ -1491,12 +1574,12 @@ classdef MUAAnalysisApp < handle
             ax = app.AxRate;
             sel = app.selectedClusterPos();
             if ~app.hasResults() || isempty(sel)
+                UIKit.styleAxes(ax, 'Spike rate over time');
                 if ~app.hasResults()
                     UIKit.emptyAxes(ax, 'Run spike sorting (step 3) to see the spike rate');
                 else
                     UIKit.emptyAxes(ax, 'Select at least one cluster in step 4');
                 end
-                UIKit.styleAxes(ax, 'Spike rate over time');
                 return;
             end
 
@@ -1584,12 +1667,12 @@ classdef MUAAnalysisApp < handle
             ax = app.AxISI;
             sel = app.selectedClusterPos();
             if ~app.hasResults() || isempty(sel)
+                UIKit.styleAxes(ax, 'Inter-spike intervals');
                 if ~app.hasResults()
                     UIKit.emptyAxes(ax, 'Run spike sorting first');
                 else
                     UIKit.emptyAxes(ax, 'Select clusters in step 4');
                 end
-                UIKit.styleAxes(ax, 'Inter-spike intervals');
                 return;
             end
             resetAxes(ax);
@@ -1615,10 +1698,10 @@ classdef MUAAnalysisApp < handle
             T = UITheme;
             if ~isstruct(app.SpikeResults) || ~isfield(app.SpikeResults, 'waveformsRaw') || ...
                     isempty(app.SpikeResults.waveformsRaw) || ~app.hasResults()
-                UIKit.emptyAxes(app.AxAlignBefore, 'Run spike sorting first');
                 UIKit.styleAxes(app.AxAlignBefore, 'Before alignment');
-                UIKit.emptyAxes(app.AxAlignAfter, 'Run spike sorting first');
+                UIKit.emptyAxes(app.AxAlignBefore, 'Run spike sorting first');
                 UIKit.styleAxes(app.AxAlignAfter, 'After alignment');
+                UIKit.emptyAxes(app.AxAlignAfter, 'Run spike sorting first');
                 return;
             end
 
