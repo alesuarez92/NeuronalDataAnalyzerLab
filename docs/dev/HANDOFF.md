@@ -138,6 +138,29 @@ Each area also adds `core/demo/*.m` generators and
   - The ERP schematic (`docs/LFPAnalysisPrinciple.png`) labels "P2" twice; the first negative peak should be N1. Tell the owner and suggest a fix.
 - **Publishing:** the owner hasn't decided yet between an artifact preview, publishing it themselves on Cloudflare Pages, or GitHub Pages. Build the site to work from any static host with relative links only.
 
+### 4b. In-app Help vs website (decision proposed to the owner, 2026-09-24)
+
+Hybrid, with one source of content:
+
+- **In-app Help stays short and task-focused:**
+  - quick start per window, demo expectations and troubleshooting;
+  - the **▶ Try it with demo data** button, which can only work inside MATLAB;
+  - available offline and always matching the installed version.
+- **The website gets the long-form content:**
+  - methods and theory, references, video-style walkthroughs;
+  - large figures, file-format details, FAQ, glossary and search;
+  - the heavy base64 images move out of `HelpApp`: pages currently reach about 2.4 MB, which makes Help slow.
+- **Links between them:**
+  - each Help topic gets a "Learn more ↗" link to the matching website page;
+  - each numbered step card in the windows gets a "?" that opens that step's Help section.
+- **Single source:** write the text once, for example as `docs/help/<topic>.md` with front-matter for the quick start, demo expectations and troubleshooting. `HelpApp` renders it via uihtml, and the website uses the same files, so they can't drift apart.
+- **Content work:**
+  - add the wave-1 features: cluster merge/split, raster/PSTH, correlograms, time–frequency, motion correction, multiple ROIs, cell detection, file formats, group statistics, figure export;
+  - shorter pages;
+  - a glossary with units;
+  - a version stamp on every page.
+- The owner raised this; confirm the approach with them before building it.
+
 ## 5. How to work cheaply
 
 - **CI budget (owner's rule: spend nothing on GitHub).** The repo is public, so Actions on standard runners and MathWorks' MATLAB actions are free, and the account's default spending limit is $0. Still, keep runs low:
