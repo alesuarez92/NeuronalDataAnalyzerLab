@@ -9,6 +9,8 @@ function run_tests
     addpath(root);
     addpath(fullfile(root, 'core'));
     addpath(fullfile(root, 'core', 'imaging'));
+    addpath(fullfile(root, 'core', 'io'));
+    addpath(fullfile(root, 'core', 'demo'));
     addpath(fullfile(root, 'apps'));
     addpath(fullfile(root, 'tests'));
 
