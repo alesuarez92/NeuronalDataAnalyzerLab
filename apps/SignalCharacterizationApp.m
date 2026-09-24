@@ -17,6 +17,7 @@ classdef SignalCharacterizationApp < handle
         FileLabel
         T0Edit             % Stimulus onset (s)
         BaselineEdit       % e.g. "0 0.1" for 0 to 0.1 s
+        DirectionMenu      % 'Auto', 'Positive', 'Negative' response direction
         FeatureList        % Checkboxes or list for which features to compute
         ExtractBtn
         TablePanel
@@ -87,14 +88,19 @@ classdef SignalCharacterizationApp < handle
                 'HighlightColor', T.cardBorder);
             inner = uigridlayout(row2, [2, 1], 'RowHeight', {36, 115}, ...
                 'Padding', [12 10 12 18], 'RowSpacing', 10);
-            % Top row: Stimulus onset and Baseline window (label immediately left of each input)
-            topRow = uigridlayout(inner, [1, 4], 'ColumnWidth', {130, 85, 130, 95}, 'ColumnSpacing', 8);
+            % Top row: Stimulus onset, Baseline window and Direction (label immediately left of each input)
+            topRow = uigridlayout(inner, [1, 6], 'ColumnWidth', {130, 85, 130, 95, 65, 100}, 'ColumnSpacing', 8);
             uilabel(topRow, 'Text', 'Stimulus onset t0 (s):');
             app.T0Edit = uieditfield(topRow, 'numeric', 'Value', 0, ...
                 'Tooltip', 'Time of stimulus onset in the signal');
             uilabel(topRow, 'Text', 'Baseline window (s):');
             app.BaselineEdit = uieditfield(topRow, 'text', 'Value', '0 0.05', ...
                 'Tooltip', 'e.g. 0 0.05 for 0 to 0.05 s');
+            uilabel(topRow, 'Text', 'Direction:');
+            app.DirectionMenu = uidropdown(topRow, 'Items', {'Auto', 'Positive', 'Negative'}, ...
+                'Value', 'Auto', ...
+                'Tooltip', ['Response polarity. Auto: negative if the post-onset deflection ' ...
+                    'below baseline is larger than above']);
             % Bottom row: Features label and listbox (full width so it does not get cut off)
             botRow = uigridlayout(inner, [1, 2], 'ColumnWidth', {160, '1x'}, 'ColumnSpacing', 8);
             uilabel(botRow, 'Text', 'Features (multi-select):');
@@ -154,7 +160,7 @@ classdef SignalCharacterizationApp < handle
             end
             app.Data = s;
             app.FileLabel.Text = file;
-            % Infer Fs from segmentedTime or t if present
+            % Infer Fs from segmentedTime, lfp_fs, t or t_lfp if present
             if isfield(s, 'segmentedTime') && ~isempty(s.segmentedTime)
                 tt = s.segmentedTime(:);
                 if numel(tt) > 1
@@ -162,8 +168,10 @@ classdef SignalCharacterizationApp < handle
                 else
                     app.Fs = 1000;
                 end
-            elseif isfield(s, 't')
-                t = s.t(:);
+            elseif isfield(s, 'lfp_fs') && ~isempty(s.lfp_fs)
+                app.Fs = s.lfp_fs;
+            elseif isfield(s, 't') || isfield(s, 't_lfp')
+                if isfield(s, 't'), t = s.t(:); else, t = s.t_lfp(:); end
                 if numel(t) > 1, app.Fs = 1/(t(2)-t(1)); else app.Fs = 1000; end
             else
                 app.Fs = 1000;
@@ -192,6 +200,7 @@ classdef SignalCharacterizationApp < handle
             end
 
             % Compute features for each series
+            nSkipped = 0;
             names = {};
             peakLat = [];
             onsetD = [];
@@ -206,23 +215,47 @@ classdef SignalCharacterizationApp < handle
             for k = 1:numel(tCell)
                 t = tCell{k}(:);
                 y = yCell{k}(:);
+                % Skip empty or malformed series (t and y must match)
+                if isempty(t) || numel(t) ~= numel(y)
+                    nSkipped = nSkipped + 1;
+                    continue;
+                end
                 if isempty(baseline)
                     baseVal = mean(y(t >= t(1) & t < min(t(1)+0.05, t(end))));
                 else
                     idx = t >= baseline(1) & t <= baseline(2);
                     baseVal = mean(y(idx));
                 end
+                % Empty/NaN baseline window: fall back to pre-onset mean, else y(1)
+                if ~isfinite(baseVal)
+                    pre = y(t < app.T0);
+                    baseVal = mean(pre(isfinite(pre)));
+                    if ~isfinite(baseVal), baseVal = y(1); end
+                end
+                % Response direction: explicit, or Auto from the larger
+                % post-onset deflection relative to baseline
+                switch app.DirectionMenu.Value
+                    case 'Positive', dirn = 'max';
+                    case 'Negative', dirn = 'min';
+                    otherwise
+                        post = y(t >= app.T0);
+                        if ~isempty(post) && (baseVal - min(post)) > (max(post) - baseVal)
+                            dirn = 'min';
+                        else
+                            dirn = 'max';
+                        end
+                end
                 names{end+1} = sprintf('Trial %d', k); %#ok<AGROW>
 
                 if ismember('Peak latency', selected)
-                    [lat, ~] = SignalFeatures.peakLatency(t, y, app.T0, 'max');
+                    [lat, ~] = SignalFeatures.peakLatency(t, y, app.T0, dirn);
                     peakLat(end+1) = lat; %#ok<AGROW>
                 else, peakLat(end+1) = NaN; end %#ok<AGROW>
                 if ismember('Onset delay (50%)', selected)
-                    onsetD(end+1) = SignalFeatures.onsetDelay(t, y, app.T0, 0.5, 'max', baseVal); %#ok<AGROW>
+                    onsetD(end+1) = SignalFeatures.onsetDelay(t, y, app.T0, 0.5, dirn, baseVal); %#ok<AGROW>
                 else, onsetD(end+1) = NaN; end %#ok<AGROW>
                 if ismember('FWHM', selected)
-                    fwhm_(end+1) = SignalFeatures.fwhm(t, y, app.T0, 'max', baseVal); %#ok<AGROW>
+                    fwhm_(end+1) = SignalFeatures.fwhm(t, y, app.T0, dirn, baseVal); %#ok<AGROW>
                 else, fwhm_(end+1) = NaN; end %#ok<AGROW>
                 if ismember('AUC positive', selected)
                     aucP(end+1) = SignalFeatures.aucPositive(t, y, baseVal); %#ok<AGROW>
@@ -231,13 +264,13 @@ classdef SignalCharacterizationApp < handle
                     aucN(end+1) = SignalFeatures.aucNegative(t, y, baseVal); %#ok<AGROW>
                 else, aucN(end+1) = NaN; end %#ok<AGROW>
                 if ismember('Rise time', selected)
-                    riseT(end+1) = SignalFeatures.riseTime(t, y, app.T0, 'max', baseVal); %#ok<AGROW>
+                    riseT(end+1) = SignalFeatures.riseTime(t, y, app.T0, dirn, baseVal); %#ok<AGROW>
                 else, riseT(end+1) = NaN; end %#ok<AGROW>
                 if ismember('Decay time', selected)
-                    decT(end+1) = SignalFeatures.decayTime(t, y, app.T0, 'max', baseVal); %#ok<AGROW>
+                    decT(end+1) = SignalFeatures.decayTime(t, y, app.T0, dirn, baseVal); %#ok<AGROW>
                 else, decT(end+1) = NaN; end %#ok<AGROW>
                 if ismember('Peak amplitude', selected)
-                    [amp, ~] = SignalFeatures.peakAmplitude(t, y, app.T0, 'max', baseVal);
+                    [amp, ~] = SignalFeatures.peakAmplitude(t, y, app.T0, dirn, baseVal);
                     peakA(end+1) = amp; %#ok<AGROW>
                 else, peakA(end+1) = NaN; end %#ok<AGROW>
                 if ismember('Stim–response integral', selected)
@@ -249,7 +282,11 @@ classdef SignalCharacterizationApp < handle
             app.ResultsTable.Data = [names(:), num2cell(peakLat(:)), num2cell(onsetD(:)), ...
                 num2cell(fwhm_(:)), num2cell(aucP(:)), num2cell(aucN(:)), ...
                 num2cell(riseT(:)), num2cell(decT(:)), num2cell(peakA(:)), num2cell(integral_(:))];
-            app.ExportBtn.Enable = 'on';
+            app.ExportBtn.Enable = ~isempty(names);
+            if nSkipped > 0
+                uialert(app.UIFig, sprintf('%d series skipped (empty, or t and y lengths differ).', nSkipped), ...
+                    'Skipped series', 'Icon', 'warning');
+            end
         end
 
         function [tCell, yCell] = getTimeSeriesFromData(app, dt)
@@ -267,9 +304,11 @@ classdef SignalCharacterizationApp < handle
                     yCell{end+1} = seg(i,:); %#ok<AGROW>
                 end
             elseif contains(dt, 'ERP') || contains(dt, 'average')
-                if isfield(s, 't') && isfield(s, 'lfp_data')
+                % ExtractEphysApp saves the LFP time vector as 't_lfp'
+                if isfield(s, 't'), tv = s.t; elseif isfield(s, 't_lfp'), tv = s.t_lfp; else, tv = []; end
+                if ~isempty(tv) && isfield(s, 'lfp_data')
                     y = mean(s.lfp_data, 1);
-                    tCell = {s.t(:)'};
+                    tCell = {tv(:)'};
                     yCell = {y(:)'};
                 elseif isfield(s, 't') && isfield(s, 'y')
                     tCell = {s.t(:)'};

@@ -127,11 +127,28 @@ classdef MUAProcessingParamsApp < handle
         end
 
         function applyParams(app)
+            order = str2double(app.OrderEdit.String);
+            lowCutoff = str2double(app.FreqLowEdit.String);
+            highCutoff = str2double(app.FreqHighEdit.String);
+            smoothMs = str2double(app.SmoothEdit.String);
+            % Validate before closing; keep the dialog open on bad input
+            if ~isfinite(order) || order < 1 || order ~= round(order)
+                errordlg('Filter order must be a positive integer.', 'Invalid Parameters');
+                return;
+            end
+            if ~isfinite(lowCutoff) || ~isfinite(highCutoff) || lowCutoff <= 0 || highCutoff <= lowCutoff
+                errordlg('Cutoffs must satisfy 0 < Low < High (Hz).', 'Invalid Parameters');
+                return;
+            end
+            if ~app.AutoSmoothCheckbox.Value && (~isfinite(smoothMs) || smoothMs <= 0)
+                errordlg('Smoothing window must be a positive number of ms.', 'Invalid Parameters');
+                return;
+            end
             app.Params.filterType = app.FilterTypeMenu.String{app.FilterTypeMenu.Value};
-            app.Params.order = str2double(app.OrderEdit.String);
-            app.Params.lowCutoff = str2double(app.FreqLowEdit.String);
-            app.Params.highCutoff = str2double(app.FreqHighEdit.String);
-            app.Params.smoothMs = str2double(app.SmoothEdit.String);
+            app.Params.order = order;
+            app.Params.lowCutoff = lowCutoff;
+            app.Params.highCutoff = highCutoff;
+            app.Params.smoothMs = smoothMs;
             app.Params.autoSmooth = app.AutoSmoothCheckbox.Value;
             app.Params.overlayRaw = app.OverlayCheckbox.Value;
             delete(app.UIFig);

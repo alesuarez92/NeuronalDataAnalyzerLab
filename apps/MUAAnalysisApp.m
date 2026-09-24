@@ -200,6 +200,14 @@ classdef MUAAnalysisApp < handle
                 app.MUAData.time = data.t_mua;
                 app.MUAData.channels = data.mua_channels;
 
+                % Reset segmentation and sorting state from any previous file
+                app.Segments = [];
+                app.SegmentCheckbox.Value = 0;
+                app.SegmentMenu.Enable = 'off';
+                app.SpikeResults = [];
+                app.ClusterSelectMenu.String = {};
+                app.ClusterSelectMenu.Value = [];
+
                 if isfield(data, 'stim_data') && isfield(data, 'stim_fs') && isfield(data, 't_stim')
                     app.StimData.signal = data.stim_data;
                     app.StimData.fs = data.stim_fs;
@@ -208,6 +216,8 @@ classdef MUAAnalysisApp < handle
                     plot(app.AxStim, app.StimData.time, app.StimData.signal);
                     title(app.AxStim, 'Stimulation Signal');
                 else
+                    % No stimulus in this file: clear any stale stimulus
+                    app.StimData = [];
                     cla(app.AxStim);
                     title(app.AxStim, 'No Stimulation Data');
                 end
@@ -235,6 +245,11 @@ classdef MUAAnalysisApp < handle
 
         function handleSegmentationToggle(app)
             if app.SegmentCheckbox.Value
+                if isempty(app.StimData)
+                    errordlg('No stimulation data in the loaded file; cannot segment.', 'Segmentation');
+                    app.SegmentCheckbox.Value = 0;
+                    return;
+                end
                 prompt = {'Minimum ISI (s):', 'Threshold:', 'Pre-stim time (s):', 'Post-stim time (s):'};
                 dlgtitle = 'Stimulation Onset Detection Parameters';
                 dims = [1 35];
@@ -253,10 +268,11 @@ classdef MUAAnalysisApp < handle
                 aboveThresh = stim > threshold;
                 onsetIdx = find(diff([0; aboveThresh(:)]) == 1);
                 onsetTimes = t(onsetIdx(:));
+                onsetTimes = onsetTimes(:);
                 if isempty(onsetTimes), app.Segments = []; return; end
                 isi = [Inf; diff(onsetTimes(:))];
                 onsetTimes = onsetTimes(isi > minISI);
-                segs = [onsetTimes' - preTime, onsetTimes' + postTime];
+                segs = [onsetTimes(:) - preTime, onsetTimes(:) + postTime];
                 app.Segments = segs;
                 app.SegmentParams = struct('minISI', minISI, 'threshold', threshold, 'preTime', preTime, 'postTime', postTime);
                 segNames = arrayfun(@(i) sprintf('Segment %d', i), 1:size(segs,1), 'UniformOutput', false);
@@ -275,14 +291,18 @@ classdef MUAAnalysisApp < handle
             if isempty(app.MUAData), return; end
             chIdx = app.ChannelMenu.Value;
 
-            % Always plot full stimulus trace
+            % Always plot full stimulus trace (if the file has one)
             cla(app.AxStim);
-            plot(app.AxStim, app.StimData.time, app.StimData.signal);
-            title(app.AxStim, 'Stimulation Signal');
+            if isempty(app.StimData)
+                title(app.AxStim, 'No Stimulation Data');
+            else
+                plot(app.AxStim, app.StimData.time, app.StimData.signal);
+                title(app.AxStim, 'Stimulation Signal');
+            end
             ylabel(app.AxStim, 'Amplitude');
             set(app.AxStim, 'XTickLabel', []);
 
-            if app.SegmentCheckbox.Value && ~isempty(app.Segments)
+            if app.SegmentCheckbox.Value && ~isempty(app.Segments) && ~isempty(app.StimData)
                 hold(app.AxStim, 'on');
                 yLims = ylim(app.AxStim);
                 segIdx = app.SegmentMenu.Value;
@@ -316,6 +336,10 @@ classdef MUAAnalysisApp < handle
         end
 
         function configureSpikeSorting(app)
+            if isempty(app.MUAData)
+                errordlg('Load MUA data before configuring spike sorting.', 'No Data');
+                return;
+            end
             % Layout uses a 35-px row pitch from y=510 down to y=125, then the
             % drift section (90, 55) and the run button at y=10. Dialog height
             % grown to 540 to keep all rows separated cleanly.
@@ -362,8 +386,13 @@ classdef MUAAnalysisApp < handle
 
             % Feature extraction method
             uicontrol(d, 'Style', 'text', 'Position', [20 300 200 20], 'String', 'Feature Extraction Method:');
+            % ICA needs the external FastICA package and Wavelet needs the
+            % Wavelet Toolbox; only offer them when available.
+            featureOpts = {'PCA', 'ICA', 'Waveform', 'Wavelet', 't-SNE'};
+            if ~exist('fastica', 'file'), featureOpts(strcmp(featureOpts, 'ICA')) = []; end
+            if ~exist('wavedec', 'file'), featureOpts(strcmp(featureOpts, 'Wavelet')) = []; end
             featurePopup = uicontrol(d, 'Style', 'popupmenu', 'Position', [220 300 120 25], ...
-                'String', {'PCA', 'ICA', 'Waveform', 'Wavelet', 't-SNE'});
+                'String', featureOpts);
 
             % Number of components
             uicontrol(d, 'Style', 'text', 'Position', [20 265 200 20], 'String', '# of Components:');
@@ -482,6 +511,23 @@ classdef MUAAnalysisApp < handle
         end
 
         function runSpikeSorting(app, params)
+            if isempty(app.MUAData)
+                errordlg('Load MUA data before running spike sorting.', 'No Data');
+                return;
+            end
+            % Required toolboxes: Signal Processing (findpeaks, butter,
+            % filtfilt) and Statistics and Machine Learning (pca, kmeans,
+            % fitgmdist, dbscan, silhouette, prctile).
+            hasSignal = license('test', 'Signal_Toolbox') && exist('findpeaks', 'file') == 2;
+            hasStats = license('test', 'Statistics_Toolbox') && exist('kmeans', 'file') == 2;
+            if ~hasSignal || ~hasStats
+                missing = {};
+                if ~hasSignal, missing{end+1} = 'Signal Processing Toolbox'; end
+                if ~hasStats, missing{end+1} = 'Statistics and Machine Learning Toolbox'; end
+                errordlg(sprintf('Spike sorting requires: %s.', strjoin(missing, ', ')), 'Missing Toolbox');
+                return;
+            end
+
             % Update status <<<<<<<<<<<<<<<<<<<
             app.ProgressLabel.String = 'Starting spike detection...';
             drawnow;
@@ -489,6 +535,10 @@ classdef MUAAnalysisApp < handle
             
             app.SpikeSortParams = params;
             chIdx = app.ChannelMenu.Value;
+            % Drop results of any previous run so partial failures leave no stale state
+            app.SpikeResults = [];
+            app.ClusterSelectMenu.String = {};
+            app.ClusterSelectMenu.Value = [];
 
             % Extract data (either full trace or segmented portion)
             if app.SegmentCheckbox.Value && ~isempty(app.Segments)
@@ -512,117 +562,98 @@ classdef MUAAnalysisApp < handle
         
             fs = app.MUAData.fs;
         
+            % --- Optional bandpass filter before detection (zero-phase) ---
+            if params.filter
+                nyq = fs / 2;
+                if ~(isfinite(params.bpLow) && isfinite(params.bpHigh) && params.bpLow > 0 && ...
+                        params.bpHigh > params.bpLow && params.bpHigh < nyq)
+                    errordlg(sprintf('Invalid bandpass range. Require 0 < low < high < %.0f Hz (Nyquist).', nyq), ...
+                        'Filter Error');
+                    app.ProgressLabel.String = 'Ready';
+                    return;
+                end
+                [bFilt, aFilt] = butter(3, [params.bpLow params.bpHigh] / nyq, 'bandpass');
+                x = filtfilt(bFilt, aFilt, double(x));
+                app.SpikeResults.segmentedMUA = x;
+            end
+
             % --- Spike detection based on method and polarity ---
-            refracSamples = round(params.refractoryMs / 1000 * fs);
-            polarityFactor = 1;  % default
-            
+            % Detection uses a short dead time (~0.3 ms) so that sub-refractory
+            % ISIs stay visible to the ISI quality check; the refractory period
+            % is used for QC only. Double detections of the same spike are
+            % removed after alignment (same extremum).
+            deadSamples = max(1, round(0.3e-3 * fs));
+
             %% Spike detection
-            % Step 1: Preprocess signal based on detection method
             % Update status <<<<<<<<<<<<<<<<<<<
             app.ProgressLabel.String = sprintf('Detecting spikes using %s...', params.detectMethod);
             drawnow;
             % <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-            switch lower(params.detectMethod)
-                case 'neo'
-                    % Nonlinear Energy Operator: Ψ[x(t)] = x(t)^2 - x(t-1)*x(t+1)
-                    xProc = x;
-                    xProc = (xProc - min(xProc)) / (max(xProc) - min(xProc));  % normalize to [0,1]
-                    %xProc = [0 diff(xProc)].^2 - [0 xProc(1:end-1)].*[xProc(2:end) 0];
-                    med = median(xProc);
-                    mad = 1.4826 * median(abs(xProc - med));
-                    baseThresh = med + params.threshold * mad;
-                    %baseThresh = mean(xProc) + params.threshold * std(xProc);
-            
-                case 'mad'
-                    % Global MAD threshold (median + threshold * 1.4826*MAD), like OLD threshold method
-                    xProc = x;
-                    med = median(xProc);
-                    mad_val = 1.4826 * median(abs(xProc - med));
-                    baseThresh = med + params.threshold * mad_val;
-            
-                case 'rolling mad'
-                    med = median(x);
-                    mad = 1.4826 * median(abs(x - med));
-                    baseThresh = med + params.threshold * mad;
-                    xProc = x;
-            
-                case 'percentile'
-                    xProc = x;
-                    baseThresh = prctile(abs(xProc), 99.9);  % 99.9th percentile
-            
-                otherwise  % 'standard'                    
-                    baseThresh = mean(x) + params.threshold * std(x);
-                    xProc = x;
-            end
-            
-            % Step 2: Polarity control
-            switch lower(params.polarity)
-                case 'negative'
-                    dataToSearch = -xProc;
-                    threshVal = baseThresh;
-                    polarityFactor = -1;
-            
-                case 'positive'
-                    dataToSearch = xProc;
-                    threshVal = baseThresh;
-                    polarityFactor = 1;
-            
-                case 'both'
-                    if strcmpi(params.detectMethod, 'rolling mad')
-                        warning('Polarity="both" not supported with Rolling MAD. Using standard threshold.');
-                        threshValPos = mean(x) + params.threshold * std(x);
-                        threshValNeg = -threshValPos;
-                    elseif strcmpi(params.detectMethod, 'mad')
-                        med = median(x);
-                        mad_val = 1.4826 * median(abs(x - med));
-                        threshValPos = med + params.threshold * mad_val;
-                        threshValNeg = med - params.threshold * mad_val;
-                    elseif strcmpi(params.detectMethod, 'percentile')
-                        threshValPos = baseThresh;
-                        threshValNeg = -baseThresh;
-                    elseif strcmpi(params.detectMethod, 'neo')
-                        threshValPos = baseThresh;
-                        threshValNeg = baseThresh;  % NEO is symmetric
-                    else
-                        threshValPos = mean(x) + params.threshold * std(x);
-                        threshValNeg = -threshValPos;
-                    end
-            
-                    [~, posLocs] = findpeaks(x, 'MinPeakHeight', threshValPos, ...
-                        'MinPeakDistance', refracSamples);
-                    [~, negLocs] = findpeaks(-x, 'MinPeakHeight', -threshValNeg, ...
-                        'MinPeakDistance', refracSamples);
-            
-                    locs = sort([posLocs(:); negLocs(:)]);
-                    spikeTimes = t(locs);
-            
-                    fprintf('[Detection] BOTH polarity | spikes: %d\n', numel(locs));
-                    return;
-            end
-            
-            % Step 3: Detect spikes
-            if strcmpi(params.detectMethod, 'rolling mad')
-                initialIdx = find(dataToSearch > baseThresh);
-                locs = [];
-                last = -Inf;
-                searchWindow = round(0.5 * fs / 1000 * params.alignWinMs);  % 0.5 ms in samples
-                
-                for i = 1:length(initialIdx)
-                    if initialIdx(i) - last > refracSamples
-                        winStart = max(1, initialIdx(i) - searchWindow);
-                        winEnd = min(length(dataToSearch), initialIdx(i) + searchWindow);
-                        [~, peakRel] = max(dataToSearch(winStart:winEnd));
-                        locs(end+1,1) = winStart + peakRel - 1;
-                        last = locs(end);
-                    end
-                end
+            isNEO = strcmpi(params.detectMethod, 'neo');
+            if isNEO
+                % Nonlinear Energy Operator: psi[n] = x[n]^2 - x[n-1]*x[n+1].
+                % Spikes of either sign give large positive psi, so the NEO
+                % output is searched directly irrespective of polarity.
+                xd = double(x);
+                psi = zeros(size(xd));
+                psi(2:end-1) = xd(2:end-1).^2 - xd(1:end-2) .* xd(3:end);
+                searchSigns = 1;
             else
-                % Global threshold
-                [~, locs] = findpeaks(dataToSearch, 'MinPeakHeight', baseThresh, ...
-                    'MinPeakDistance', refracSamples);
+                switch lower(params.polarity)
+                    case 'negative', searchSigns = -1;
+                    case 'positive', searchSigns = 1;
+                    otherwise,       searchSigns = [1 -1];  % 'both'
+                end
             end
-            
+
+            locs = [];
+            threshLines = [];  % thresholds on the MUA amplitude scale (for plotting)
+            for sgn = searchSigns
+                if isNEO
+                    dataToSearch = psi;
+                    % Threshold on the NEO scale
+                    thr = mean(psi) + params.threshold * std(psi);
+                else
+                    % Search the sign-flipped signal; threshold computed on it
+                    dataToSearch = sgn * double(x);
+                    switch lower(params.detectMethod)
+                        case {'mad', 'rolling mad'}
+                            med = median(dataToSearch);
+                            madVal = 1.4826 * median(abs(dataToSearch - med));
+                            thr = med + params.threshold * madVal;
+                        case 'percentile'
+                            thr = prctile(abs(dataToSearch), 99.9);  % 99.9th percentile
+                        otherwise  % 'standard'
+                            thr = mean(dataToSearch) + params.threshold * std(dataToSearch);
+                    end
+                    threshLines(end+1) = sgn * thr; %#ok<AGROW>
+                end
+
+                if strcmpi(params.detectMethod, 'rolling mad')
+                    initialIdx = find(dataToSearch > thr);
+                    sgnLocs = [];
+                    last = -Inf;
+                    searchWindow = round(0.5 * fs / 1000 * params.alignWinMs);  % 0.5 ms in samples
+                    for i = 1:length(initialIdx)
+                        if initialIdx(i) - last > deadSamples
+                            winStart = max(1, initialIdx(i) - searchWindow);
+                            winEnd = min(length(dataToSearch), initialIdx(i) + searchWindow);
+                            [~, peakRel] = max(dataToSearch(winStart:winEnd));
+                            sgnLocs(end+1,1) = winStart + peakRel - 1; %#ok<AGROW>
+                            last = sgnLocs(end);
+                        end
+                    end
+                else
+                    % Global threshold
+                    [~, sgnLocs] = findpeaks(dataToSearch, 'MinPeakHeight', thr, ...
+                        'MinPeakDistance', deadSamples);
+                end
+                locs = [locs; sgnLocs(:)]; %#ok<AGROW>
+            end
+            locs = unique(locs);  % sorted; merges coincident detections
+
             spikeTimes = t(locs);
+            spikeTimes = spikeTimes(:);
 
             fprintf('[Detection] Method: %s | Polarity: %s | Spikes: %d\n', ...
                 lower(params.detectMethod), lower(params.polarity), numel(locs));
@@ -652,6 +683,7 @@ classdef MUAAnalysisApp < handle
             
             alignedWaves = nan(length(locs), 2*win + 1);
             validIdx = false(size(locs));
+            peakLocs = nan(size(locs));
             
             for i = 1:length(locs)
                 center = locs(i);
@@ -670,15 +702,26 @@ classdef MUAAnalysisApp < handle
                     if leftFinal > 0 && rightFinal <= length(x)
                         alignedWaves(i,:) = x(leftFinal:rightFinal);
                         validIdx(i) = true;
+                        peakLocs(i) = peakLoc;
                     end
                 end
                 
             end
             
+            % Drop double detections of the same spike (snapped to the same extremum)
+            validPos = find(validIdx);
+            [~, keepPos] = unique(peakLocs(validPos), 'stable');
+            validIdx(:) = false;
+            validIdx(validPos(keepPos)) = true;
+
             % Filter only valid waveform rows
             alignedWaves = alignedWaves(validIdx, :);
             locs = locs(validIdx);  % spike indices
             spikeTimes = spikeTimes(validIdx);  % spike times aligned with waveforms
+            if numel(locs) < params.minSpikesPerCluster * 2
+                errordlg('Too few spikes with complete waveforms for clustering.', 'Clustering Error');
+                return;
+            end
 
             % Store original waveforms (centered at detection locs)
             preAlignedWaves = nan(length(locs), 2*win + 1);
@@ -807,6 +850,12 @@ classdef MUAAnalysisApp < handle
                         b, valid, numel(unique(labels)));
                 end
         
+                if isempty(waveformBins)
+                    errordlg('Time-binning drift correction: no time bin produced a valid clustering.', ...
+                        'Clustering Error');
+                    return;
+                end
+
                 % Flatten all bins into one array
                 spikeTimesFlat = []; waveformsFlat = []; labelsFlat = []; binIDsFlat = [];
                 for i = 1:numel(waveformBins)
@@ -827,14 +876,19 @@ classdef MUAAnalysisApp < handle
                         clusterLabels(clusterLabels == k) = 0;  % reassign to noise
                     end
                 end
-                % Replace segment-relative spike times and indices
+                % Replace spike times, indices and waveforms with the kept bins
+                % so they stay in sync with clusterLabels
                 spikeTimes = spikeTimesFlat;
+                alignedWaves = waveformsFlat;
                 locs = round((spikeTimes - t(1)) * fs) + 1;  % aligned to segment trace
+                locs = min(max(locs, 1), numel(t));
 
             % DRIFT CORRECTION: dynamic clustering
             elseif params.enableDriftCorrection && strcmpi(params.driftMethod, 'Dynamic Clustering')
                 
-                tnorm = ((spikeTimes - min(spikeTimes)) / range(spikeTimes))';
+                tSpan = max(spikeTimes) - min(spikeTimes);
+                if tSpan <= 0, tSpan = 1; end
+                tnorm = (spikeTimes(:) - min(spikeTimes)) / tSpan;
                 dynFeatures = [features, tnorm];  
                 switch lower(params.clusterMethod)
                     case 'k-means', [clusterLabels, valid] = tryKMeans(dynFeatures, params.minSpikesPerCluster);
@@ -863,18 +917,26 @@ classdef MUAAnalysisApp < handle
             clusterLabels = round(clusterLabels);
             app.SpikeResults.spikeTimes = spikeTimes;
             app.SpikeResults.clusterIdx = clusterLabels;
-            app.SpikeResults.waveforms = [];
-        
+            app.SpikeResults.waveforms = {};
+
+            % Scatter x-axis: absolute time when full trace, relative when segmented (match axes)
+            useRelativeTime = app.SegmentCheckbox.Value && ~isempty(app.Segments);
+            if params.filter
+                % Show the filtered trace the spikes were detected on
+                cla(app.AxMUA);
+                if useRelativeTime
+                    plot(app.AxMUA, t - t(1), x, 'k');
+                else
+                    plot(app.AxMUA, t, x, 'k');
+                end
+            end
             hold(app.AxMUA, 'on');
             clusterIDs = unique(clusterLabels);
             cmap = lines(numel(clusterIDs));
-        
-            % Plot threshold lines
-            if ~strcmp(params.polarity, 'both')
-                yline(app.AxMUA, polarityFactor * threshVal, '--r', 'LineWidth', 1.5);
-            else
-                yline(app.AxMUA, mean(x) + params.threshold * std(x), '--r', 'LineWidth', 1.5);
-                yline(app.AxMUA, -mean(x) - params.threshold * std(x), '--r', 'LineWidth', 1.5);
+
+            % Plot threshold lines (none for NEO: its threshold is on the NEO scale)
+            for thrLine = threshLines
+                yline(app.AxMUA, thrLine, '--r', 'LineWidth', 1.5);
             end
         
             % Plot each cluster: spikes, waveforms, and ISI
@@ -883,8 +945,6 @@ classdef MUAAnalysisApp < handle
             isiThresh = 2.0;  % max % spikes with ISIs < 1.5 ms allowed
             SNRThresh = 2.0;  % min SNR allowed
             preSpikeBasleine = 0.5; % pre-spike baseline (e.g., first 0.5 ms)
-            % Scatter x-axis: absolute time when full trace, relative when segmented (match axes)
-            useRelativeTime = app.SegmentCheckbox.Value && ~isempty(app.Segments);
             for i = 1:numel(clusterIDs)
                 k = clusterIDs(i);
                 si = locs(clusterLabels == k);
@@ -906,7 +966,8 @@ classdef MUAAnalysisApp < handle
                 ampP2P = max(meanWave) - min(meanWave);
                 
                 % Estimate noise from pre-spike baseline (e.g., first 0.5 ms)
-                baselineEnd = round(preSpikeBasleine / 1000 * fs);
+                % (at least 2 samples so std is defined at low fs)
+                baselineEnd = min(size(clusterWaves, 2), max(2, round(preSpikeBasleine / 1000 * fs)));
                 baselineRegion = clusterWaves(:, 1:baselineEnd);
                 noiseSD = std(baselineRegion(:));
                 
@@ -1018,6 +1079,11 @@ classdef MUAAnalysisApp < handle
         end
 
         function updateClusterScatter(app)
+            % Nothing to show until spike sorting has produced results
+            if ~isstruct(app.SpikeResults) || ~isfield(app.SpikeResults, 'clusterIdx') || ...
+                    ~isfield(app.SpikeResults, 'segmentedTime') || isempty(app.SpikeResults.segmentedTime)
+                return;
+            end
             % Clear AxMUA but restore MUA trace
             cla(app.AxMUA);
             hold(app.AxMUA, 'on');
@@ -1045,14 +1111,20 @@ classdef MUAAnalysisApp < handle
         
             for j = 1:numel(selectedClusters)
                 k = selectedClusters(j);
+                % waveforms{} is stored by position in the sorted cluster list
+                % (same as the colour index), not by cluster ID (ID 0 = noise)
                 colorIdx = find(allClusterIDs == k);
                 si = find(clusterIdx == k);
         
-                if useAmps && numel(app.SpikeResults.waveforms) >= k && ~isempty(app.SpikeResults.waveforms{k})
-                    clusterWaves = app.SpikeResults.waveforms{k};
+                if useAmps && numel(app.SpikeResults.waveforms) >= colorIdx && ...
+                        ~isempty(app.SpikeResults.waveforms{colorIdx})
+                    clusterWaves = app.SpikeResults.waveforms{colorIdx};
                     amps = max(clusterWaves, [], 2);  % Use max amp
                 else
-                    amps = x(si);  % Fallback to raw MUA value at spike index (may be off if x ≠ spike-trace)
+                    % Fallback: MUA value at each spike's sample index
+                    sampIdx = round((app.SpikeResults.spikeTimes(si) - t(1)) * app.MUAData.fs) + 1;
+                    sampIdx = min(max(sampIdx, 1), numel(x));
+                    amps = x(sampIdx);
                 end
         
                 scatter(app.AxMUA, app.SpikeResults.spikeTimes(si)-t(1), amps, 20,...
@@ -1062,6 +1134,10 @@ classdef MUAAnalysisApp < handle
         end
 
         function selectAllClusters(app)
+            if ~isstruct(app.SpikeResults) || ~isfield(app.SpikeResults, 'clusterIdx') || ...
+                    isempty(app.SpikeResults.clusterIdx)
+                return;
+            end
             allClusterIDs = unique(app.SpikeResults.clusterIdx);
             
             % Only include cluster IDs ≥ 1
@@ -1074,6 +1150,7 @@ classdef MUAAnalysisApp < handle
         end
 
         function clearClusterSelection(app)
+            if isempty(app.ClusterSelectMenu.String), return; end
             app.ClusterSelectMenu.Value = [];
             app.updateClusterScatter();
         end
@@ -1145,8 +1222,9 @@ classdef MUAAnalysisApp < handle
             labelOffset = 0;
             finalLabels = zeros(size(labels));
             
-            % Store cluster centroids from previous bin
+            % Store cluster centroids (and their global labels) from previous bin
             prevCentroids = [];
+            prevIDs = [];
             
             for b = 1:length(uniqueBins)
                 bin = uniqueBins(b);
@@ -1154,7 +1232,7 @@ classdef MUAAnalysisApp < handle
                 
                 waveBin = waveforms(idx, :);
                 labelBin = labels(idx);
-                uniqueClusts = unique(labelBin);
+                uniqueClusts = unique(labelBin(labelBin > 0));  % label 0 = noise, stays 0
                 
                 % Compute centroids for each cluster in this bin
                 centroids = zeros(length(uniqueClusts), size(waveBin, 2));
@@ -1165,7 +1243,7 @@ classdef MUAAnalysisApp < handle
                 
                 % Match clusters to previous bin centroids
                 newLabels = zeros(size(labelBin));
-                assigned = false(1, length(uniqueClusts));
+                curIDs = zeros(length(uniqueClusts), 1);
                 
                 for c = 1:length(uniqueClusts)
                     thisCentroid = centroids(c, :);
@@ -1173,7 +1251,7 @@ classdef MUAAnalysisApp < handle
                     bestScore = -Inf;
                     
                     for p = 1:size(prevCentroids,1)
-                        corrVal = corr(thisCentroid', prevCentroids(p,:)');
+                        corrVal = pearsonR(thisCentroid, prevCentroids(p,:));
                         distVal = norm(thisCentroid - prevCentroids(p,:));
                         
                         if corrVal >= corrThresh && distVal <= distThresh
@@ -1186,15 +1264,20 @@ classdef MUAAnalysisApp < handle
                     end
                     
                     if bestMatch > 0
-                        newLabels(labelBin == uniqueClusts(c)) = bestMatch;
+                        % Inherit the global label of the matched previous cluster
+                        curIDs(c) = prevIDs(bestMatch);
                     else
                         labelOffset = labelOffset + 1;
-                        newLabels(labelBin == uniqueClusts(c)) = labelOffset;
+                        curIDs(c) = labelOffset;
                     end
+                    newLabels(labelBin == uniqueClusts(c)) = curIDs(c);
                 end
                 
                 finalLabels(idx) = newLabels;
-                prevCentroids = centroids;
+                if ~isempty(uniqueClusts)  % an all-noise bin keeps the previous reference
+                    prevCentroids = centroids;
+                    prevIDs = curIDs;
+                end
             end
         end
 
@@ -1212,7 +1295,7 @@ classdef MUAAnalysisApp < handle
                 for j = i+1:length(uniqueClusts)
                     c1 = centroids(uniqueClusts(i),:);
                     c2 = centroids(uniqueClusts(j),:);
-                    r = corr(c1', c2');
+                    r = pearsonR(c1, c2);
                     d = norm(c1 - c2);
                     if r > corrThresh && d < distThresh
                         mergedLabels(mergedLabels == uniqueClusts(j)) = uniqueClusts(i);
@@ -1220,8 +1303,10 @@ classdef MUAAnalysisApp < handle
                 end
             end
         
-            % Reassign cluster labels to be sequential
-            [~,~,mergedLabels] = unique(mergedLabels, 'sorted');
+            % Reassign cluster labels to be sequential (keep 0 = noise as 0)
+            pos = mergedLabels > 0;
+            [~, ~, seqLabels] = unique(mergedLabels(pos), 'sorted');
+            mergedLabels(pos) = seqLabels;
         end
 
         function mergedLabels = mergeSimilarClusters(app, waveforms, labels, corrThresh, distThresh)
@@ -1243,7 +1328,7 @@ classdef MUAAnalysisApp < handle
         
             for i = 1:K
                 for j = i+1:K
-                    r = corr(centroids(i,:)', centroids(j,:)');
+                    r = pearsonR(centroids(i,:), centroids(j,:));
                     d = norm(centroids(i,:) - centroids(j,:));
                     if r > corrThresh && d < distThresh
                         % Merge cluster j into i
@@ -1259,8 +1344,10 @@ classdef MUAAnalysisApp < handle
                 end
             end
         
-            % Reassign cluster labels to be sequential
-            [~,~,mergedLabels] = unique(mergedLabels, 'sorted');
+            % Reassign cluster labels to be sequential (keep 0 = noise as 0)
+            pos = mergedLabels > 0;
+            [~, ~, seqLabels] = unique(mergedLabels(pos), 'sorted');
+            mergedLabels(pos) = seqLabels;
         end
 
 
@@ -1291,13 +1378,24 @@ classdef MUAAnalysisApp < handle
                 return;
             end
         
-            clusterIDs = app.ClusterIDLookup(app.ClusterSelectMenu.Value);
+            % Listbox items are built from unique(clusterIdx), in that order
+            allClusterIDs = unique(app.SpikeResults.clusterIdx);
+            selectedIdx = app.ClusterSelectMenu.Value;
+            selectedIdx = selectedIdx(selectedIdx >= 1 & selectedIdx <= numel(allClusterIDs));
+            if isempty(selectedIdx)
+                errordlg('Select at least one cluster.');
+                return;
+            end
+            clusterIDs = allClusterIDs(selectedIdx);
             t = app.SpikeResults.spikeTimes;
             c = app.SpikeResults.clusterIdx;
         
             tStart = min(t);
             tEnd = max(t);
             edges = tStart:binSize:tEnd;
+            if numel(edges) < 2 || edges(end) < tEnd
+                edges(end+1) = edges(end) + binSize;  % cover the last spikes
+            end
             centers = edges(1:end-1) + binSize/2;
         
             figure('Name', 'Spike Rate Over Time', 'Position', [100 100 700 400]); hold on;
@@ -1319,7 +1417,11 @@ classdef MUAAnalysisApp < handle
             end
         
             xlabel('Time (s)');
-            ylabel(isRelative * "Relative Rate" + ~isRelative * "Firing Rate (Hz)");
+            if isRelative
+                ylabel('Relative Rate');
+            else
+                ylabel('Firing Rate (Hz)');
+            end
             title('Spike Rate Over Time');
             legend show;
         end
@@ -1387,10 +1489,16 @@ end
 function [idx, valid] = tryDBSCAN(features, minSpikes, epsilon)
     if isnan(epsilon) || epsilon <= 0
         % Auto-tune epsilon using k-distance heuristic
-        k = min(10, size(features, 2)); % e.g., 10th nearest neighbor
-        D = pdist2(features, features);
-        D = sort(D, 2);
-        kDistances = D(:, k + 1);  % skip self-distance
+        N = size(features, 1);
+        if N < 2
+            idx = zeros(N, 1);
+            valid = false;
+            return;
+        end
+        k = min(10, N - 1); % e.g., 10th nearest neighbor
+        % knnsearch avoids the N x N distance matrix; column 1 is self
+        [~, D] = knnsearch(features, features, 'K', k + 1);
+        kDistances = D(:, k + 1);
         epsilon = prctile(kDistances, 95);  % choose 95th percentile
     end
 
@@ -1403,4 +1511,10 @@ function [idx, valid] = tryDBSCAN(features, minSpikes, epsilon)
 
     idx(idx == -1) = 0; % unclustered
     valid = true;
+end
+
+function r = pearsonR(a, b)
+    % Pearson correlation of two vectors (base MATLAB, no toolbox)
+    R = corrcoef(a(:), b(:));
+    r = R(1, 2);
 end

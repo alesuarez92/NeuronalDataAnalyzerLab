@@ -148,14 +148,25 @@ classdef ROIAnalysisApp < handle
                     info = imfinfo(fullPath);
                     n = numel(info);
                     first = imread(fullPath, 1);
-                    app.Stack = zeros([size(first, 1), size(first, 2), n], class(first));
-                    app.Stack(:, :, 1) = first;
-                    for k = 2:n
-                        app.Stack(:, :, k) = imread(fullPath, k);
+                    % Preallocate double; RGB(A) frames are collapsed to the
+                    % grayscale mean of the colour channels
+                    app.Stack = zeros(size(first, 1), size(first, 2), n);
+                    for k = 1:n
+                        fr = double(imread(fullPath, k));
+                        if ndims(fr) == 3
+                            fr = mean(fr(:, :, 1:min(3, size(fr, 3))), 3);
+                        end
+                        app.Stack(:, :, k) = fr;
                     end
                     app.TimeVec = 1:n;
+                    app.ROIMask = [];
                 end
-                app.ROIMask = [];
+                % Drawn ROI/line belong to the previous stack; drop them so a
+                % roiMask loaded from .mat is actually used
+                try delete(app.CurrentROI); catch, end
+                try delete(app.CurrentLine); catch, end
+                app.CurrentROI = []; app.CurrentLine = [];
+                app.LineStart = []; app.LineEnd = [];
                 app.FileLabel.Text = file;
             catch ME
                 errordlg(sprintf('Load failed: %s', ME.message), 'Load error');
@@ -167,11 +178,7 @@ classdef ROIAnalysisApp < handle
                 errordlg('Load a stack first.', 'ROI');
                 return;
             end
-            first = app.Stack(:, :, 1);
-            if ndims(first) == 3
-                first = mean(first, 3);
-            end
-            imshow(first, [], 'Parent', app.AxesImage);
+            imshow(app.firstFrame(), [], 'Parent', app.AxesImage);
             try
                 delete(app.CurrentROI);
             catch
@@ -189,11 +196,7 @@ classdef ROIAnalysisApp < handle
                 errordlg('Load a stack first.', 'Line');
                 return;
             end
-            first = app.Stack(:, :, 1);
-            if ndims(first) == 3
-                first = mean(first, 3);
-            end
-            imshow(first, [], 'Parent', app.AxesImage);
+            imshow(app.firstFrame(), [], 'Parent', app.AxesImage);
             try
                 delete(app.CurrentLine);
             catch
@@ -203,6 +206,15 @@ classdef ROIAnalysisApp < handle
                 app.LineStart = []; app.LineEnd = [];
             catch
                 errordlg('Draw a line for kymograph or vessel diameter. If drawline is not available, set line in .mat as lineStart, lineEnd.', 'Line');
+            end
+        end
+
+        function first = firstFrame(app)
+            % First frame as a 2-D grayscale image (H x W x N or H x W x 3 x N stacks)
+            if ndims(app.Stack) == 4
+                first = mean(double(app.Stack(:, :, :, 1)), 3);
+            else
+                first = app.Stack(:, :, 1);
             end
         end
 
@@ -222,6 +234,10 @@ classdef ROIAnalysisApp < handle
                 app.ROIMask(y1:y2, x1:x2) = true;
             end
             stack = double(app.Stack);
+            if ndims(stack) == 4
+                % H x W x 3 x N (RGB stack): collapse to grayscale mean per frame
+                stack = reshape(mean(stack, 3), size(stack, 1), size(stack, 2), size(stack, 4));
+            end
             if app.ConvertBWCb.Value
                 stack = imageToGrayscale256(stack);
             end
@@ -271,24 +287,25 @@ classdef ROIAnalysisApp < handle
 
             switch method
                 case 'Brightness'
-                    [app.Intensity, app.T] = roiIntensityOverTime(stack, app.ROIMask, app.TimeVec);
+                    [app.Intensity, app.T] = roiIntensityOverTime(stack, app.ROIMask, app.T);
                 case 'Movement'
-                    [app.Movement, ~] = roiMovement(stack, app.ROIMask, app.TimeVec, 'diff');
+                    [app.Movement, ~] = roiMovement(stack, app.ROIMask, app.T, 'diff');
                 case 'Both'
-                    [app.Intensity, app.T] = roiIntensityOverTime(stack, app.ROIMask, app.TimeVec);
-                    [app.Movement, ~] = roiMovement(stack, app.ROIMask, app.TimeVec, 'diff');
+                    [app.Intensity, app.T] = roiIntensityOverTime(stack, app.ROIMask, app.T);
+                    [app.Movement, ~] = roiMovement(stack, app.ROIMask, app.T, 'diff');
                 case 'ΔF/F (gCaMP)'
-                    [app.DFF, app.T, ~] = deltaFOverF(stack, app.ROIMask, app.TimeVec, 'first', 30);
+                    [app.DFF, app.T, ~] = deltaFOverF(stack, app.ROIMask, app.T, 'first', 30);
                 case 'Speed (flow)'
-                    [app.Speed, app.T] = roiFlowSpeed(stack, app.ROIMask, app.TimeVec);
+                    [app.Speed, app.T] = roiFlowSpeed(stack, app.ROIMask, app.T);
                 case 'Kymograph'
-                    [app.Kymo, ~, app.T] = kymograph(stack, app.LineStart, app.LineEnd, app.TimeVec);
+                    [app.Kymo, ~, app.T] = kymograph(stack, app.LineStart, app.LineEnd, app.T);
                 case 'Vessel diameter'
-                    [app.Diameter, app.T, ~] = vesselDiameterFromLine(stack, app.LineStart, app.LineEnd, app.TimeVec, 'fwhm');
+                    [app.Diameter, app.T, ~] = vesselDiameterFromLine(stack, app.LineStart, app.LineEnd, app.T, 'fwhm');
             end
 
-            % Plot
-            cla(app.AxesPlot);
+            % Plot (reset clears a previous yyaxis right side; colorbar removed explicitly)
+            colorbar(app.AxesPlot, 'off');
+            cla(app.AxesPlot, 'reset');
             if strcmp(method, 'Kymograph') && ~isempty(app.Kymo)
                 imagesc(app.AxesPlot, app.T, 1:size(app.Kymo, 1), app.Kymo);
                 app.AxesPlot.YDir = 'normal';
