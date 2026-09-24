@@ -24,7 +24,10 @@ Before any meaningful work, announce one of:
 - Tests + CI green on every change. No "trivial" exemption.
 - Build clean (0 errors; warnings acceptable if pre-existing).
 - Use your own CLI tools (`gh`, `git`, language toolchains). Don't ask the human what you can run yourself.
-- No AI/agent attribution on commits, PRs, or other GitHub-visible artefacts.
+- No AI/agent attribution on commits, PRs, or other GitHub-visible artefacts. The owner, Alejandro Suarez, is the sole author of this repository; only add other people who are real collaborators.
+- Before the first commit of every session, set the commit identity to the owner (cloud containers default to another identity):
+  `git config user.name "Alejandro Suarez" && git config user.email "107207149+alesuarez92@users.noreply.github.com"`
+  Never add `Co-Authored-By` or session-link trailers.
 
 ## After every checkpoint
 
