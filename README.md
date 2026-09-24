@@ -115,7 +115,8 @@ the SDK.
 ## Development
 
 - **Tests:** run `run_tests` from the project root, or `runtests('tests')`.
-  See [tests/README.md](tests/README.md).
+  See [tests/README.md](tests/README.md). CI runs code analysis and the
+  tests on every push ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 - **Versioning:** semver, single source of truth in `core/UITheme.version`.
   Each release is tagged (`v0.1.0`, ...) and recorded in
   [CHANGELOG.md](CHANGELOG.md).

@@ -7,6 +7,43 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Signal Characterization**: FWHM, rise time and decay time used the peak
+  latency as the peak amplitude, so their thresholds were wrong; rise time's
+  10%/90% levels collapsed onto the peak; FWHM counted samples outside the
+  peak lobe. All features now share one baseline rule and honour a new
+  **Direction** option (Auto / Positive / Negative). ERP files saved by
+  Extract Ephys (`t_lfp`) are now accepted.
+- **LFP / ERP**: edge epochs were averaged in as zeros; onset timing was one
+  sample late. Downsampled LFP saved the requested rate instead of the real
+  one (e.g. 1017.25 Hz, not 1000 Hz, for TDT data). CSD input is validated.
+- **MUA**: the saved MUA signal was nearly nulled by unrectified smoothing;
+  polarity "both" never clustered; the NEO option did not apply NEO; the
+  ISI-violation check could never fire; "Filter before detection" was
+  ignored; Plot Spike Rate always crashed; drift-correction relabelling mixed
+  up cluster IDs and merged noise into cluster 1.
+- **LDF**: re-running processing compounded filtering/downsampling;
+  downsampling now anti-aliases; crop started one sample early; a stale
+  crop could be saved after loading a new file.
+- **ROI / imaging**: RGB TIFFs crashed on load; `roiMask` from `.mat` was
+  discarded; propagation-speed estimates had the wrong sign/magnitude;
+  vessel diameter crashed on `[x1 y1 x2 y2]` lines.
+- Input validation across dialogs and file loaders instead of crashes.
+
+### Added
+
+- Unit tests for `SignalFeatures` and `core/imaging` checked against
+  analytic answers (`SignalFeaturesTest`, `ImagingTest`).
+- GitHub Actions CI: MATLAB code analysis and unit tests on every push.
+- Smoothing and percentile normalization work without the Image Processing
+  / Statistics toolboxes; the launcher warns when the Signal Processing
+  Toolbox is missing.
+
+### Removed
+
+- `.brain/` tooling folder.
+
 ## [0.1.0] - 2026-05-07
 
 First public release. The repo bundles a complete UI, the LDF and electrophysiology
