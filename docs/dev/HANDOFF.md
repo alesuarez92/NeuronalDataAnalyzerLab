@@ -91,16 +91,19 @@ Each area also adds `core/demo/*.m` generators and
    - update the launcher (`core/Main.m`) if needed;
    - add CHANGELOG entries.
 
-## 3. WAVE 2 — integrated (2026-09-24), waiting for CI
+## 3. WAVE 2 — done and green (2026-09-24)
 
-Both areas are committed together with the lead's integration (Help topics
-"Batch processing" and "Sessions and reports", a quick-start line per window,
-session buttons in ProcessingLDFApp, CHANGELOG). Reports:
+Batch processing and sessions/reports are committed, green in CI (run 41:
+199 passed, 0 failed, 1 skipped = matnwb), and the review fixes of their
+screenshots and PDFs are green too (run 42, `871dfbf`). Reports:
 `docs/dev/reports/batch.md`, `docs/dev/reports/session-report.md`.
-Neither area ran in real MATLAB before this push (Octave only), so expect CI
-fixes. Things to look at first: MUA batch sorting (never run), the report PDF
-layout, the Java MD5 call, the new card heights (Main is now 940 px tall,
-BatchApp 1440x860), and test durations (target < 90 s per file).
+Known limitation: `Batch.seriesFeatures` copies Signal Characterization's
+feature rules; change both together.
+
+Next: wave 3 (Welcome topic and README mention Batch and Sessions; check the
+launcher; Help "Learn more" links once the website URL exists), then the PR
+into `main` (delete `docs/dev/` first; remove the ci/screenshots publishing
+step and branch once everything is tested).
 
 ### Original wave-2 plan
 
