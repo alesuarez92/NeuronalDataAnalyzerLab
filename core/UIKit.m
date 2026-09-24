@@ -215,6 +215,9 @@ classdef UIKit
         %% styleAxes - Consistent axes look: grid, fonts, labels
         function styleAxes(ax, ttl, xl, yl)
             T = UITheme;
+            % Undo emptyAxes: its placeholder text and fixed empty ticks
+            delete(findobj(ax, 'Tag', 'emptyHint'));
+            ax.XTickMode = 'auto'; ax.YTickMode = 'auto';
             if nargin >= 2 && ~isempty(ttl), title(ax, ttl, 'FontWeight', 'bold', 'Color', T.sectionTitleColor); end
             if nargin >= 3 && ~isempty(xl), xlabel(ax, xl); end
             if nargin >= 4 && ~isempty(yl), ylabel(ax, yl); end
