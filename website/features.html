@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Response features and statistics · NeuroAnalyzer</title>
+<meta name="description" content="Signal Characterization in NeuroAnalyzer: response features, group statistics with effect sizes and vector figure export.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<main id="main">
+
+<section class="page-head"><p class="eyebrow">Pipeline</p><h1>Response features, group statistics and figures</h1><p class="lede">Signal Characterization turns each response into numbers, compares groups of animals with statistical tests and exports publication figures.</p></section>
+<nav class="toc" aria-label="On this page"><a href="#features">Features</a><a href="#stats">Groups & statistics</a><a href="#figures">Figure export</a><a href="#walkthrough">Walkthrough</a><a href="#io">Inputs and outputs</a><a href="#demo">Demo expectations</a></nav>
+
+<section class="section" id="features"><h2>Features of a single response</h2>
+<div class="two">
+<div class="prose"><h4>Reference level and direction</h4>
+<ul>
+<li><b>Baseline</b>: the mean of the signal inside the baseline window is the reference for every feature. If the window holds no samples, the pre-onset mean is used; if end ≤ start, the first 0.05 s of the trace. For trials that start before t0 the window is set to the pre-stimulus part when the file is loaded.</li>
+<li><b>Direction</b>: Positive (peaks), Negative (troughs) or Auto (negative when the post-onset deflection below baseline is larger than above).</li>
+</ul>
+<h4>Features (measured after t0)</h4>
+<ul>
+<li><b>Peak latency</b>: time from t0 to the peak.</li>
+<li><b>Onset delay (50%)</b>: time from t0 until the response first reaches 50% of the baseline-to-peak amplitude.</li>
+<li><b>FWHM</b>: width of the part of the response around the peak that stays beyond half of the baseline-to-peak amplitude.</li>
+<li><b>AUC positive / negative</b>: area above / below the baseline over the whole trace.</li>
+<li><b>Rise time</b>: 10% → 90% of the baseline-to-peak amplitude, before the peak.</li>
+<li><b>Decay time</b>: from the peak until the signal returns past 50%.</li>
+<li><b>Peak amplitude</b>: peak minus baseline.</li>
+<li><b>Stim–response integral</b>: integral of the signal from t0 to the end.</li>
+</ul>
+<p>A feature that cannot be measured (e.g. the signal never returns to 50%) is NaN.</p></div>
+<figure class="illus"><div class="shot"><img src="assets/figures/SignalCharacterizationPrinciple.png" alt="Onset t0, baseline window, peak amplitude, FWHM, rise and decay." loading="lazy"><span class="badge illus">Illustration</span></div><figcaption>Onset t0, baseline window, peak amplitude, FWHM, rise and decay. <span class="credit">Figure: Alejandro Suarez.</span></figcaption></figure>
+</div>
+<p class="muted">Data types detected on loading: LDF trials (one series per trial), LFP from Extract Ephys (mean over channels), an ERP export, or any file with <code>t</code> and <code>y</code>. The plot marks t0, the baseline window, the detected peak and the FWHM before you extract, so the settings can be checked.</p></section>
+
+<section class="section" id="stats"><h2>Groups &amp; statistics</h2>
+<div class="prose">
+<p>In the <b>Groups &amp; statistics</b> tab, add one .mat file per animal to each group. One value per animal is computed for the chosen feature (recommended: from the file's mean trace), then tested:</p>
+<div class="tablewrap"><table class="stack"><thead><tr><th>Design</th><th>Parametric</th><th>Nonparametric (ranks)</th><th>Effect size</th></tr></thead><tbody>
+<tr><td>Paired (same animals, 2 groups)</td><td>Paired t-test</td><td>Wilcoxon signed-rank<sup class="cite">[<a href="references.html#ref-wilcoxon1945" aria-label="Reference 16">16</a>]</sup></td><td>d<sub>z</sub>; rank-biserial r</td></tr>
+<tr><td>Unpaired (2 groups)</td><td>Welch t-test<sup class="cite">[<a href="references.html#ref-welch1947" aria-label="Reference 14">14</a>]</sup></td><td>Mann–Whitney U<sup class="cite">[<a href="references.html#ref-mann1947" aria-label="Reference 17">17</a>]</sup></td><td>Hedges' g; rank-biserial r</td></tr>
+<tr><td>ANOVA (2+ independent groups)</td><td>One-way ANOVA with Tukey–Kramer comparisons<sup class="cite">[<a href="references.html#ref-kramer1956" aria-label="Reference 15">15</a>]</sup></td><td>Kruskal–Wallis<sup class="cite">[<a href="references.html#ref-kruskal1952" aria-label="Reference 18">18</a>]</sup></td><td>η², ω²; η²<sub>H</sub></td></tr>
+</tbody></table></div>
+<ul>
+<li>Every result lists the test, statistic, df, p, effect size, 95% CI of the difference, n per group, a <b>robustness check</b> with the other test family, the assumptions, and a copy-ready report sentence.</li>
+<li>Paired designs match subject #1 with #1, #2 with #2 (the <b>#</b> column; reorder with Move up / Move down); the report lists every pair.</li>
+<li>The plot shows every animal, pair lines, mean ± SEM or a box plot, and significance brackets.</li>
+<li>Not available: repeated-measures ANOVA or mixed models for the same animals in 3+ conditions. The assumptions list says so when it applies; use paired tests with a multiple-comparison correction, or a statistics package.</li>
+</ul>
+<p>The implementation is checked against published textbook data sets; see <a href="validation.html#stats">Validation</a>.</p>
+</div></section>
+
+<section class="section" id="figures"><h2>Figure export</h2>
+<p><b>Export figure…</b> saves the selected trace (Single file tab) or the group plot as a publication figure: vector PDF, SVG or EPS, or PNG / TIFF at 300 or 600 dpi; 8.5 cm wide, 8 pt Helvetica, white background. The window itself is not changed.
+Vector files stay editable in Illustrator or Inkscape. Plot colours across the toolbox use the colour-blind-safe Okabe–Ito palette<sup class="cite">[<a href="references.html#ref-okabe2008" aria-label="Reference 20">20</a>]</sup>.</p></section>
+
+<section class="section" id="walkthrough"><h2>Walkthrough</h2><div data-tour="features" data-label="Response features walkthrough"><noscript><p class="note">The walkthrough needs JavaScript. The frames are in <code>assets/frames/</code>.</p></noscript></div></section>
+
+<section class="section" id="io"><h2>Inputs and outputs</h2><div class="io"><div class="card"><h4>In</h4><ul><li>LDF trials from LDF Process: <code>segmentedLDF</code>, <code>segmentedTime</code> (one series per trial)</li><li>LFP from Extract Ephys: <code>lfp_data</code>, <code>t_lfp</code> (mean over channels = one series)</li><li>ERP export from LFP analysis, or any <code>.mat</code> with <code>t</code> and <code>y</code> (or <code>t</code> and <code>LDF</code>)</li></ul></div><div class="card"><h4>Out</h4><ul><li>.csv: one row per series, columns Trial_Channel, PeakLatency_s, OnsetDelay_s, FWHM_s, AUCpos, AUCneg, RiseTime_s, DecayTime_s, PeakAmp, Integral</li><li>.mat: <code>data</code> (the table as a cell array) and <code>colNames</code></li></ul></div></div></section>
+
+<section class="section" id="demo"><h2>Demo expectations</h2>
+<p>The trials file and the group demo are described on the <a href="demo-data.html#groups">demo data page</a>. Expected results (from the in-app Help):</p>
+<div class="prose"><ul>
+<li><b>Data</b>: <code>demo_ldf_trials.mat</code>, 8 LDF trials from −5 to 20 s at 10 Hz (0 = stimulus onset). The demo sets t0 = 0, direction Auto, the baseline to −5–0 s and selects every feature.</li>
+<li><b>Expected per trial</b> (true response: ~120 PU baseline + 30 PU gamma-shaped hyperemia): <b>peak latency ≈ 4 s</b>, <b>peak amplitude ≈ 30 PU</b>, onset delay (50%) ≈ 1.9 s, FWHM ≈ 5.5 s, rise time (10–90%) ≈ 2.2 s, decay to 50% ≈ 3.4 s; positive direction.</li>
+<li>Trials differ by a few PU / tenths of a second because of vasomotion and noise, which is why the mean over trials is the number to report.</li>
+<li><b>Group demo</b> (<b>Try group demo</b>): 24 files, <code>control_animal01.mat</code> … <code>drug_animal08.mat</code>: the same 8 animals in Control, Stimulated and Drug, each with 8 LDF trials (−5 to 20 s at 10 Hz). True peak hyperemia 18, 30 and 24 PU; animals differ by ~3 PU, plus ~2.5 PU per animal and condition.</li>
+<li><b>Paired t-test, Peak amplitude, Control vs Stimulated</b>: Stimulated − Control ≈ <b>+12 PU</b> (95% CI roughly +9 to +15), <b>p &lt; 0.001</b>, d_z ≈ 3 (simulated 3.3). Wilcoxon signed-rank: p ≈ 0.008 (all 8 animals increase; the smallest exact p possible with 8 pairs). Unpaired (Welch): also significant, with a smaller t.</li>
+<li><b>ANOVA</b>: F(2, 21) large, p &lt; 0.001; Tukey–Kramer Stimulated − Control ≈ +12 PU (p &lt; 0.001); Drug lies ~6 PU from each of the others (usually, not always, significant). <b>Peak latency</b> ≈ 4 s in every group: no difference expected.</li>
+</ul></div>
+<p>Step-by-step instructions and troubleshooting: <a href="guide.html#features">Signal Characterization in the guide</a>.</p></section>
+
+</main>
+</body>
+</html>

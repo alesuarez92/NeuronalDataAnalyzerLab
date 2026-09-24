@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install · NeuroAnalyzer</title>
+<meta name="description" content="How to install NeuroAnalyzer in MATLAB, its toolbox requirements and the optional TDT SDK.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<main id="main">
+
+<section class="page-head"><p class="eyebrow">Install</p><h1>Install NeuroAnalyzer</h1><p class="lede">Download a tagged release, add it to the MATLAB path and launch it with <code>NeuroAnalyzer</code>.</p></section>
+
+<section class="section" id="steps"><h2>Steps</h2>
+<ol class="steps">
+<li><span><b>Download the release ZIP</b> from <a href="https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/latest">Releases</a> (<i>Source code (zip)</i>). Use Releases rather than the green
+<i>Code → Download ZIP</i> button: that button gives the in-development <code>main</code> branch.</span></li>
+<li><span><b>Unzip</b> it somewhere stable, for example <code>~/Documents/MATLAB/NeuronalDataAnalyzerLab</code>.</span></li>
+<li><span><b>Add it to the path</b> once, in the MATLAB Command Window:
+<pre><code>addpath(genpath('~/Documents/MATLAB/NeuronalDataAnalyzerLab'));
+savepath;   % optional: keep it for future sessions</code></pre></span></li>
+<li><span><b>Launch</b>:
+<pre><code>NeuroAnalyzer</code></pre>
+The launcher asks for an <b>Import</b> folder (raw data) and an <b>Export</b> folder (results) the first time. Both are stored as MATLAB preferences.</span></li>
+</ol></section>
+
+<section class="section" id="check"><h2>Check the installation</h2>
+<ul class="prose">
+<li>The launcher status bar says whether the Signal Processing Toolbox and the TDT SDK were found.</li>
+<li>Click <b>Try demo data</b> in any window and compare the result with the window's "Demo data" section in <a href="guide.html">the guide</a>.</li>
+<li>Optional: run the test suite from the toolbox folder with <code>run_tests</code>. Tests that need a display or a missing toolbox are skipped.</li>
+</ul></section>
+
+<section class="section" id="requirements"><h2>Requirements</h2>
+<div class="tablewrap"><table class="stack">
+<thead><tr><th>Needed for</th><th>Requirement</th></tr></thead>
+<tbody>
+<tr><td>Everything</td><td>MATLAB R2021a or later (the windows use <code>uifigure</code>, <code>uigridlayout</code>, <code>uihyperlink</code>)</td></tr>
+<tr><td>Filtering, downsampling, spike detection (LDF Processing, Extract Ephys, MUA Analysis)</td><td>Signal Processing Toolbox</td></tr>
+<tr><td>Spike sorting (MUA Analysis, MUA batch): PCA, K-means, GMM, DBSCAN, silhouette</td><td>Statistics and Machine Learning Toolbox</td></tr>
+<tr><td>Drawing a ROI or a line in ROI Analysis</td><td>Image Processing Toolbox (without it, store a <code>roiMask</code> in the .mat file)</td></tr>
+<tr><td>ICA or wavelet features in spike sorting (optional)</td><td>FastICA or the Wavelet Toolbox; PCA works without them</td></tr>
+<tr><td>Loading TDT tanks</td><td>TDT MATLAB SDK (below). The demo tank does not need it.</td></tr>
+<tr><td>NWB export with the official schema classes (optional)</td><td><a href="https://github.com/NeurodataWithoutBorders/matnwb">matnwb</a>; without it a built-in writer produces an NWB-style file that is not validated</td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="tdt"><h2>TDT MATLAB SDK (only for TDT tanks)</h2>
+<p>The Tucker-Davis Technologies SDK is a separate, third-party toolbox with its own licence and is not included.</p>
+<ol class="steps">
+<li><span>Download it from <a href="https://www.tdt.com/support/matlab-sdk/">tdt.com/support/matlab-sdk</a> and unzip it.</span></li>
+<li><span>Place the <code>TDTMatlabSDK/</code> folder under <code>Utilities/</code>, so that <code>Utilities/TDTMatlabSDK/TDTSDK/</code> exists.</span></li>
+<li><span>Restart MATLAB. Extract Ephys adds the SDK to the path when it is needed. The folder is ignored by git, so updates do not touch it.</span></li>
+</ol></section>
+
+<section class="section" id="update"><h2>Update</h2>
+<p>Download the new release ZIP, replace the contents of the same folder (the path stays the same) and launch again.
+To follow development instead, clone the repository into that folder:</p>
+<pre><code>git clone https://github.com/alesuarez92/NeuronalDataAnalyzerLab.git</code></pre>
+<p>Report bugs and ideas through <a href="https://github.com/alesuarez92/NeuronalDataAnalyzerLab/issues">GitHub issues</a> rather than keeping a fork; see the
+<a href="about.html#licence">licence</a>.</p></section>
+
+</main>
+</body>
+</html>

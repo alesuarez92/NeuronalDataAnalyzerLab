@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validation · NeuroAnalyzer</title>
+<meta name="description" content="What the NeuroAnalyzer test suite checks: recovery of simulated ground truth, analytic signals and textbook statistics.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<main id="main">
+
+<section class="page-head"><p class="eyebrow">Quality</p><h1>What the automated tests check</h1><p class="lede">The test suite (<code>tests/</code>, run with <code>run_tests</code>) analyses synthetic data with known answers, analytic signals and published textbook examples, and compares the results with stated tolerances. Continuous integration runs it in real MATLAB, with a virtual display, on every push.</p></section>
+<nav class="toc" aria-label="On this page"><a href="#scope">Scope</a><a href="#truth">Demo ground truth</a><a href="#analytic">Analytic checks</a><a href="#stats">Statistics</a><a href="#io">Formats and sessions</a><a href="#windows">Windows</a><a href="#examples">Examples</a></nav>
+
+<section class="section" id="scope"><h2>Scope and limits</h2>
+<ul class="prose">
+<li>The simulated recordings are made by the toolbox's own generators (<a href="demo-data.html">demo data</a>). Passing these tests shows that the analyses recover what was simulated; it is not a validation on real recordings or on independent ground-truth datasets.</li>
+<li>Tolerances are those written in the test files. Tests that need a toolbox or a display that is not available are skipped, not passed.</li>
+<li>The numbers below are the checks as they are in the repository; the test files are the reference.</li>
+</ul></section>
+
+<section class="section" id="truth"><h2>Demo ground truth recovered</h2><div class="tablewrap"><table class="stack"><thead><tr><th>Quantity</th><th>Simulated / exact</th><th>Checked within</th><th>Test</th></tr></thead><tbody><tr><td>LDF: response peak delay (trial average)</td><td>4 s</td><td>± 0.5 s</td><td>DemoDataTest, LDFPipelineTest</td></tr><tr><td>LDF: response amplitude</td><td>30 PU</td><td>± 25% (DemoDataTest); ± 5 PU (LDFPipelineTest)</td><td>DemoDataTest, LDFPipelineTest</td></tr><tr><td>LDF: onsets and trials</td><td>9 onsets, 8 complete trials</td><td>onsets ± 1 sample; exact count</td><td>LDFPipelineTest</td></tr><tr><td>LDF processing vs the previous in-app code</td><td>same trials</td><td>1e-12</td><td>LDFPipelineTest</td></tr><tr><td>ERP: N1 latency on the sink channel</td><td>15 ms</td><td>± 3 ms</td><td>DemoDataTest, LFPFeaturesTest</td></tr><tr><td>ERP: channel with the deepest N1; CSD sink channel</td><td>channel 4</td><td>exact</td><td>DemoDataTest, LFPFeaturesTest</td></tr><tr><td>ERP: stimulus onsets</td><td>15 onsets</td><td>± 1 sample</td><td>LFPFeaturesTest</td></tr><tr><td>ERSP: 40 Hz burst, 100–200 ms (oscillation demo)</td><td>phase-locked burst</td><td>> 6 dB; ITPC > 0.8; &lt; 3 dB on channel 8</td><td>LFPFeaturesTest</td></tr><tr><td>Band power: theta on channel 8</td><td>A² = (40 µV)²</td><td>± 20%, not modulated by the stimuli</td><td>LFPFeaturesTest</td></tr><tr><td>MUA: threshold crossings on channel 4</td><td>simulated spike count</td><td>0.6× to 1.5×</td><td>DemoDataTest</td></tr><tr><td>MUA: units after sorting + auto-merge (channel 4)</td><td>2 home units (+1 from channel 5)</td><td>2 to 3 units</td><td>MUAFeaturesTest</td></tr><tr><td>Imaging: time of the last calcium peak</td><td>11 s</td><td>± 0.6 s</td><td>DemoDataTest</td></tr><tr><td>Imaging: mean vessel diameter</td><td>12 px</td><td>± 3 px</td><td>DemoDataTest</td></tr><tr><td>Imaging: red blood cell speed from the kymograph</td><td>2 px/frame</td><td>± 0.3</td><td>DemoDataTest</td></tr><tr><td>Motion correction: per-frame shift error</td><td>random walk, max 3 px</td><td>&lt; 0.3 px (mean reference), &lt; 0.4 px (first frame)</td><td>ImagingFeaturesTest</td></tr><tr><td>Detect cells</td><td>3 cells</td><td>exactly 3, centres within 3 px</td><td>ImagingFeaturesTest</td></tr><tr><td>ΔF/F per detected cell</td><td>event times per cell</td><td>peaks ± 0.5 s; &lt; 0.1 at other cells' events</td><td>ImagingFeaturesTest</td></tr><tr><td>Robust vessel diameter with a crossing blood cell</td><td>12 ± 3 px sine</td><td>max error &lt; 2.5 px, RMS &lt; 1 px (standard: jumps &gt; 10 px)</td><td>ImagingFeaturesTest</td></tr><tr><td>Group demo: paired t-test, Control vs Stimulated</td><td>+12 PU (population)</td><td>p &lt; 0.05, CI above 0, d<sub>z</sub> within 30% of the sample value</td><td>StatsFeaturesTest</td></tr><tr><td>Batch LDF: latency / amplitude per file</td><td>3–4.5 s / 20–35 PU</td><td>± 0.4 s / ± 3 PU</td><td>BatchFeaturesTest</td></tr><tr><td>Batch LFP: N1 latency / amplitude / sink channel</td><td>12–18 ms / −100 to −140 µV / 3–5</td><td>± 1.5 ms / ± 20% / exact</td><td>BatchFeaturesTest</td></tr><tr><td>Batch imaging: peak ΔF/F / time / mean diameter</td><td>0.5–1.5 / known / 10–14 px</td><td>± 0.1 / ± 0.15 s / ± 0.75 px</td><td>BatchFeaturesTest</td></tr><tr><td>Batch features: latency / amplitude</td><td>3–4.5 s / realised mean</td><td>± 0.35 s / ± 1.5 PU</td><td>BatchFeaturesTest</td></tr><tr><td>Batch MUA: same recording at 2× gain</td><td>identical spikes</td><td>spike count ± 5%; 2–3 units; evoked rate &gt; 3× baseline</td><td>BatchFeaturesTest</td></tr></tbody></table></div></section>
+
+<section class="section" id="analytic"><h2>Analytic checks</h2><div class="tablewrap"><table class="stack"><thead><tr><th>Function</th><th>Known answer</th><th>Test</th></tr></thead><tbody><tr><td>Peak latency, amplitude, onset delay (50%), FWHM, rise (10–90%), decay (to 50%), AUC</td><td>closed-form values of a Gaussian response on a raised baseline, also mirrored (negative); NaN on empty or flat windows</td><td>SignalFeaturesTest</td></tr><tr><td>ROI intensity, ΔF/F, movement, kymograph speed (three methods), vessel diameter</td><td>small synthetic stacks with exact answers</td><td>ImagingTest</td></tr><tr><td>Sub-pixel vessel diameter</td><td>soft-walled synthetic profiles: error &lt; 0.5 px, better than sample counting</td><td>ImagingFeaturesTest</td></tr><tr><td>Hampel filter</td><td>flags exactly the injected spikes</td><td>ImagingFeaturesTest</td></tr><tr><td>Morlet wavelets</td><td>peak at a 25 Hz sinusoid (± 1 Hz), correct phase, flat power for white noise (± 15%)</td><td>LFPFeaturesTest</td></tr><tr><td>Welch spectrum</td><td>peak at 50 Hz; total power = variance (± 2%); white-noise floor 2σ²/fs</td><td>LFPFeaturesTest</td></tr><tr><td>Spectrogram</td><td>tracks a 10 → 30 Hz change (± 2 Hz)</td><td>LFPFeaturesTest</td></tr><tr><td>Band power</td><td>|analytic signal|² = A² (± 1%), nothing outside the band</td><td>LFPFeaturesTest</td></tr><tr><td>CSD</td><td>V(z) = z² gives CSD = −2 everywhere</td><td>LFPFeaturesTest</td></tr><tr><td>Epoch averaging</td><td>edge epochs excluded, not zero-filled</td><td>LFPFeaturesTest</td></tr><tr><td>Auto-merge</td><td>merges two copies of one unit (r &gt; 0.95); keeps units that differ in size or shape</td><td>MUAFeaturesTest</td></tr><tr><td>Split</td><td>separates two mixed units (&gt; 97% correct); merge undoes the split</td><td>MUAFeaturesTest</td></tr><tr><td>PSTH</td><td>recovers a 10 → 100 spikes/s step (± 15%)</td><td>MUAFeaturesTest</td></tr><tr><td>Correlograms</td><td>empty within the 2 ms dead time; cross-correlogram peak at a known 5.5 ms lag</td><td>MUAFeaturesTest</td></tr></tbody></table></div></section>
+
+<section class="section" id="stats"><h2>Statistics</h2>
+<p><code>GroupStats</code> is written in base MATLAB and checked against published textbook results that statistics packages reproduce:</p>
+<ul class="prose">
+<li>Student's (1908) sleep data (R dataset <code>sleep</code>): paired t = −4.0621, df = 9, p = 0.002833; Welch t = −1.8608, df = 17.776, p = 0.07939, with their 95% confidence intervals; Wilcoxon signed-rank with ties and a zero difference.</li>
+<li>Examples from Hollander &amp; Wolfe (as in R's <code>wilcox.test</code> help): exact signed-rank and exact Mann–Whitney p-values, the latter also by full enumeration.</li>
+<li>R's <code>PlantGrowth</code>: one-way ANOVA, Tukey HSD and Kruskal–Wallis.</li>
+<li>Identities: t quantiles, F = t² for two groups, the studentized range for two groups = √2·|t|, symmetry, zero effect.</li>
+<li>Figure export writes non-empty PDF, SVG, EPS and PNG files without changing the source axes.</li>
+</ul></section>
+
+<section class="section" id="io"><h2>File formats and sessions</h2>
+<ul class="prose">
+<li><b>Readers</b>: the demo recording written as Intan, Open Ephys and NWB is read back within half a quantisation step, with the right rate, channel count and stimulus onsets. Because a round trip only shows that a reader agrees with the toolbox's own writer, every format also has a file assembled byte by byte from the published format description, and checks of clear errors (wrong magic number, missing files, truncated data).</li>
+<li><b>Sessions</b>: MD5 checksums match values computed independently (Python <code>hashlib</code> / <code>md5sum</code>) with the Java and the pure-MATLAB implementation; saving and loading round-trip; inputs are classified as ok, changed, missing or moved; for each of the 7 analysis windows a saved session reopened in a new window gives the same results, and a session opened in the wrong window is refused.</li>
+<li><b>Batch</b>: a corrupt or wrong file becomes an error row while the other files run; the CSV, MAT and log are written; Cancel skips the remaining files; MUA sorting is repeatable with its seed and leaves the global random stream unchanged.</li>
+</ul></section>
+
+<section class="section" id="windows"><h2>Every window, driven step by step</h2>
+<p><code>AppSmokeTest</code> opens every window and dialog. The walkthrough tests (<code>DemoWalkthroughTest</code> and the per-area walkthroughs) drive each window through its steps on the demo data through the same public methods the buttons call, save a screenshot after every step (the frames on this site), and fail if a step errors or, for several steps, if the result misses the simulated values.</p></section>
+
+<section class="section" id="examples"><h2>Examples: simulated vs measured in the screenshots</h2>
+<div class="tablewrap"><table class="stack"><thead><tr><th>Where</th><th>Simulated</th><th>Shown in the window</th></tr></thead><tbody>
+<tr><td>Batch, LDF: peak latency per file</td><td>3, 3.5, 4, 4.5 s</td><td>3.06, 3.65, 3.90, 4.47 s</td></tr>
+<tr><td>Batch, imaging: peak ΔF/F per file</td><td>0.5, 1.0, 1.5</td><td>0.504, 1.006, 1.521</td></tr>
+<tr><td>Batch, response features: peak latency (mean trace)</td><td>3, 3.5, 4, 4.5 s</td><td>3.1, 3.6, 4.1, 4.4 s</td></tr>
+<tr><td>MUA: units on channel 4 after auto-merge</td><td>2 units on channel 4, 1 on channel 5</td><td>3 units (356, 177, 62 spikes); merge r = 0.98</td></tr>
+<tr><td>Motion correction: largest shift</td><td>3 px</td><td>3.0 px</td></tr>
+<tr><td>Groups: Stimulated − Control</td><td>12 PU (population)</td><td>11.9 PU [95% CI 9.1, 14.7], p &lt; 0.0001</td></tr>
+</tbody></table></div>
+<div class="shot-grid">
+<figure><div class="shot"><a href="assets/frames/ROIAnalysisApp_x02_motion_corrected.png"><img src="assets/frames/ROIAnalysisApp_x02_motion_corrected.png" alt="Estimated rigid shifts (solid) against the true shifts of the advanced demo (dashed)." loading="lazy"></a><span class="badge">DEMO DATA — synthetic, generated by core/demo/demoImagingAdvanced.m</span></div><figcaption>Estimated rigid shifts (solid) against the true shifts of the advanced demo (dashed).</figcaption></figure>
+<figure><div class="shot"><a href="assets/frames/ROIAnalysisApp_x06_diameter_robust.png"><img src="assets/frames/ROIAnalysisApp_x06_diameter_robust.png" alt="Robust vessel diameter (green) against the standard estimate (grey), which jumps when the blood cell crosses the line." loading="lazy"></a><span class="badge">DEMO DATA — synthetic, generated by core/demo/demoImagingAdvanced.m</span></div><figcaption>Robust vessel diameter (green) against the standard estimate (grey), which jumps when the blood cell crosses the line.</figcaption></figure>
+</div></section>
+
+</main>
+</body>
+</html>

@@ -122,7 +122,16 @@ step and branch once everything is tested).
    - Several apps have their own copies of `setButtonStyle` and `stepCard`. Move them into UIKit (`UIKit.setPrimary`, `UIKit.stepCard`).
    - Update the Node 20 deprecation in the Actions versions (`checkout@v5`, `upload-artifact@v5`) when available.
 
-## 4. Support website (after wave 2, so it documents real capabilities)
+## 4. Support website — BUILT (2026-09-24)
+
+`website/` has 15 pages + README (Cloudflare Pages: no build command, output
+`website`); frames from CI, lossless only; 23 verified references; the owner's
+figures credited to him (the P2-labelled ERP schematic and two figures whose
+axes did not match the app were left out, pending redrawing). Left to do:
+Help "Learn more ↗" links once the owner sends the site URL; redraw the owner's
+figures (docs/*.png) with the current UI style.
+
+### Original website plan (for reference)
 
 - **Location:** `website/` in the repo. It's static HTML/CSS/JS with no build step, so it deploys as-is to Cloudflare Pages (build command: none, output directory: `website`) or to GitHub Pages.
 - **Started so far:**

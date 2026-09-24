@@ -526,7 +526,7 @@ classdef HelpApp < handle
                 '**4 Save**: click **Save cropped data...** and choose a file name. Open this file next in **LDF Process**.'
                 '**Session / report (optional)**: in step 4, **Save session…** stores the export file (with checksum), the range and the crop; **Open session…** redoes them; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
-                '* **Data**: LabChart-style export, 8 channels, 300 s at 1000 Hz. Channel 6 = stimulus: 9 pulses of 5 s every 30 s from t = 30 s. Channel 8 = LDF: ~120 PU baseline with slow drift, vasomotion (0.1 Hz), a cardiac ripple (6 Hz) and noise.'
+                '* **Data**: LabChart-style export, 8 channels, 300 s at 1000 Hz. Channel 6 = stimulus: 9 pulses of 5 s every 30 s from t = 30 s. Channel 8 = LDF: ~120 PU baseline with slow drift, vasomotion (0.13 Hz), a cardiac ripple (6 Hz) and noise.'
                 '* **What you should see**: after each stimulus pulse the LDF rises by about **+30 PU**, peaking about **4 s after the onset**, and returns to baseline within ~12 s.'
                 '* **Try**: crop **20 to 280 s** (this is exactly what the LDF Process demo file contains) and save; the cropped plots start at t = 0 with the first pulse at 10 s.'};
             t.inputs = {
@@ -592,7 +592,7 @@ classdef HelpApp < handle
                 'Pick the **filter type** and enter the **cutoff(s)** in Hz; start with order 4.'
                 'Click **Apply** and compare the filtered trace with the original in the plots; use **Undo** to try other settings.'};
             t.demo = {
-                '* **Data**: the cropped demo LDF (1000 Hz). Besides the ~+30 PU responses it contains a slow drift (period 400 s), vasomotion at **0.1 Hz** (±3 PU), a cardiac ripple at **6 Hz** (±1.5 PU) and white noise.'
+                '* **Data**: the cropped demo LDF (1000 Hz). Besides the ~+30 PU responses it contains a slow drift (period 400 s), vasomotion at **0.13 Hz** (±3 PU), a cardiac ripple at **6 Hz** (±1.5 PU) and white noise.'
                 '* **Low-pass 1 Hz** (after 10x downsampling): the 6 Hz ripple and most noise disappear, the responses keep their shape and timing (zero-phase filtering: the peak stays ~4 s after onset).'
                 '* **High-pass 0.2 Hz**: removes drift and vasomotion but also shrinks and distorts the slow (~5 s wide) responses, a good example of a cutoff that is too high for LDF.'};
             t.inputs = {'A signal and its sampling rate (after downsampling)'};
@@ -932,7 +932,7 @@ classdef HelpApp < handle
                 '* **LDF**: 4 cropped recordings (200 s, 7 stimuli of 5 s). **What you should get**: 7 onsets and **6 trials** per file (the last stimulus is too close to the end); peak latency **~3, 3.5, 4 and 4.5 s** and peak amplitude **~20, 25, 30 and 35 PU** (within ~2 PU); one trial file per recording in the trials folder.'
                 '* **LFP**: 3 recordings, 8 channels 100 µm apart. **What you should get**: 8 rows per file; the N1 is largest and the CSD sink (SinkChannel) is on **channel 3, 4 and 5**, with the N1 at **~12, 15 and 18 ms** (roughly −100 to −140 µV on the sink channel).'
                 '* **MUA**: the demo MUA recording and a copy recorded at twice the gain, channel 4. **What you should get**: **2–3 units** and the **same spike count in both files** (sorting does not depend on the gain); the evoked rate (5–55 ms after each stimulus) is several times the baseline rate.'
-                '* **Imaging**: 3 stacks with a cell (roiMask) and a vessel crossed by the line 25 50 63 50. **What you should get**: peak ΔF/F **~0.5, 1.0 and 1.5** at ~3.2 s and mean vessel diameter **~10, 12 and 14 px**.'
+                '* **Imaging**: 3 stacks with a cell (roiMask) and a vessel crossed by the line 25 50 63 50. **What you should get**: peak ΔF/F **~0.5, 1.0 and 1.5** (transients at 3 and 6.5 s; the peak is the second, at ~6.7 s) and mean vessel diameter **~10, 12 and 14 px**.'
                 '* **Response features**: 4 trial files. **What you should get**: peak latency ~3, 3.5, 4, 4.5 s and peak amplitude ~20, 25, 30, 35 PU (one row per file); Series = Each series gives one row per trial (32 rows).'};
             t.inputs = {
                 'LDF: cropped `.mat` files from LDF Extract (`stim`, `LDF`, `t`, `Fs`)'
