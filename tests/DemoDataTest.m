@@ -72,7 +72,7 @@ function testImagingGroundTruth(tests)
     cx = s.truth.vesselCenterX;
     d = vesselDiameterFromLine(s.stack, [cx - 25, 70], [cx + 25, 70], s.timeVec, 'fwhm');
     verifyEqual(tests, mean(d, 'omitnan'), mean(s.truth.diameter), 'AbsTol', 3);
-    ky = kymograph(s.stack(:, :, 1:30), [cx 1], [cx 96]);
+    ky = kymograph(s.stack(:, :, 1:20), [cx 1], [cx 96]);   % one RBC pass
     verifyEqual(tests, propagationSpeedFromKymograph(ky, 'fit'), s.truth.rbcSpeedPxPerFrame, 'AbsTol', 0.3);
 end
 

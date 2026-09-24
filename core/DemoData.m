@@ -245,8 +245,8 @@ classdef DemoData
 
         %% imagingStack - 96x96x150 frames at 10 Hz
         % A vertical vessel (dark band) whose diameter oscillates 12 +/- 3 px
-        % at 0.2 Hz, a red blood cell (bright spot) moving down the vessel at
-        % 2 px/frame, and a cell (disk, r = 6 px) with calcium transients
+        % at 0.2 Hz, a red blood cell (bright spot) moving down the upper vessel
+        % (y = 5..48, repeating every 22 frames) at 2 px/frame, and a cell (disk, r = 6 px) with calcium transients
         % (dF/F = 1.0) at 3 s, 7 s and 11 s. roiMask marks the cell.
         function s = imagingStack()
             rs = DemoData.stream(3);
@@ -268,7 +268,9 @@ classdef DemoData
                 bg = 0.6 + texture;
                 vessel = 1 ./ (1 + exp((abs(X - cx) - diam(k) / 2) / 0.8));   % 1 inside
                 frame = bg .* (1 - 0.7 * vessel);
-                rbcY = mod(5 + 2 * (k - 1), H);
+                % RBC travels the upper part of the vessel only (y < 50), so it
+                % never crosses the diameter line used by the demo (y = 70)
+                rbcY = 5 + mod(2 * (k - 1), 44);
                 frame = frame + 0.8 * exp(-((X - cx).^2 + (Y - rbcY).^2) / (2 * 2^2));
                 frame(cellMask) = frame(cellMask) + 0.25 * (1 + dff(k));
                 frame = frame + 0.02 * randn(rs, H, W);
