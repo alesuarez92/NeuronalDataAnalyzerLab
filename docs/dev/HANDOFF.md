@@ -184,6 +184,16 @@ Hybrid, with one source of content:
   - a version stamp on every page.
 - The owner raised this; confirm the approach with them before building it.
 
+## 4c. Goal: validation paper for NeuroAnalyzer (owner, 2026-09-24; plan in detail later)
+
+Publish the toolbox with its results validated on **public ground-truth data from realistic models**, mainly **CSD** and **spike sorting**. First outline (all references and datasets to be verified before use):
+- **Spike sorting:** simulated and hybrid recordings with known spike times. Candidates: MEArec (biophysical simulations; Buccino & Einevoll, Neuroinformatics 2021), SpikeForest ground-truth collection (Magland et al., eLife 2020), paired juxtacellular + extracellular recordings (e.g. Marques-Smith et al. / Neto et al.), simulations of Quiroga et al. 2004. Metrics: per-unit accuracy, precision, recall (SpikeForest definitions), with and without auto-merge; compare with a reference sorter on the same data if feasible.
+- **CSD:** LFPs from multicompartment models with known transmembrane currents (LFPy / hybridLFPy; Blue Brain / Allen biophysical models). Compare the toolbox's standard CSD with iCSD (Pettersen et al. 2006) and kCSD (Potworowski et al. 2012). Metrics: correlation and error against the true CSD, sink/source localisation, effect of noise, channel spacing and boundary rows. This may motivate adding iCSD / kCSD to LFP Analysis.
+- **Loading the data:** many datasets are on DANDI as NWB (the reader exists). MEArec and SpikeForest use HDF5 / SpikeInterface formats, so a reader or a small conversion script may be needed.
+- **Deliverables:** a reproducible `validation/` folder of scripts (download, run, figures), a tagged release with a Zenodo DOI, and a target journal (e.g. J Neurosci Methods, Neuroinformatics, eNeuro, or JOSS for the software paper).
+- **Tie-in:** the planned simulation suite (separate repository) can later provide further ground truth.
+- Ask the owner whether this goal should appear in the public `ROADMAP.md` or stay private until submission.
+
 ## 5. How to work cheaply
 
 - **CI budget (owner's rule: spend nothing on GitHub).** The repo is public, so Actions on standard runners and MathWorks' MATLAB actions are free, and the account's default spending limit is $0. Still, keep runs low:
