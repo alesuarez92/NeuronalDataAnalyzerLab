@@ -121,6 +121,8 @@ the SDK.
   Each release is tagged (`v0.1.0`, ...) and recorded in
   [CHANGELOG.md](CHANGELOG.md).
 - **Contributing:** see [CONTRIBUTING.md](CONTRIBUTING.md).
+- **Roadmap:** planned work and open items for contributors are in
+  [ROADMAP.md](ROADMAP.md).
 
 ## Author
 
