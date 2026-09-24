@@ -7,6 +7,11 @@ Classification of the ongoing work: **EXISTING STRAND**.
 - **Branch:** `claude/admiring-cori-52ekpa`. Every commit is pushed there. No PR exists yet, and the owner hasn't asked for one.
 - **Repo rule** (from `CLAUDE.md`): no AI or agent attribution in commits, PRs or anything else visible on GitHub.
 
+## 0. First steps for the next session
+
+- **Merging to `main`:** use "Squash and merge", which gives one commit signed by GitHub under the owner's name.
+- **Pending question for the owner:** `docs/dev/` contains working notes written in the first person by delegated agents. Propose rewording them neutrally as "development notes" now, and removing them before merging to `main`.
+
 ## 1. What exists now
 
 ### Done and green in CI (real MATLAB)
