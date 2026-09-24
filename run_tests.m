@@ -17,7 +17,8 @@ function run_tests
 
     nPass = sum([result.Passed]);
     nFail = sum([result.Failed]);
-    fprintf('\nDone: %d passed, %d failed.\n', nPass, nFail);
+    nSkip = sum([result.Incomplete]);
+    fprintf('\nDone: %d passed, %d failed, %d skipped.\n', nPass, nFail, nSkip);
 
     if nFail > 0
         for k = 1:numel(result)

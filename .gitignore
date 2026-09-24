@@ -47,3 +47,4 @@ __pycache__/
 # *.nex
 # data/
 # local_config/
+test-artifacts/

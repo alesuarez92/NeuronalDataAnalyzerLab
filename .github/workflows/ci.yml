@@ -33,3 +33,11 @@ jobs:
         uses: matlab-actions/run-command@v2
         with:
           command: run_tests
+
+      - name: Upload window screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: window-screenshots
+          path: test-artifacts/screens/
+          if-no-files-found: warn
