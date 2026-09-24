@@ -2063,7 +2063,8 @@ function g = stepCard(parent, n, text, rowHeights, colWidths)
         'RowHeight', [{22}, rowHeights], 'ColumnWidth', colWidths, ...
         'Padding', [10 8 10 8], 'RowSpacing', 6, 'ColumnSpacing', 8, 'BackgroundColor', T.cardBg);
     lbl = UIKit.step(g, n, text);
-    lbl.Layout.Row = 1; lbl.Layout.Column = [1 numel(colWidths)];
+    lbl.Layout.Row = 1;
+    if numel(colWidths) > 1, lbl.Layout.Column = [1 numel(colWidths)]; end
 end
 
 %% placeField - UIKit.field placed explicitly on one row (label | control)
