@@ -26,13 +26,14 @@
 %
 % Sessions and reports (see core/Session.m, core/Report.m):
 %   B = UIKit.sessionButtons(parent, app)
-%       'Save session…', 'Open session…' (row 1) and 'Report (PDF)…'
-%       (row 2) in a 2x2 grid placed in parent (set B.Grid.Layout);
+%       'Save session…', 'Open session…' (row 1), 'Report (PDF)…' and
+%       'Methods text…' (row 2; core/MethodsWriter.m) in a 2x2 grid placed
+%       in parent (set B.Grid.Layout);
 %       the row needs UIKit.sessionButtonsHeight() pixels. The buttons
 %       call the dialog wrappers below, which call the window's public
 %       methods saveSessionTo / openSession / makeReport.
-%   UIKit.setSessionEnable(B, canSave)   Save / Report need data; Open is
-%       always enabled (call from the window's updateControls).
+%   UIKit.setSessionEnable(B, canSave)   Save / Report / Methods need data;
+%       Open is always enabled (call from the window's updateControls).
 %   UIKit.saveSessionDialog(app) / openSessionDialog(app) / reportDialog(app)
 %   txt = UIKit.askText(title, subtitle, helpTopic, default, okText)
 %       Modal multi-line text dialog; [] when cancelled.
@@ -299,10 +300,10 @@ classdef UIKit
                 'FontColor', T.mutedColor, 'HorizontalAlignment', 'right');
         end
 
-        %% sessionButtons - Save session / Open session / Report (PDF) buttons
+        %% sessionButtons - Save session / Open session / Report (PDF) / Methods text buttons
         % Creates a 2x2 grid in parent (place it with B.Grid.Layout.Row /
         % Column; it needs UIKit.sessionButtonsHeight() pixels). B.Save,
-        % B.Open and B.Report are the buttons. Enable them from the
+        % B.Open, B.Report and B.Methods are the buttons. Enable them from the
         % window's updateControls with UIKit.setSessionEnable(B, hasData).
         function B = sessionButtons(parent, app)
             T = UITheme;
@@ -323,7 +324,12 @@ classdef UIKit
                 @(~,~)UIKit.reportDialog(app), 'secondary', ...
                 ['One-page A4 PDF: an image of this window plus the versions, date, input files ' ...
                  'with MD5, settings and key results (for lab notebooks and methods sections)']);
-            B.Report.Layout.Row = 2; B.Report.Layout.Column = [1 2];
+            B.Report.Layout.Row = 2; B.Report.Layout.Column = 1;
+            B.Methods = UIKit.button(B.Grid, ['Methods text' char(8230)], ...
+                @(~,~)MethodsWriter.forApp(app), 'secondary', ...
+                ['Draft methods paragraph from this analysis: every step, parameter, the software ' ...
+                 'versions and the references, ready to edit, copy or save as .txt']);
+            B.Methods.Layout.Row = 2; B.Methods.Layout.Column = 2;
         end
 
         %% sessionButtonsHeight - Pixel height of the sessionButtons grid
@@ -331,12 +337,13 @@ classdef UIKit
             h = 2 * UITheme.buttonHeight + 6;
         end
 
-        %% setSessionEnable - Save / Report need data; Open is always available
+        %% setSessionEnable - Save / Report / Methods need data; Open is always available
         function setSessionEnable(B, canSave)
             if isempty(B) || ~isstruct(B) || ~isfield(B, 'Save') || ~isvalid(B.Save), return; end
             if canSave, st = 'on'; else, st = 'off'; end
             B.Save.Enable = st;
             B.Report.Enable = st;
+            if isfield(B, 'Methods') && isvalid(B.Methods), B.Methods.Enable = st; end
             B.Open.Enable = 'on';
         end
 

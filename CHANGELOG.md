@@ -9,6 +9,19 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **Methods text**: a *Methods text…* button next to the session
+  buttons of every analysis window drafts a methods section from the
+  analysis: every step in the past tense with the values actually used
+  (filters, trial and epoch windows, thresholds, CSD method and
+  parameters, spike-sorting settings, statistical tests and corrections),
+  the NeuroAnalyzer and MATLAB versions, and a reference list (e.g.
+  Pettersen et al. 2006, Potworowski et al. 2012, Mauchly 1940,
+  Greenhouse & Geisser 1959, Holm 1979, Friedman 1937). What the session
+  does not know (animals, surgery, hardware) is left as a bracketed
+  placeholder; nothing is invented. The text can be edited, copied or
+  saved as UTF-8 .txt, and *Add saved sessions…* combines several
+  sessions of a pipeline in pipeline order (`core/MethodsWriter.m`;
+  scriptable with `MethodsWriter.fromSession` / `fromSessions`).
 - **Virtual lab** (launcher → *Virtual lab*, `apps/VirtualLabApp.m`,
   `core/VirtualLab.m`): a simulated experiment to learn by doing. The
   student reads how laser Doppler flowmetry works, plans a whisker

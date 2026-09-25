@@ -23,7 +23,8 @@ kymograph, robust vessel diameter), and **signal characterization**
 
 Every analysis can run on a whole folder (**batch processing**), be saved
 and reopened as a **session** with input-file checksums, and produce a
-one-page **PDF report**. Every window has **synthetic demo data with known
+one-page **PDF report** and a draft **methods text** (every step and
+parameter, software versions and references, ready to edit). Every window has **synthetic demo data with known
 answers**, so results can be checked before using real recordings.
 
 To learn by doing, the **Virtual lab** lets a student plan and record a
@@ -84,7 +85,7 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | `core/imaging/` | ROI / line-based image analysis: ΔF/F, kymograph, flow speed, vessel diameter, intensity, movement, motion correction, cell detection. |
 | `core/io/` | Readers for Intan RHD, Open Ephys binary and NWB; NWB export. |
 | `core/demo/`, `core/DemoData.m` | Synthetic demo recordings with ground truth. |
-| `core/Batch.m`, `core/Session.m`, `core/Report.m` | Batch processing, session files, PDF reports. |
+| `core/Batch.m`, `core/Session.m`, `core/Report.m`, `core/MethodsWriter.m` | Batch processing, session files, PDF reports, methods text. |
 | `core/VirtualLab.m` | Virtual lab: simulated experiments with known answers, reference analysis and feedback. |
 | `apps/` | Sub-app windows: Extract / Process / Average LDF, Extract Ephys, LFP & MUA processing and analysis, ROI Analysis, Signal Characterization, Batch Processing, Virtual Lab, Help. |
 | `docs/` | Workflow and principle figures shown in the Help window. |

@@ -57,7 +57,7 @@ correctly and that teaches while it is used:
 
 | | Item | Notes |
 |---|---|---|
-| 📅 | Methods-section writer | From a saved session: a ready-to-edit methods paragraph with every step, parameter, software version and citation. |
+| ✅ | Methods-section writer | *Methods text…* in every window drafts the methods from one or several saved sessions: every step, parameter, software version and citation, with placeholders for what only you know. |
 | 📅 | Quality checks | A plain-language check per step (too few trials, refractory violations, CSD sink at an edge contact, sphericity, motion larger than a cell), each saying why it matters and what to try. |
 | 📅 | Live parameter previews | Thresholds, filters, CSD smoothing: a small preview updates as the value changes. |
 | 📅 | Import and compare | Kilosort / Phy units and Suite2p ROIs: quality checks, and side-by-side comparison with NeuroAnalyzer's own sorting and cell detection. |

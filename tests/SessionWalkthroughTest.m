@@ -9,8 +9,10 @@
 % reopened window; write the one-page PDF report and check that it exists
 % and is larger than 10 kB. Frames go to
 % test-artifacts/screens/walkthrough/<App>_s<NN>_<step>.png and reports
-% to test-artifacts/screens/reports/<App>_report.pdf. Skipped when no
-% display is available.
+% to test-artifacts/screens/reports/<App>_report.pdf. LFP Analysis also
+% opens the Methods text dialog (core/MethodsWriter.m) and saves a frame
+% of it (LFPAnalysisApp_s03_methods_text.png). Skipped when no display is
+% available.
 % =========================================================================
 
 function tests = SessionWalkthroughTest
@@ -65,7 +67,9 @@ function sessionSteps(tests, app, tag, ctor, btns)
     if nargin < 5, btns = app.SessionBtns; end
     tests.verifyEqual(char(btns.Save.Enable), 'on', [tag ': Save session disabled']);
     tests.verifyEqual(char(btns.Report.Enable), 'on', [tag ': Report disabled']);
+    tests.verifyEqual(char(btns.Methods.Enable), 'on', [tag ': Methods text disabled']);
     tests.verifyEqual(btns.Save.Text, ['Save session' char(8230)]);
+    tests.verifyEqual(btns.Methods.Text, ['Methods text' char(8230)]);
     scrollToButtons(btns);
     shot(tests, app, sprintf('%s_s01_session_buttons', tag));
 
@@ -102,6 +106,7 @@ function testExtractLDF(tests)
     app = ExtractLDFApp(); c = onCleanup(@() delete(app.UIFig));
     tests.verifyEqual(char(app.SessionBtns.Save.Enable), 'off');
     tests.verifyEqual(char(app.SessionBtns.Open.Enable), 'on');
+    tests.verifyEqual(char(app.SessionBtns.Methods.Enable), 'off');
     app.loadDemo();
     app.processData();
     sessionSteps(tests, app, 'ExtractLDFApp', @ExtractLDFApp);
@@ -136,6 +141,17 @@ function testLFPAnalysis(tests)
     app.runERP(struct('preTime', 0.05, 'postTime', 0.2, 'threshold', 0.5, 'minISI', 0.5));
     app.computeCSD(100, 1:8);
     sessionSteps(tests, app, 'LFPAnalysisApp', @LFPAnalysisApp);
+    % Methods text… opens the draft methods text of this analysis
+    fig = MethodsWriter.forApp(app);
+    tests.verifyNotEmpty(fig, 'Methods text dialog not opened');
+    if isempty(fig), return; end
+    c2 = onCleanup(@() delete(fig));
+    ta = findobj(fig, 'Type', 'uitextarea');
+    txt = strjoin(cellstr(ta.Value), newline);
+    tests.verifyTrue(contains(txt, 'from 50 ms before to 200 ms after each onset'), txt);
+    tests.verifyTrue(contains(txt, 'negative second spatial derivative'), txt);
+    tests.verifyTrue(contains(txt, sprintf('NeuroAnalyzer v%s', UITheme.version)), txt);
+    shot(tests, struct('UIFig', fig), 'LFPAnalysisApp_s03_methods_text');
 end
 
 function testMUAAnalysis(tests)

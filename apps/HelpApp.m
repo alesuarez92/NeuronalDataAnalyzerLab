@@ -1033,7 +1033,8 @@ classdef HelpApp < handle
                 '**Save session…** (last step card of every analysis window): choose a file name, type optional notes (animal, condition, why these settings) and click **Save session**. The `.nasession.mat` file stores the input file paths with their size, date and MD5 checksum, every setting, the results and your notes.'
                 '**Open session…**: choose a `.nasession.mat` saved by the **same window**. The input files are reloaded and checked; the settings are applied and the analysis is re-run, so the window looks as it did when you saved.'
                 'If an input file has moved, put it next to the session file (it is found automatically) or choose it when asked. If a file has **changed** since the session was saved, the session still opens and the status bar warns you.'
-                '**Report (PDF)…**: writes one A4 page with a picture of the window and, below it, the NeuroAnalyzer and MATLAB versions, the date, every input file with its MD5, the settings and the key results. Attach it to your lab notebook or use it for the methods section.'};
+                '**Report (PDF)…**: writes one A4 page with a picture of the window and, below it, the NeuroAnalyzer and MATLAB versions, the date, every input file with its MD5, the settings and the key results. Attach it to your lab notebook or use it for the methods section.'
+                '**Methods text…**: drafts a methods paragraph from what the window did: every step with its settings and units, the NeuroAnalyzer and MATLAB versions, and the references. Edit it in the box, then **Copy** it or **Save .txt…** and paste it into your manuscript. **Add saved sessions…** combines the sessions of the other steps (e.g. Extract → Process → Average LDF) into one text, in pipeline order.'};
             t.demo = {
                 '* **Try**: in any window click **Try demo data**, run the analysis, then **Save session…**. Close the window, open it again from the launcher and click **Open session…**: the same plots and numbers come back.'
                 '* **What you should get**: the status bar says "Session … opened (saved … with NeuroAnalyzer v…)" and shows your notes. **Report (PDF)…** writes a one-page PDF (a few hundred kB).'};
@@ -1042,7 +1043,8 @@ classdef HelpApp < handle
                 'The input files the session refers to, at their saved location, next to the session file, or chosen when asked'};
             t.outputs = {
                 '`<name>.nasession.mat`: variable `session` with `app`, `toolboxVersion`, `matlabVersion`, `os`, `created` (ISO 8601), `inputs` (role, path, name, bytes, modified, md5), `settings`, `results`, `summary`, `notes`'
-                '`<name>_report.pdf`: one A4 page (window image + versions, inputs with MD5, settings, key results)'};
+                '`<name>_report.pdf`: one A4 page (window image + versions, inputs with MD5, settings, key results)'
+                '`<name>_methods.txt`: the methods text as edited (UTF-8, opens in Word), with its reference list'};
             t.details = {
                 '## What is stored'
                 '* **Inputs**: the full path, size in bytes, modification date and MD5 checksum of every input file (for folders such as TDT tanks: one checksum over all files in the folder).'
@@ -1054,13 +1056,19 @@ classdef HelpApp < handle
                 '* A session saved by one window cannot be opened in another window.'
                 '## The PDF report'
                 '* One page: base MATLAB cannot join several PDF pages without a toolbox, so the window picture and the summary share one A4 page. Long lists are shortened on the page; the session file keeps everything.'
-                '* The window picture is taken with `exportapp` (MATLAB R2020b or later); if that fails, the largest plot is used instead.'};
+                '* The window picture is taken with `exportapp` (MATLAB R2020b or later); if that fails, the largest plot is used instead.'
+                '## The methods text'
+                '* Written in the past tense with the values actually used (filter cut-offs and orders, trial windows, thresholds, CSD method and parameters, statistical tests and corrections), the software versions and the references of the methods (e.g. Pettersen et al. 2006 for iCSD, Potworowski et al. 2012 for kCSD, Holm 1979, Greenhouse & Geisser 1959).'
+                '* NeuroAnalyzer does not know your animals, surgery or hardware: the text starts with a bracketed placeholder for them, and **[please add: …]** marks anything else you must fill in. Nothing is invented: a setting the session does not hold is left out.'
+                '* It is a draft. **Check every sentence against what you did**, delete what you did not use, and keep the references your journal needs.'
+                '* From a script: `[txt, refs] = MethodsWriter.fromSession(Session.load(p))`, or `MethodsWriter.fromSessions({p1, p2, p3})` for a whole pipeline; `MethodsWriter.write(file, txt, refs)` saves it.'};
             t.trouble = {
                 '"This session was saved by …, not by this window"', 'Open the session in the window named in the message (each window saves its own kind of session).'
                 '"Session not opened: … not found at …"', 'The input file was moved or renamed. Copy it next to the session file, or use Open session… again and locate it when asked.'
                 '"… has CHANGED since the session was saved (MD5 differs)"', 'The input file is not the one used when the session was saved (edited, re-exported or overwritten). The results may differ; use the original file if you still have it.'
                 'Report not written', 'Check that the folder is writable and that the PDF is not open in another program. The analysis itself is not affected.'
-                'The window picture in the PDF shows only one plot', '`exportapp` is not available (MATLAB older than R2020b or no display); the largest plot was used instead.'};
+                'The window picture in the PDF shows only one plot', '`exportapp` is not available (MATLAB older than R2020b or no display); the largest plot was used instead.'
+                'The methods text lacks a step I did', 'The text only describes what the session holds. Run the step and save the session again, or use **Add saved sessions…** for steps done in other windows.'};
         end
 
         %% topicVirtualLab - Plan, record and analyse a simulated experiment
