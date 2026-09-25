@@ -550,6 +550,7 @@ classdef MUAPipeline
                 isi = diff(t(si));
                 isiViolations = sum(isi < (refracMs / 1000));  % convert ms to seconds
                 violationRate = 100 * isiViolations / max(1, length(isi));
+                results.isiViolationRate(k) = violationRate;
 
                 % Optional rejection
                 if violationRate > isiThresh && k ~= 0
@@ -567,10 +568,9 @@ classdef MUAPipeline
 
                 if isRejected
                     fprintf('[REJECTED] Cluster %d: %s\n', k, rejectionReason);
-                else
-                    if k > 0
-                        results.rejectedClusters(k) = false;
-                    end
+                end
+                if k > 0
+                    results.rejectedClusters(k) = isRejected;
                 end
 
                 % Display-only copy of the QC outcome (table, titles, markers)

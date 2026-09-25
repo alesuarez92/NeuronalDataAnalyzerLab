@@ -249,3 +249,28 @@ function testDemo_autoMergeAndPSTH(tests)
     verifyLessThanOrEqual(tests, psth.centers(iPk), 0.055);
     verifyGreaterThan(tests, max(psth.rate), 3 * mean(psth.rate(psth.centers < 0)));
 end
+
+%% testQualityResultsStored - Rejected units and ISI violation rates are stored in the results
+% (they were shown on screen but results.rejectedClusters stayed false and
+% results.isiViolationRate empty)
+function testQualityResultsStored(tests)
+    fs = 30000;
+    rs = RandStream('mt19937ar', 'Seed', 11);
+    nw = 36;                                   % 1.2 ms waveforms
+    shape = -100 * exp(-((1:nw) - 24).^2 / 8);   % flat first 0.5 ms (noise estimate)
+    % Cluster 1: clean unit (spikes >= 5 ms apart); cluster 2: same shape but
+    % every other spike 0.5 ms after the previous one (refractory violations)
+    s1 = (1:40) * 0.01;
+    s2 = sort([(1:20) * 0.02 + 0.5, (1:20) * 0.02 + 0.5 + 0.0005]);
+    t = (0:round(1.5 * fs)) / fs;
+    locs = round([s1, s2] * fs)' + 1;
+    labels = [ones(40, 1); 2 * ones(40, 1)];
+    waves = repmat(shape, 80, 1) + 5 * randn(rs, 80, nw);
+    p = MUAPipeline.completeParams(struct('refractoryMs', 1.5));
+    [results, qc] = MUAPipeline.qualityMetrics(struct(), labels, waves, locs, t, fs, p);
+    verifyEqual(tests, [qc.rejected], [false true]);
+    verifyEqual(tests, results.rejectedClusters, [false true]);
+    verifyEqual(tests, results.isiViolationRate(1), 0);
+    verifyGreaterThan(tests, results.isiViolationRate(2), 2);
+    verifyEqual(tests, results.isiViolationRate(2), qc(2).isiPct);
+end
