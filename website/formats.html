@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>File formats · NeuroAnalyzer</title>
+<meta name="description" content="Input and output file formats of NeuroAnalyzer: LabChart, TDT, Intan RHD, Open Ephys, NWB, image stacks and result files.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<main id="main">
+
+<section class="page-head"><p class="eyebrow">Data</p><h1>File formats</h1><p class="lede">What each window reads and writes. Every intermediate result is a MATLAB .mat file that the next window loads.</p></section>
+<nav class="toc" aria-label="On this page"><a href="#inputs">Recordings</a><a href="#ldf">LDF files</a><a href="#ephys">LFP and MUA files</a><a href="#imaging">Image stacks</a><a href="#results">Result files</a><a href="#nwb-export">NWB export</a><a href="#walkthrough">Walkthrough</a><a href="#limits">Not supported</a></nav>
+
+<section class="section" id="inputs"><h2>Recordings</h2>
+<div class="tablewrap"><table class="stack"><thead><tr><th>Format</th><th>Window</th><th>What is needed</th></tr></thead><tbody>
+<tr><td>LabChart export (.mat)</td><td>Extract LDF</td><td><code>data</code> (all channels concatenated), <code>datastart</code>, <code>dataend</code>; optional <code>samplerate</code> (1000 Hz assumed when missing), <code>titles</code>, <code>unittext</code>. Stimulus on channel 6, LDF on channel 8.</td></tr>
+<tr><td>TDT tank / block folder</td><td>Extract Ephys</td><td>Streams <code>Whis</code> (stimulus) and <code>xRAW</code> (raw); read with the TDT MATLAB SDK (<code>TDTbin2mat</code>)</td></tr>
+<tr><td>Intan RHD2000 (.rhd)<sup class="cite">[<a href="references.html#ref-intan-rhd" aria-label="Reference 22">22</a>]</sup></td><td>Extract Ephys</td><td>File format 1.0–3.x, traditional single-file layout; amplifier channels at 0.195 µV per bit; digital and ADC inputs as stimulus candidates. The notch-filter setting in the header is shown but not applied.</td></tr>
+<tr><td>Open Ephys binary<sup class="cite">[<a href="references.html#ref-openephys-binary" aria-label="Reference 23">23</a>]</sup></td><td>Extract Ephys</td><td>Recording folder (or a folder above it) with <code>structure.oebin</code> and <code>continuous.dat</code> (GUI 0.5 or later); samples × bit_volts; ADC channels and TTL lines as stimulus candidates; AUX channels skipped</td></tr>
+<tr><td>NWB 2.x (.nwb)<sup class="cite">[<a href="references.html#ref-rubel2022" aria-label="Reference 21">21</a>]</sup></td><td>Extract Ephys</td><td>An ElectricalSeries in <code>/acquisition</code> or <code>/processing</code> (the first one; data × conversion); stimulus TimeSeries and trial / interval tables aligned to the series start</td></tr>
+<tr><td>Image stack (.mat or multi-frame TIFF)</td><td>ROI Analysis</td><td>See <a href="#imaging">Image stacks</a></td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="ldf"><h2>LDF files</h2>
+<div class="tablewrap"><table class="stack"><thead><tr><th>File</th><th>Written by</th><th>Variables</th></tr></thead><tbody>
+<tr><td>Cropped LDF</td><td>Extract LDF</td><td><code>stim</code>, <code>LDF</code>, <code>t</code> (s, 0 at the crop start), <code>Fs</code> (Hz)</td></tr>
+<tr><td>LDF trials</td><td>LDF Processing; Batch (LDF)</td><td><code>segmentedLDF</code> (trials × samples), <code>segmentedTime</code> (s, 0 = onset), <code>Fs</code></td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="ephys"><h2>LFP and MUA files</h2>
+<div class="tablewrap"><table class="stack"><thead><tr><th>File</th><th>Written by</th><th>Variables</th></tr></thead><tbody>
+<tr><td>LFP</td><td>Extract Ephys (Save LFP…)</td><td><code>lfp_data</code> (channels × samples), <code>lfp_channels</code>, <code>lfp_fs</code>, <code>t_lfp</code>, <code>stim_data</code>, <code>stim_fs</code>, <code>t_stim</code></td></tr>
+<tr><td>MUA</td><td>Extract Ephys (Save MUA…)</td><td><code>mua_data</code>, <code>mua_channels</code>, <code>mua_fs</code>, <code>t_mua</code>, <code>stim_data</code>, <code>stim_fs</code>, <code>t_stim</code>, <code>filterParams</code></td></tr>
+<tr><td>ERP / CSD export</td><td>LFP Analysis</td><td><code>t</code>, <code>y</code> (ERP averaged over channels), <code>erp_avg</code>, <code>erp_std</code>, <code>erp_channels</code>, <code>n_epochs</code>, <code>onset_times</code>, <code>erp_params</code>, <code>csd</code> when computed</td></tr>
+<tr><td>Spike sorting</td><td>MUA Analysis</td><td><code>SpikeResults</code> (spike times, cluster IDs, waveforms), <code>SpikeSortParams</code>, <code>clusterQuality</code>, <code>info</code> (including <code>info.clusterEdits</code>)</td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="imaging"><h2>Image stacks</h2><div class="prose"><div class="io"><div class="card"><h4>In</h4><ul><li><code>.mat</code> with <code>stack</code> or <code>frames</code> (H × W × N grayscale or H × W × 3 × N RGB; otherwise the first variable is used)</li><li>Optional in the .mat: <code>timeVec</code> or <code>t</code> (one time per frame), <code>roiMask</code> (logical H × W) or <code>roiMasks</code> (H × W × K, optional <code>roiNames</code>), used as the first ROIs</li><li>Multi-frame TIFF: RGB frames are converted to grayscale (mean of the colour channels); time = frame index</li></ul></div><div class="card"><h4>Out</h4><ul><li>.csv: <code>Time</code> plus one column per measure (Intensity, Movement, DFF, Speed; with several ROIs <code>&lt;measure&gt;_&lt;ROI name&gt;</code>), or <code>Diameter_px</code> (+ <code>Diameter_standard_px</code>, <code>Replaced</code> when robust); for a kymograph, a matrix (first row = time)</li><li>.mat: struct <code>results</code> with the series (one row per ROI), <code>roiMasks</code> / <code>roiNames</code>, <code>roiMask</code> (ROI 1), <code>lineStart</code> / <code>lineEnd</code>, <code>motionCorrection</code> and <code>shifts</code>, and the preprocessing and diameter settings</li></ul></div></div></div></section>
+
+<section class="section" id="results"><h2>Result files</h2>
+<div class="tablewrap"><table class="stack"><thead><tr><th>File</th><th>Written by</th><th>Content</th></tr></thead><tbody>
+<tr><td>Feature table (.csv / .mat)</td><td>Signal Characterization</td><td>One row per series: Trial_Channel, PeakLatency_s, OnsetDelay_s, FWHM_s, AUCpos, AUCneg, RiseTime_s, DecayTime_s, PeakAmp, Integral; the .mat has <code>data</code> and <code>colNames</code></td></tr>
+<tr><td>Group values and report</td><td>Signal Characterization (Groups & statistics)</td><td>Per-animal values (.csv) plus <code>_report.txt</code>, or the full result (.mat)</td></tr>
+<tr><td>Figures</td><td>Signal Characterization</td><td>PDF, SVG, EPS; PNG or TIFF at 300 / 600 dpi</td></tr>
+<tr><td>Batch summary</td><td>Batch Processing</td><td><code>&lt;name&gt;_summary.csv</code>, <code>&lt;name&gt;_summary.mat</code> (table <code>summary</code> and struct <code>batch</code>), <code>&lt;name&gt;_log.txt</code></td></tr>
+<tr><td>Session</td><td>Every analysis window</td><td><code>&lt;name&gt;.nasession.mat</code>: variable <code>session</code> (app, versions, OS, date, inputs with MD5, settings, results, notes)</td></tr>
+<tr><td>Report</td><td>Every analysis window</td><td><code>&lt;name&gt;_report.pdf</code>: one A4 page</td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="nwb-export"><h2>NWB export</h2>
+<p><b>Export NWB…</b> in Extract Ephys writes the processed LFP in volts to <code>/processing/ecephys/LFP</code>, the stimulus to <code>/stimulus/presentation</code>, and electrodes with the source channel names. With <a href="https://github.com/NeurodataWithoutBorders/matnwb">matnwb</a> installed it uses the official schema classes.
+Without it, a built-in minimal writer follows the NWB 2.7 layout but is <b>not validated</b> at run time and does not embed the schema; check such files with <code>nwbinspector</code> or <code>pynwb.validate</code> in Python. Subject metadata is not written.</p></section>
+
+<section class="section" id="walkthrough"><h2>Walkthrough: the demo recording in each format</h2><p>The demo tank's first 6 s of channels 3–6, written as Intan, Open Ephys and NWB files by <code>core/demo/demoFormats.m</code>, loaded in Extract Ephys.</p><div data-tour="formats" data-label="Formats walkthrough"><noscript><p class="note">The walkthrough needs JavaScript. The frames are in <code>assets/frames/</code>.</p></noscript></div></section>
+
+<section class="section" id="limits"><h2>Not supported</h2>
+<ul class="prose">
+<li>Intan stimulation files (.rhs) and the "one file per signal type / per channel" layouts.</li>
+<li>The legacy Open Ephys format (.continuous files).</li>
+<li>NWB 1.x and 3-D ElectricalSeries.</li>
+<li>Recordings larger than memory: files are read in full.</li>
+</ul>
+<p>These are listed as open items in the <a href="https://github.com/alesuarez92/NeuronalDataAnalyzerLab/blob/main/ROADMAP.md">roadmap</a>.</p></section>
+
+</main>
+</body>
+</html>

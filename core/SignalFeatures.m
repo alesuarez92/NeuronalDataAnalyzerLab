@@ -5,75 +5,69 @@
 % Static helpers for signal characterization: FWHM, peak latency, onset
 % delay, areas under the curve (positive/negative), rise/decay times,
 % peak amplitude, and stimulation-response integration. All methods assume
-% time vector t (seconds) and signal y; optional baseline window or baseline
-% value. Used by SignalCharacterizationApp.
+% time vector t (seconds) and signal y; optional baseline value. Used by
+% SignalCharacterizationApp.
+%
+% Conventions shared by every method:
+%   t0        - stimulus onset (s). The response is searched for t >= t0.
+%   direction - 'max' (positive-going response) or 'min' (negative-going).
+%   baseline  - scalar reference level. When omitted or empty, it is the
+%               mean of the pre-stimulus samples (t < t0); if there are
+%               none, the mean of the first 5 post-onset samples.
+% Features that cannot be computed (no samples after t0, response never
+% crosses the required level) return NaN rather than erroring.
 % =========================================================================
 
 classdef SignalFeatures
     methods(Static)
-        %% peakLatency - Time from t(1) or t0 to maximum (or minimum) value
+        %% peakLatency - Time from t0 to maximum (or minimum) value
         % t, y: vectors; t0: optional start time (e.g. stimulus onset). direction: 'max' or 'min'
+        % OUTPUT: lat - latency (s) relative to t0; amp - raw peak value (not baseline-corrected)
         function [lat, amp] = peakLatency(t, y, t0, direction)
-            if nargin < 3, t0 = t(1); end
+            if nargin < 3 || isempty(t0), t0 = t(1); end
             if nargin < 4, direction = 'max'; end
-            idx = t >= t0;
-            if ~any(idx), lat = NaN; amp = NaN; return; end
-            t_ = t(idx); y_ = y(idx);
-            if strcmpi(direction, 'min')
-                [amp, i] = min(y_);
-            else
-                [amp, i] = max(y_);
-            end
+            [t_, y_] = SignalFeatures.window(t, y, t0);
+            if isempty(t_), lat = NaN; amp = NaN; return; end
+            [amp, i] = SignalFeatures.extremum(y_, direction);
             lat = t_(i) - t0;
         end
 
-        %% onsetDelay - Time to first cross a fraction of peak (e.g. 0.5 = 50% of peak)
-        % t, y: vectors; t0: stimulus onset; frac: fraction of peak (0–1); direction 'max' or 'min'
-        function delay = onsetDelay(t, y, t0, frac, direction)
-            if nargin < 4, frac = 0.5; end
+        %% onsetDelay - Time from t0 until the response first reaches frac of its peak
+        % frac is measured from baseline to peak (0.5 = 50% of peak amplitude).
+        function delay = onsetDelay(t, y, t0, frac, direction, baseline)
+            if nargin < 4 || isempty(frac), frac = 0.5; end
             if nargin < 5, direction = 'max'; end
-            [~, amp] = SignalFeatures.peakLatency(t, y, t0, direction);
-            idx = t >= t0;
-            if ~any(idx), delay = NaN; return; end
-            t_ = t(idx); y_ = y(idx);
-            if strcmpi(direction, 'min')
-                thr = amp + frac * (mean(y_(1:min(3,numel(y_)))) - amp);
-            else
-                thr = amp - frac * (amp - mean(y_(1:min(3,numel(y_)))));
-            end
-            if strcmpi(direction, 'min')
-                cross = find(y_ <= thr, 1);
-            else
-                cross = find(y_ >= thr, 1);
-            end
+            if nargin < 6, baseline = []; end
+            [t_, y_] = SignalFeatures.window(t, y, t0);
+            if isempty(t_), delay = NaN; return; end
+            base = SignalFeatures.resolveBaseline(t, y, t0, baseline);
+            [amp, iPk] = SignalFeatures.extremum(y_, direction);
+            thr = base + frac * (amp - base);
+            cross = SignalFeatures.firstReach(y_(1:iPk), thr, direction);
             if isempty(cross), delay = NaN; return; end
             delay = t_(cross) - t0;
         end
 
-        %% fwhm - Full width at half maximum (seconds) around peak after t0
-        % t, y: vectors; t0: onset; direction 'max' or 'min'
-        function w = fwhm(t, y, t0, direction)
+        %% fwhm - Full width at half maximum (s) of the response lobe containing the peak
+        % Half maximum is halfway between baseline and peak. Only the contiguous
+        % run of samples around the peak counts, so later unrelated excursions
+        % do not inflate the width.
+        function w = fwhm(t, y, t0, direction, baseline)
             if nargin < 4, direction = 'max'; end
-            [amp, ~] = SignalFeatures.peakLatency(t, y, t0, direction);
-            idx = t >= t0;
-            if ~any(idx), w = NaN; return; end
-            t_ = t(idx); y_ = y(idx);
-            base = mean(y_(1:min(5, numel(y_))));
-            if strcmpi(direction, 'min')
-                half = amp + 0.5 * (base - amp);
-                above = y_ <= half;
-            else
-                half = amp - 0.5 * (amp - base);
-                above = y_ >= half;
-            end
-            ii = find(above);
-            if isempty(ii), w = NaN; return; end
-            w = t_(ii(end)) - t_(ii(1));
+            if nargin < 5, baseline = []; end
+            [t_, y_] = SignalFeatures.window(t, y, t0);
+            if isempty(t_), w = NaN; return; end
+            base = SignalFeatures.resolveBaseline(t, y, t0, baseline);
+            [amp, iPk] = SignalFeatures.extremum(y_, direction);
+            if amp == base, w = NaN; return; end
+            half = base + 0.5 * (amp - base);
+            [i1, i2] = SignalFeatures.lobe(y_, iPk, half, direction);
+            w = t_(i2) - t_(i1);
         end
 
         %% aucPositive - Area under the curve for y > baseline (trapz)
         function a = aucPositive(t, y, baseline)
-            if nargin < 3, baseline = mean(y(1:min(round(numel(y)/10), numel(y)))); end
+            if nargin < 3 || isempty(baseline), baseline = SignalFeatures.defaultAucBaseline(y); end
             y_ = y - baseline;
             y_(y_ < 0) = 0;
             a = trapz(t, y_);
@@ -81,80 +75,131 @@ classdef SignalFeatures
 
         %% aucNegative - Area under the curve for y < baseline (absolute value)
         function a = aucNegative(t, y, baseline)
-            if nargin < 3, baseline = mean(y(1:min(round(numel(y)/10), numel(y)))); end
+            if nargin < 3 || isempty(baseline), baseline = SignalFeatures.defaultAucBaseline(y); end
             y_ = baseline - y;
             y_(y_ < 0) = 0;
             a = trapz(t, y_);
         end
 
-        %% riseTime - Time from 10% to 90% of peak (from t0)
-        function rt = riseTime(t, y, t0, direction)
+        %% riseTime - Time from 10% to 90% of the baseline-to-peak amplitude (from t0)
+        % Both crossings are searched on the rising edge, i.e. before the peak.
+        function rt = riseTime(t, y, t0, direction, baseline)
             if nargin < 4, direction = 'max'; end
-            [amp, ~] = SignalFeatures.peakLatency(t, y, t0, direction);
-            idx = t >= t0;
-            if ~any(idx), rt = NaN; return; end
-            t_ = t(idx); y_ = y(idx);
-            if strcmpi(direction, 'min')
-                lo = amp + 0.9 * (min(y_) - amp);
-                hi = amp + 0.1 * (min(y_) - amp);
-            else
-                lo = amp - 0.9 * (amp - max(y_));
-                hi = amp - 0.1 * (amp - max(y_));
-            end
-            iLo = find(y_ >= lo, 1); iHi = find(y_ >= hi, 1);
-            if strcmpi(direction, 'min')
-                iLo = find(y_ <= lo, 1); iHi = find(y_ <= hi, 1);
-            end
+            if nargin < 5, baseline = []; end
+            [t_, y_] = SignalFeatures.window(t, y, t0);
+            if isempty(t_), rt = NaN; return; end
+            base = SignalFeatures.resolveBaseline(t, y, t0, baseline);
+            [amp, iPk] = SignalFeatures.extremum(y_, direction);
+            if amp == base, rt = NaN; return; end
+            rising = y_(1:iPk);
+            iLo = SignalFeatures.firstReach(rising, base + 0.1 * (amp - base), direction);
+            iHi = SignalFeatures.firstReach(rising, base + 0.9 * (amp - base), direction);
             if isempty(iLo) || isempty(iHi), rt = NaN; return; end
-            rt = abs(t_(iHi) - t_(iLo));
+            rt = t_(iHi) - t_(iLo);
         end
 
         %% decayTime - Time from peak to 50% return toward baseline (after t0)
-        function dt = decayTime(t, y, t0, direction)
+        function dt = decayTime(t, y, t0, direction, baseline)
             if nargin < 4, direction = 'max'; end
-            [amp, ~] = SignalFeatures.peakLatency(t, y, t0, direction);
-            idx = t >= t0;
-            if ~any(idx), dt = NaN; return; end
-            t_ = t(idx); y_ = y(idx);
-            base = mean(y_(1:min(5,numel(y_))));
+            if nargin < 5, baseline = []; end
+            [t_, y_] = SignalFeatures.window(t, y, t0);
+            if isempty(t_), dt = NaN; return; end
+            base = SignalFeatures.resolveBaseline(t, y, t0, baseline);
+            [amp, iPk] = SignalFeatures.extremum(y_, direction);
+            if amp == base, dt = NaN; return; end
+            half = base + 0.5 * (amp - base);
+            % Decay = first sample after the peak that falls back past half.
             if strcmpi(direction, 'min')
-                half = amp + 0.5 * (base - amp);
-                after = find(t_ > t_(y_ == min(y_), 1), 1);
-                if isempty(after), dt = NaN; return; end
-                cross = find(y_(after:end) >= half, 1) + after - 1;
+                back = find(y_(iPk:end) >= half, 1);
             else
-                half = amp - 0.5 * (amp - base);
-                after = find(y_ == max(y_), 1, 'last');
-                cross = find(y_(after:end) <= half, 1) + after - 1;
+                back = find(y_(iPk:end) <= half, 1);
             end
-            if isempty(cross), dt = NaN; return; end
-            dt = t_(cross) - t_(after);
+            if isempty(back), dt = NaN; return; end
+            dt = t_(iPk + back - 1) - t_(iPk);
         end
 
         %% peakAmplitude - Max or min value relative to baseline (after t0)
         function [amp, tPeak] = peakAmplitude(t, y, t0, direction, baseline)
             if nargin < 4, direction = 'max'; end
             if nargin < 5, baseline = []; end
-            idx = t >= t0;
-            if ~any(idx), amp = NaN; tPeak = NaN; return; end
-            t_ = t(idx); y_ = y(idx);
-            if isempty(baseline), baseline = mean(y_(1:min(5,numel(y_)))); end
-            if strcmpi(direction, 'min')
-                [v, i] = min(y_);
-            else
-                [v, i] = max(y_);
-            end
-            amp = v - baseline;
+            [t_, y_] = SignalFeatures.window(t, y, t0);
+            if isempty(t_), amp = NaN; tPeak = NaN; return; end
+            base = SignalFeatures.resolveBaseline(t, y, t0, baseline);
+            [v, i] = SignalFeatures.extremum(y_, direction);
+            amp = v - base;
             tPeak = t_(i);
         end
 
-        %% stimResponseIntegration - Integral of response * stim (or dot product) over window
-        % stim and response same length as t; t0 = stimulus onset. Returns integral of response from t0.
-        function val = stimResponseIntegration(t, stim, response, t0)
-            if nargin < 4, t0 = t(1); end
+        %% stimResponseIntegration - Integral of the response from t0 (trapz)
+        % stim is accepted for API compatibility but not used: the value is
+        % the integral of response over t >= t0.
+        function val = stimResponseIntegration(t, stim, response, t0) %#ok<INUSL>
+            if nargin < 4 || isempty(t0), t0 = t(1); end
             idx = t >= t0;
-            if ~any(idx), val = NaN; return; end
+            if nnz(idx) < 2, val = NaN; return; end
             val = trapz(t(idx), response(idx));
+        end
+    end
+
+    methods(Static, Access = private)
+        %% window - Samples with t >= t0, as column vectors
+        function [t_, y_] = window(t, y, t0)
+            t = t(:); y = y(:);
+            idx = t >= t0;
+            t_ = t(idx); y_ = y(idx);
+        end
+
+        %% resolveBaseline - Explicit baseline, else pre-onset mean, else first post-onset samples
+        function base = resolveBaseline(t, y, t0, baseline)
+            if ~isempty(baseline) && isfinite(baseline)
+                base = baseline;
+                return;
+            end
+            t = t(:); y = y(:);
+            pre = y(t < t0);
+            if ~isempty(pre)
+                base = mean(pre);
+            else
+                post = y(t >= t0);
+                base = mean(post(1:min(5, numel(post))));
+            end
+        end
+
+        %% defaultAucBaseline - Mean of the first 10% of samples (at least one)
+        function base = defaultAucBaseline(y)
+            n = max(1, round(numel(y) / 10));
+            base = mean(y(1:min(n, numel(y))));
+        end
+
+        %% extremum - Peak value and index for the requested direction
+        function [v, i] = extremum(y, direction)
+            if strcmpi(direction, 'min')
+                [v, i] = min(y);
+            else
+                [v, i] = max(y);
+            end
+        end
+
+        %% firstReach - First index where y reaches level in the response direction
+        function i = firstReach(y, level, direction)
+            if strcmpi(direction, 'min')
+                i = find(y <= level, 1);
+            else
+                i = find(y >= level, 1);
+            end
+        end
+
+        %% lobe - Contiguous index range around iPk where y stays past level
+        function [i1, i2] = lobe(y, iPk, level, direction)
+            if strcmpi(direction, 'min')
+                past = y <= level;
+            else
+                past = y >= level;
+            end
+            i1 = iPk;
+            while i1 > 1 && past(i1 - 1), i1 = i1 - 1; end
+            i2 = iPk;
+            while i2 < numel(y) && past(i2 + 1), i2 = i2 + 1; end
         end
     end
 end

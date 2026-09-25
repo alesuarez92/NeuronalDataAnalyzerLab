@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laser Doppler flowmetry · NeuroAnalyzer</title>
+<meta name="description" content="The LDF pipeline of NeuroAnalyzer: crop, filter, segment trials and average, with a walkthrough on synthetic demo data.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<main id="main">
+
+<section class="page-head"><p class="eyebrow">Pipeline</p><h1>Laser Doppler flowmetry (LDF)</h1><p class="lede">Three windows turn a LabChart recording of blood flow into stimulus-locked trials and a grand average. Signal Characterization then measures each response.</p><div class="chain"><span class="step">1 Extract LDF</span><span class="arrow">→</span><span class="step">2 LDF Processing</span><span class="arrow">→</span><span class="step">3 Average LDF Viewer</span><span class="arrow">→</span><span class="step">Signal Characterization</span></div></section>
+<nav class="toc" aria-label="On this page"><a href="#what">What it does</a><a href="#walkthrough">Walkthrough</a><a href="#io">Inputs and outputs</a><a href="#methods">Methods</a><a href="#demo">Demo expectations</a></nav>
+
+<section class="section" id="what"><h2>What it does</h2>
+<div class="grid">
+<div class="card"><span class="tag">1 Extract LDF</span><p>Loads a LabChart .mat export (stimulus on channel 6, LDF on channel 8), shows both, and crops the experiment by typing a range or clicking twice on the plot.</p></div>
+<div class="card"><span class="tag">2 LDF Processing</span><p>Optional downsampling (1×, 2×, 5×, 10×, anti-aliased) and filtering (low-, high-, band-pass or notch; Butterworth, Chebyshev I or FIR), then trials cut around each stimulus onset. Trials can be appended to an existing trials file.</p></div>
+<div class="card"><span class="tag">3 Average LDF Viewer</span><p>Pools the trials of one or more trial files with the same time axis and plots all trials and the grand average (mean ± SD), optionally relative to each trial's pre-stimulus mean.</p></div>
+</div>
+<p>The LDF channel is used as exported (for example in perfusion units, PU). Laser Doppler flowmetry measures the Doppler shift of light scattered by moving red blood cells<sup class="cite">[<a href="references.html#ref-bonner1981" aria-label="Reference 11">11</a>]</sup>; the toolbox does not convert it to absolute flow.</p></section>
+
+<section class="section" id="walkthrough"><h2>Walkthrough on the demo recording</h2><div data-tour="ldf" data-label="LDF walkthrough"><noscript><p class="note">The walkthrough needs JavaScript. The frames are in <code>assets/frames/</code>.</p></noscript></div></section>
+
+<section class="section" id="io"><h2>Inputs and outputs</h2>
+<h3>Extract LDF</h3><div class="io"><div class="card"><h4>In</h4><ul><li>LabChart export <code>.mat</code> with <code>data</code> (all channels, concatenated), <code>datastart</code> and <code>dataend</code> (start / end index of each channel)</li><li>Optional: <code>samplerate</code> (Hz; 1000 Hz is assumed when missing), <code>titles</code>, <code>unittext</code>, comments</li><li>Stimulus = channel 6, LDF = channel 8</li></ul></div><div class="card"><h4>Out</h4><ul><li>Cropped <code>.mat</code> with <code>stim</code> (stimulus), <code>LDF</code> (flow), <code>t</code> (time in s, 0 at the crop start) and <code>Fs</code> (Hz)</li></ul></div></div>
+<h3>LDF Processing</h3><div class="io"><div class="card"><h4>In</h4><ul><li><code>.mat</code> from LDF Extract with <code>stim</code>, <code>LDF</code>, <code>t</code>, <code>Fs</code> (all four are required)</li></ul></div><div class="card"><h4>Out</h4><ul><li><code>.mat</code> with <code>segmentedLDF</code> (trials × samples), <code>segmentedTime</code> (s, 0 = stimulus onset, negative = before) and <code>Fs</code></li></ul></div></div>
+<h3>Average LDF Viewer</h3><div class="io"><div class="card"><h4>In</h4><ul><li>One or more <code>.mat</code> files with <code>segmentedLDF</code> and <code>segmentedTime</code> (from LDF Process)</li></ul></div><div class="card"><h4>Out</h4><ul><li>Plots of all trials and of the grand average (mean ± SD); the file list shows how many trials came from each file</li></ul></div></div>
+<p>Variable-level details are on the <a href="formats.html#ldf">file formats</a> page.</p></section>
+
+<section class="section" id="methods"><h2>Methods</h2>
+<div class="prose">
+<h4>Cropping</h4>
+<p>Sample <i>k</i> is at time (<i>k</i> − 1) / Fs. Cropping keeps samples round(Start·Fs)+1 to round(End·Fs)+1, with 0 ≤ Start &lt; End ≤ duration. Loading a new file discards the previous crop.</p>
+<h4>Filtering and downsampling</h4>
+<p>Downsampling decimates the LDF with an anti-aliasing filter and subsamples the stimulus. Filters are applied forwards and backwards (zero-phase), so responses are not shifted in time.
+Butterworth filters have a maximally flat pass-band<sup class="cite">[<a href="references.html#ref-butterworth1930" aria-label="Reference 19">19</a>]</sup>; Chebyshev I filters are steeper with pass-band ripple; FIR filters are always stable but need a high order for a sharp cutoff.
+Cutoffs must lie below half the sampling rate after downsampling (1000 Hz / 10 → cutoffs below 50 Hz). Processing always starts from the loaded data, so new settings never filter an already filtered signal.</p>
+<h4>Trials</h4>
+<p>Onsets are the samples where the stimulus rises above the threshold; an onset closer than the minimum interval to the previous one is ignored. Each trial runs from onset − pre to onset + post; trials that would run past the start or end of the recording are skipped.
+Files are pooled in the Average LDF Viewer only when their time axes are identical. <b>Relative to baseline</b> subtracts the mean of each trial's samples before t = 0.</p>
+</div>
+<div class="shot-grid">
+<figure class="illus"><div class="shot"><img src="assets/figures/LDFExtractPrinciple.png" alt="Cropping keeps the selected range of the full recording." loading="lazy"><span class="badge illus">Illustration</span></div><figcaption>Cropping keeps the selected range of the full recording. <span class="credit">Figure: Alejandro Suarez.</span></figcaption></figure>
+<figure class="illus"><div class="shot"><img src="assets/figures/LDFProcessPrinciple.png" alt="Segmentation: trials are cut around each event and averaged." loading="lazy"><span class="badge illus">Illustration</span></div><figcaption>Segmentation: trials are cut around each event and averaged. <span class="credit">Figure: Alejandro Suarez.</span></figcaption></figure>
+<figure class="illus"><div class="shot"><img src="assets/figures/FilterHowItWorks.png" alt="Low-pass, high-pass and band-pass filters." loading="lazy"><span class="badge illus">Illustration</span></div><figcaption>Low-pass, high-pass and band-pass filters. <span class="credit">Figure: Alejandro Suarez.</span></figcaption></figure>
+<figure class="illus"><div class="shot"><img src="assets/figures/FilterPrinciple.png" alt="A noisy signal before and after a band-pass filter." loading="lazy"><span class="badge illus">Illustration</span></div><figcaption>A noisy signal before and after a band-pass filter. <span class="credit">Figure: Alejandro Suarez.</span></figcaption></figure>
+</div></section>
+
+<section class="section" id="demo"><h2>Demo expectations</h2>
+<p>These are the results the demo recording should give (from the in-app Help). The recording itself is described on the <a href="demo-data.html#ldf">demo data page</a>.</p>
+<h3>Extract LDF</h3><div class="prose"><ul>
+<li><b>Data</b>: LabChart-style export, 8 channels, 300 s at 1000 Hz. Channel 6 = stimulus: 9 pulses of 5 s every 30 s from t = 30 s. Channel 8 = LDF: ~120 PU baseline with slow drift, vasomotion (0.13 Hz), a cardiac ripple (6 Hz) and noise.</li>
+<li><b>What you should see</b>: after each stimulus pulse the LDF rises by about <b>+30 PU</b>, peaking about <b>4 s after the onset</b>, and returns to baseline within ~12 s.</li>
+<li><b>Try</b>: crop <b>20 to 280 s</b> (this is exactly what the LDF Process demo file contains) and save; the cropped plots start at t = 0 with the first pulse at 10 s.</li>
+</ul></div>
+<h3>LDF Processing and filtering</h3><div class="prose"><ul>
+<li><b>Data</b>: the cropped demo recording (20–280 s of the LDF export, 1000 Hz): 9 stimulus pulses of 5 s, the first at 10 s, then every 30 s.</li>
+<li><b>Try</b>: downsample 10x, low-pass ~1 Hz (removes the 6 Hz cardiac ripple), then segment with pre = 5 s and post = 20 s.</li>
+<li><b>What you should get</b>: 8 complete trials (the last pulse is too close to the end for a 20 s window). The mean response rises after 0 s and <b>peaks ~4 s after onset at ~+30 PU</b> above a ~120 PU baseline.</li>
+</ul><ul>
+<li><b>Data</b>: the cropped demo LDF (1000 Hz). Besides the ~+30 PU responses it contains a slow drift (period 400 s), vasomotion at <b>0.13 Hz</b> (±3 PU), a cardiac ripple at <b>6 Hz</b> (±1.5 PU) and white noise.</li>
+<li><b>Low-pass 1 Hz</b> (after 10x downsampling): the 6 Hz ripple and most noise disappear, the responses keep their shape and timing (zero-phase filtering: the peak stays ~4 s after onset).</li>
+<li><b>High-pass 0.2 Hz</b>: removes drift and vasomotion but also shrinks and distorts the slow (~5 s wide) responses, a good example of a cutoff that is too high for LDF.</li>
+</ul></div>
+<h3>Average LDF Viewer</h3><div class="prose"><ul>
+<li><b>Data</b>: <code>demo_ldf_trials.mat</code>, 8 trials from −5 to 20 s at 10 Hz (0 = stimulus onset).</li>
+<li><b>What you should get</b>: the grand average is flat before 0 s (~120 PU), rises after onset and <b>peaks ~4 s after onset at ~+30 PU</b>, then returns to baseline by ~12–15 s. The SD band shows the trial-to-trial vasomotion (a few PU).</li>
+<li>With <b>Relative to baseline</b> the curve starts at ~0 PU and peaks at ~+30 PU.</li>
+</ul></div>
+<p>Step-by-step instructions and troubleshooting: <a href="guide.html#ldf-extract">Extract LDF</a>, <a href="guide.html#ldf-process">LDF Processing</a>, <a href="guide.html#filtering">Filtering</a>, <a href="guide.html#ldf-average">Average LDF Viewer</a>.</p></section>
+
+</main>
+</body>
+</html>

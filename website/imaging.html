@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Imaging · NeuroAnalyzer</title>
+<meta name="description" content="ROI Analysis in NeuroAnalyzer: motion correction, cell detection, ΔF/F, kymograph and robust vessel diameter, shown on synthetic stacks.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<main id="main">
+
+<section class="page-head"><p class="eyebrow">Pipeline</p><h1>Imaging: ROI and line analysis</h1><p class="lede">ROI Analysis measures regions or a line over time in a stack of coregistered frames, such as two-photon calcium or blood-flow imaging.</p></section>
+<nav class="toc" aria-label="On this page"><a href="#what">Methods</a><a href="#walkthrough">Walkthrough</a><a href="#io">Inputs and outputs</a><a href="#demo">Demo expectations</a></nav>
+
+<section class="section" id="what"><h2>Methods</h2>
+<div class="two">
+<div class="prose">
+<h4>Using a ROI (one trace per ROI)</h4>
+<ul>
+<li><b>Brightness</b>: mean intensity in the ROI per frame. <b>Movement</b>: mean absolute frame-to-frame difference in the ROI. <b>Both</b>: the two on two axes.</li>
+<li><b>ΔF/F</b>: (F − F0) / F0 of the ROI intensity, F0 = mean of the first N frames (default 30). ΔF/F is the usual measure for calcium indicators<sup class="cite">[<a href="references.html#ref-grienberger2012" aria-label="Reference 10">10</a>]</sup>.</li>
+<li><b>Speed (flow)</b>: frame-to-frame motion magnitude in the ROI, a flow / speed proxy.</li>
+</ul>
+<h4>Using a line</h4>
+<ul>
+<li><b>Kymograph</b>: intensity along the line in every frame, as a position × time image. Along a vessel, slanted streaks come from moving blood cells and their slope is their speed, the idea behind line-scan velocity measurements<sup class="cite">[<a href="references.html#ref-kleinfeld1998" aria-label="Reference 9">9</a>]</sup>.</li>
+<li><b>Vessel diameter</b>: width at half level (FWHM, pixels) of the profile along a line drawn across the vessel, with walls located to sub-pixel precision. <b>Robust diameter</b> uses running-median background and lumen levels and a Hampel filter (7 frames, 3 robust SD) so that a blood cell crossing the line does not make the width jump.</li>
+</ul>
+</div>
+<figure class="illus"><div class="shot"><img src="assets/figures/ROIAnalysisPrinciple.png" alt="ROI intensity over time, a kymograph and the vessel diameter at half maximum." loading="lazy"><span class="badge illus">Illustration</span></div><figcaption>ROI intensity over time, a kymograph and the vessel diameter at half maximum. <span class="credit">Figure: Alejandro Suarez.</span></figcaption></figure>
+</div>
+<div class="prose">
+<h4>Preprocessing and tools</h4>
+<ul>
+<li><b>Motion correction (rigid)</b>: every frame is aligned to the mean image by FFT phase correlation with a sub-pixel peak fit (two passes) and shifted back (bilinear). Translation only.</li>
+<li><b>Detect cells</b>: local correlation image (mean correlation of each pixel with its 8 neighbours), an automatic threshold (median + 4 robust SD, at least 0.2), connected components of 20–1000 px that are not elongated, holes filled; cells numbered left to right.</li>
+<li><b>Several ROIs</b>: drawn, detected or loaded from <code>roiMask</code> / <code>roiMasks</code>; each has a name, colour and area.</li>
+<li>Optional <b>B&amp;W 256 levels</b>, Gaussian <b>smoothing</b> (sigma 2 px) and per-frame <b>normalisation</b> to 0–1 (not for Brightness or ΔF/F), applied in that order.</li>
+</ul>
+</div></section>
+
+<section class="section" id="walkthrough"><h2>Walkthrough on the demo stacks</h2><div data-tour="imaging" data-label="Imaging walkthrough"><noscript><p class="note">The walkthrough needs JavaScript. The frames are in <code>assets/frames/</code>.</p></noscript></div></section>
+
+<section class="section" id="io"><h2>Inputs and outputs</h2><div class="io"><div class="card"><h4>In</h4><ul><li><code>.mat</code> with <code>stack</code> or <code>frames</code> (H × W × N grayscale or H × W × 3 × N RGB; otherwise the first variable is used)</li><li>Optional in the .mat: <code>timeVec</code> or <code>t</code> (one time per frame), <code>roiMask</code> (logical H × W) or <code>roiMasks</code> (H × W × K, optional <code>roiNames</code>), used as the first ROIs</li><li>Multi-frame TIFF: RGB frames are converted to grayscale (mean of the colour channels); time = frame index</li></ul></div><div class="card"><h4>Out</h4><ul><li>.csv: <code>Time</code> plus one column per measure (Intensity, Movement, DFF, Speed; with several ROIs <code>&lt;measure&gt;_&lt;ROI name&gt;</code>), or <code>Diameter_px</code> (+ <code>Diameter_standard_px</code>, <code>Replaced</code> when robust); for a kymograph, a matrix (first row = time)</li><li>.mat: struct <code>results</code> with the series (one row per ROI), <code>roiMasks</code> / <code>roiNames</code>, <code>roiMask</code> (ROI 1), <code>lineStart</code> / <code>lineEnd</code>, <code>motionCorrection</code> and <code>shifts</code>, and the preprocessing and diameter settings</li></ul></div></div></section>
+
+<section class="section" id="demo"><h2>Demo expectations</h2>
+<p>The two demo stacks are described on the <a href="demo-data.html#imaging">demo data page</a>. Expected results (from the in-app Help):</p>
+<div class="prose"><ul>
+<li><b>Data</b>: <code>demo_imaging.mat</code>, 96 × 96 px, 150 frames at 10 Hz (15 s). A dark vertical <b>vessel at x = 60</b> whose <b>diameter oscillates 12 ± 3 px (9–15 px) every 5 s</b>; a bright <b>red blood cell moving down 2 px/frame</b> (20 px/s); a <b>cell at (24, 30), radius 6 px</b> with calcium transients (ΔF/F ≈ 1) at <b>3, 7 and 11 s</b>. The cell's <code>roiMask</code> is in the file.</li>
+<li>The demo selects <b>ΔF/F</b> with that mask (baseline = first 30 frames) and a line across the vessel from (45, 70) to (75, 70).</li>
+<li><b>ΔF/F</b>: flat ~0 until 3 s, then <b>three peaks of ~0.2–0.3 at 3, 7 and 11 s</b>, each decaying in ~1–2 s. (The simulated calcium signal has ΔF/F ≈ 1, but it is added on top of the tissue background inside the ROI, so the measured ΔF/F of the ROI is smaller.)</li>
+<li><b>Vessel diameter</b> (same line): a sine between <b>~9 and ~15 px with a 5 s period</b>. <b>Kymograph</b> along the vessel (e.g. from (60, 5) to (60, 90)): slanted streaks with a slope of <b>2 px per frame</b>.</li>
+<li><b>Advanced demo</b> (<b>Try advanced demo (motion, 3 cells)</b>): 96 × 96 px, 150 frames at 10 Hz. Every frame is shifted by up to <b>±3 px</b> (smooth random walk); <b>three cells</b>: cell 1 at (22, 24) with events at <b>4, 8.5, 13 s</b>, cell 2 at (26, 78) at <b>5.5, 10.5 s</b>, cell 3 at (82, 30) at <b>7, 12 s</b>; the vessel at x = 60 (12 ± 3 px, period 5 s) and a bright <b>red blood cell that crosses the diameter line</b> (35, 64)–(85, 64) about every 3 s.</li>
+<li><b>Motion correction</b>: the Motion correction tab shows dy and dx following the dashed true shifts (error &lt; 0.3 px), max shift ≈ 3 px.</li>
+<li><b>Show → Correlation image</b>: the three cells are bright disks (correlation ≈ 0.9), the vessel a bright band; <b>Detect cells</b> adds exactly <b>Cell 1–3</b> (the vessel is rejected as too elongated).</li>
+<li><b>ΔF/F</b> (Run): three traces, each peaking only at its own cell's event times.</li>
+<li><b>Vessel diameter</b>: without Robust diameter the trace jumps to ~50 px whenever the blood cell crosses the line; with <b>Robust diameter</b> it follows the 9–15 px sine (error &lt; 2.5 px) and the replaced frames are circled.</li>
+</ul></div>
+<p>Step-by-step instructions and troubleshooting: <a href="guide.html#roi">ROI Analysis in the guide</a>.</p></section>
+
+</main>
+</body>
+</html>

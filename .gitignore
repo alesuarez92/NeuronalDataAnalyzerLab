@@ -19,7 +19,10 @@ desktop.ini
 .idea/
 .vscode/
 .cursor/
-.claude/
+.claude/*
+# ...except the shared project hooks (context-budget handoff)
+!.claude/settings.json
+!.claude/hooks/
 .aider*
 .continue/
 .windsurf/
@@ -47,3 +50,7 @@ __pycache__/
 # *.nex
 # data/
 # local_config/
+test-artifacts/
+
+# Shared Claude Code hook scripts (see CLAUDE.md "Context budget")
+!.claude/hooks/*.sh

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Batch processing · NeuroAnalyzer</title>
+<meta name="description" content="Batch processing in NeuroAnalyzer: one pipeline, one set of settings, a folder of files and one summary table.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<main id="main">
+
+<section class="page-head"><p class="eyebrow">All pipelines</p><h1>Batch processing</h1><p class="lede">Run one analysis with the same settings on a folder of files and get one summary table, a log and, for LDF, the trial files.</p></section>
+<nav class="toc" aria-label="On this page"><a href="#pipelines">Pipelines</a><a href="#walkthrough">Walkthrough</a><a href="#io">Inputs and outputs</a><a href="#scripts">From scripts</a><a href="#demo">Demo expectations</a></nav>
+
+<section class="section" id="pipelines"><h2>What each pipeline measures</h2>
+<div class="prose"><h4>What each pipeline measures</h4>
+<ul>
+<li><b>LDF</b>: the LDF Process steps (decimate, filter, cut trials around each onset), then the response features of the <b>mean trial</b> (onset 0 s, baseline = the pre-onset part): peak latency and amplitude, onset delay, FWHM, AUC, rise and decay time, integral.</li>
+<li><b>LFP</b>: ERP per channel as in LFP Analysis (onsets on the mean-subtracted stimulus). <b>N1</b> = minimum in the N1 window, <b>P2</b> = maximum in the P2 window; latency in ms after the stimulus, amplitude relative to the pre-stimulus mean, multiplied by Amplitude scale (1e6: V to µV). With <b>Compute CSD</b> (≥ 3 channels, in the listed order, top to bottom): the CSD minimum in the N1 window per channel (AmpUnit / mm²) and the sink channel of the file.</li>
+<li><b>MUA</b>: spike sorting per channel as in MUA Analysis. The random generator is set to <b>Random seed</b> before every channel, so the same file always gives the same clusters, whatever its position in the list. Per channel: spikes in units, units (good / rejected by the quality check: SNR &lt; 2 or &gt; 2% ISIs below the refractory period), mean rate and rate per unit, mean SNR, worst ISI violation and, with a stimulus, the rate in the response window vs the baseline window.</li>
+<li><b>Imaging</b>: per ROI the mean brightness and ΔF/F (F0 = mean of the first baseline frames) with its peak and peak time; with a line, the vessel diameter (FWHM; <b>Robust diameter</b> ignores red blood cells) as mean, min and max. No smoothing or normalisation is applied; <b>Motion correction</b> registers every frame onto the mean image first.</li>
+<li><b>Response features</b>: the nine features of Signal Characterization, for the mean of the series in each file or for every series.</li>
+</ul>
+<h4>Good to know</h4>
+<ul>
+<li>Channels are the numbers saved in the file (<code>lfp_channels</code> / <code>mua_channels</code>), otherwise the row numbers. Empty = all channels.</li>
+<li>Vector fields take numbers separated by spaces, e.g. <code>5 50</code> for a window or <code>45 70 75 70</code> for a line.</li>
+<li>The same pipelines run from scripts: <code>R = Batch.run('ldf', folder, params, outFolder)</code>; <code>Batch.defaults('ldf')</code> lists the settings.</li>
+</ul></div>
+<p>A file that fails does not stop the batch: it gets a red row with the reason, and the other files are processed. <b>Cancel</b> stops before the next file and still writes the summary of the files done.
+Rows are coloured by status: green ok, orange warning (some channels failed), red error, grey skipped.</p></section>
+
+<section class="section" id="walkthrough"><h2>Walkthrough on the demo batches</h2><div data-tour="batch" data-label="Batch walkthrough"><noscript><p class="note">The walkthrough needs JavaScript. The frames are in <code>assets/frames/</code>.</p></noscript></div></section>
+
+<section class="section" id="io"><h2>Inputs and outputs</h2><div class="io"><div class="card"><h4>In</h4><ul><li>LDF: cropped <code>.mat</code> files from LDF Extract (<code>stim</code>, <code>LDF</code>, <code>t</code>, <code>Fs</code>)</li><li>LFP: <code>.mat</code> files from Extract Ephys (<code>lfp_data</code>, <code>stim_data</code>, <code>lfp_fs</code>, <code>stim_fs</code>; <code>t_lfp</code>, <code>lfp_channels</code> optional)</li><li>MUA: <code>.mat</code> files from Extract Ephys (<code>mua_data</code>, <code>mua_fs</code>; <code>t_mua</code>, <code>mua_channels</code>, <code>stim_data</code> + <code>t_stim</code> optional)</li><li>Imaging: <code>.mat</code> with <code>stack</code> (or <code>frames</code>), optional <code>timeVec</code> / <code>t</code> and <code>roiMask</code> / <code>roiMasks</code>, or a multi-frame TIFF</li><li>Response features: any file Signal Characterization reads (<code>segmentedLDF</code> + <code>segmentedTime</code>, <code>lfp_data</code> + <code>t_lfp</code>, <code>t</code> + <code>y</code>, <code>t</code> + <code>LDF</code>)</li></ul></div><div class="card"><h4>Out</h4><ul><li><code>&lt;name&gt;_summary.csv</code> and <code>&lt;name&gt;_summary.mat</code> (table <code>summary</code> + struct <code>batch</code> with the settings, files, statuses and log): columns File, Status, Message, then the pipeline's results</li><li><code>&lt;name&gt;_log.txt</code>: date, settings and one line per file (result or error)</li><li>LDF: <code>trials/&lt;file&gt;_segments.mat</code> per recording (<code>segmentedLDF</code>, <code>segmentedTime</code>, <code>Fs</code>), ready for LDF Average</li></ul></div></div></section>
+
+<section class="section" id="scripts"><h2>From scripts</h2>
+<p>The same pipelines run without the window, which is useful for many sessions or for a methods section:</p>
+<pre><code>p = Batch.defaults('ldf');          % the settings and their defaults
+p.threshold = 2.5;
+R = Batch.run('ldf', folder, p, outFolder);</code></pre>
+<p>Pipelines: <code>'ldf'</code>, <code>'erp'</code>, <code>'mua'</code>, <code>'roi'</code>, <code>'features'</code>. The MUA pipeline sets the random generator to the <b>Random seed</b> setting before every channel, so the same file always gives the same clusters, and leaves MATLAB's global random stream as it was.</p></section>
+
+<section class="section" id="demo"><h2>Demo expectations</h2>
+<p><b>Try demo batch</b> writes a few files per pipeline, each with slightly different known answers (generator: <code>core/demo/demoBatch.m</code>, described on the <a href="demo-data.html#batch">demo data page</a>).</p>
+<div class="prose"><ul>
+<li><b>Data</b>: <b>Try demo batch</b> writes synthetic files for the chosen pipeline, each with slightly different known answers, and fills the settings.</li>
+<li><b>LDF</b>: 4 cropped recordings (200 s, 7 stimuli of 5 s). <b>What you should get</b>: 7 onsets and <b>6 trials</b> per file (the last stimulus is too close to the end); peak latency <b>~3, 3.5, 4 and 4.5 s</b> and peak amplitude <b>~20, 25, 30 and 35 PU</b> (within ~2 PU); one trial file per recording in the trials folder.</li>
+<li><b>LFP</b>: 3 recordings, 8 channels 100 µm apart. <b>What you should get</b>: 8 rows per file; the N1 is largest and the CSD sink (SinkChannel) is on <b>channel 3, 4 and 5</b>, with the N1 at <b>~12, 15 and 18 ms</b> (roughly −100 to −140 µV on the sink channel).</li>
+<li><b>MUA</b>: the demo MUA recording and a copy recorded at twice the gain, channel 4. <b>What you should get</b>: <b>2–3 units</b> and the <b>same spike count in both files</b> (sorting does not depend on the gain); the evoked rate (5–55 ms after each stimulus) is several times the baseline rate.</li>
+<li><b>Imaging</b>: 3 stacks with a cell (roiMask) and a vessel crossed by the line 25 50 63 50. <b>What you should get</b>: peak ΔF/F <b>~0.5, 1.0 and 1.5</b> at ~6.7 s (the second of two transients, which rides on the tail of the first) and mean vessel diameter <b>~10, 12 and 14 px</b>.</li>
+<li><b>Response features</b>: 4 trial files. <b>What you should get</b>: peak latency ~3, 3.5, 4, 4.5 s and peak amplitude ~20, 25, 30, 35 PU (one row per file); Series = Each series gives one row per trial (32 rows).</li>
+</ul></div>
+<p>Troubleshooting: <a href="guide.html#batch">Batch processing in the guide</a>.</p></section>
+
+</main>
+</body>
+</html>

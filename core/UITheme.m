@@ -11,7 +11,7 @@ classdef UITheme
     properties(Constant)
         % Release version (semantic versioning). Shown in every app's footer
         % next to the copyright. Update together with CHANGELOG.md.
-        version = '0.1.0'
+        version = '0.2.0'
         % Backgrounds
         bgGray      = [0.96 0.965 0.98]   % Main/content background
         headerBg    = [0.18 0.28 0.48]    % Header bar (dark blue)
@@ -28,6 +28,27 @@ classdef UITheme
         sectionTitleColor = [0.2 0.25 0.35]
         bodyColor   = [0.45 0.5 0.55]
         mutedColor  = [0.5 0.52 0.58]
+        % Status / feedback colors (status bar, alerts, validation)
+        success     = [0.16 0.52 0.32]
+        warning     = [0.80 0.50 0.05]
+        danger      = [0.72 0.20 0.20]
+        info        = [0.18 0.40 0.66]
+        % Secondary buttons and hint panels
+        secondaryBg = [0.93 0.95 0.97]
+        secondaryFg = [0.18 0.28 0.48]
+        hintBg      = [0.93 0.96 0.99]
+        hintBorder  = [0.75 0.84 0.93]
+        % Plot palette (Okabe-Ito, colorblind-safe) for traces, one row per series
+        plotColors  = [0.00 0.45 0.70;   % blue
+                       0.84 0.37 0.00;   % vermillion
+                       0.00 0.62 0.45;   % bluish green
+                       0.80 0.47 0.65;   % reddish purple
+                       0.90 0.62 0.00;   % orange
+                       0.34 0.71 0.91;   % sky blue
+                       0.40 0.40 0.40]   % gray
+        stimColor   = [0.55 0.55 0.60]   % stimulus traces / onset markers
+        shadeColor  = [0.00 0.45 0.70]   % ±SD / selection shading (use with alpha)
+        axesGrid    = [0.85 0.87 0.90]
         % Font sizes
         fontTitle   = 22
         fontSubtitle = 11
@@ -47,5 +68,10 @@ classdef UITheme
         % Order is [L B R T] (matches uigridlayout 'Padding'). Generous on all
         % sides: left for ylabel + tick labels, bottom for xlabel, top for title.
         axesPanelPadding = [40 35 12 35]
+        % Status bar at the bottom of every window (above the footer)
+        statusHeight = 28
+        % Standard control heights / widths
+        buttonHeight = 32
+        controlHeight = 26
     end
 end

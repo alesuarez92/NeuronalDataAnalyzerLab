@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo data · NeuroAnalyzer</title>
+<meta name="description" content="How the synthetic demo recordings of NeuroAnalyzer are generated: formulas, parameters, seeds and ground truth.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<main id="main">
+
+<section class="page-head"><p class="eyebrow">Data</p><h1>Demo data with known answers</h1><p class="lede">Every window can open synthetic recordings made by the toolbox itself. They are generated from explicit formulas with fixed random seeds, so they are always the same, and each file stores the values that were simulated.</p></section>
+<nav class="toc" aria-label="On this page"><a href="#use">How to use it</a><a href="#files">Files</a><a href="#ldf">LDF</a><a href="#ephys">Electrophysiology</a><a href="#imaging">Imaging</a><a href="#groups">Groups</a><a href="#formats">Formats</a><a href="#batch">Batch sets</a></nav>
+
+<section class="section" id="use"><h2>How to use it</h2>
+<ul class="prose">
+<li><b>Try demo data</b> in a window opens it with its demo already loaded and the settings filled in.</li>
+<li><b>▶ Try it with demo data</b> in Help does the same for the topic shown.</li>
+<li><b>Generate all demo files…</b> (Help, Welcome topic; the launcher's <b>Try with demo data</b> opens that topic) writes every file to a folder, which can become the Import folder.</li>
+<li>From code: <code>files = DemoData.writeAll(folder)</code>, or <code>p = DemoData.file(kind)</code> for one cached file (in <code>tempdir/NeuroAnalyzerDemo</code>).</li>
+<li>Each file has a <code>truth</code> variable with the simulated values: onsets, latencies, amplitudes, spike times, shifts, diameters, and so on.</li>
+</ul>
+<p class="note demo">Everything shown on this site, every plot and number, comes from these synthetic recordings. They are not measurements from animals.</p></section>
+
+<section class="section" id="files"><h2>Files</h2><div class="prose"><div class="tablewrap"><table class="stack"><thead><tr><th>File</th><th>Open it in</th><th>What it contains</th></tr></thead><tbody>
+<tr><td>demo_ldf_export.mat</td><td>LDF Extract</td><td>LabChart-style export, 300 s at 1000 Hz: stimulus on channel 6 (5 s pulses every 30 s from 30 s), LDF on channel 8 (~120 PU) with a +30 PU response peaking ~4 s after each onset</td></tr>
+<tr><td>demo_ldf_cropped.mat</td><td>LDF Process</td><td>The same recording cropped to 20–280 s (<code>stim</code>, <code>LDF</code>, <code>t</code>, <code>Fs</code>)</td></tr>
+<tr><td>demo_ldf_trials.mat</td><td>LDF Average, Signal Characterization</td><td>8 trials from −5 to 20 s at 10 Hz (<code>segmentedLDF</code>, <code>segmentedTime</code>)</td></tr>
+<tr><td>demo_tank/</td><td>Ephys Extract</td><td>30 s TDT-like block: 8 raw channels at 24414 Hz and a whisker stimulus (20 ms pulses every 2 s from 1 s)</td></tr>
+<tr><td>demo_lfp.mat</td><td>LFP Analysis, Signal Characterization</td><td>8-channel LFP at 1017 Hz, 100 µm spacing: ERP with N1 at 15 ms and P2 at 40 ms, largest at channel 4</td></tr>
+<tr><td>demo_mua.mat</td><td>MUA Analysis</td><td>Channels 3–5 at 24414 Hz with three units that fire more for 50 ms after each stimulus</td></tr>
+<tr><td>demo_imaging.mat</td><td>ROI Analysis</td><td>96 × 96 × 150 frames at 10 Hz: a pulsing vessel, a moving red blood cell and a cell with calcium transients (<code>roiMask</code> included)</td></tr>
+<tr><td>demo_lfp_oscillations.mat</td><td>LFP Analysis (step 6)</td><td>demo_lfp.mat plus 6 Hz theta (40 µV, all channels) and a phase-locked 40 Hz burst (10 µV, 50–250 ms after each stimulus, channels 3–5)</td></tr>
+<tr><td>demo_imaging_advanced.mat</td><td>ROI Analysis</td><td>Jittered stack (±3 px), three cells with distinct event times, a pulsing vessel and a red blood cell crossing the diameter line</td></tr>
+<tr><td>groups/</td><td>Signal Characterization (Groups &amp; statistics)</td><td>24 LDF trial files: the same 8 animals in Control, Stimulated and Drug (true peaks 18, 30 and 24 PU)</td></tr>
+<tr><td>formats/</td><td>Ephys Extract</td><td>The first 6 s of demo channels 3–6 as an Intan .rhd, an Open Ephys binary folder and an NWB file</td></tr>
+</tbody></table></div></div></section>
+
+<section class="section" id="ldf"><h2>LDF recording (<code>DemoData.ldfExport</code>)</h2>
+<div class="prose">
+<p>An 8-channel LabChart-style export, 300 s at 1000 Hz. Channel 6 is the stimulus: 5 V pulses of 5 s every 30 s from t = 30 s (9 pulses). Channel 8 is the LDF signal:</p>
+<pre><code>LDF(t) = 120 + 5·sin(2πt/400) + 3·sin(2π·0.13·t) + 1.5·sin(2π·6·t) + noise(SD 2)
+         + Σ_onsets 30·g((t − onset)/4),   g(x) = x³·e^(3(1−x)) for x &gt; 0, else 0</code></pre>
+<p>That is a ~120 PU baseline, a slow drift (period 400 s), vasomotion at 0.13 Hz, a 6 Hz cardiac ripple and white noise, plus a response of +30 PU peaking 4 s after every onset. The response shape is a gamma-variate function, a common model of slow haemodynamic responses<sup class="cite">[<a href="references.html#ref-boynton1996" aria-label="Reference 12">12</a>]</sup>.</p>
+<dl class="kv"><dt>Cropped file</dt><dd>20–280 s of the same recording (<code>stim</code>, <code>LDF</code>, <code>t</code>, <code>Fs</code>); onsets at 10, 40, … 250 s.</dd>
+<dt>Trials file</dt><dd>The 8 onsets whose −5 to +20 s window fits, block-averaged to 10 Hz (<code>segmentedLDF</code>, <code>segmentedTime</code>, <code>Fs</code>).</dd>
+<dt>Ground truth</dt><dd>onsets, stimulus duration 5 s, response peak delay 4 s, amplitude 30 PU, baseline 120 PU.</dd></dl>
+</div></section>
+
+<section class="section" id="ephys"><h2>Electrophysiology (<code>DemoData.tdtTank</code>, <code>lfpFile</code>, <code>muaFile</code>)</h2>
+<div class="prose">
+<p>30 s, 8 channels 100 µm apart, whisker stimulus pulses of 20 ms every 2 s from 1 s (15 stimuli). The raw channels are at the TDT rate 24414.0625 Hz; the LFP and stimulus are at 1017.25 Hz (24× decimation).</p>
+<h4>LFP</h4>
+<pre><code>ERP(x) = −120 µV·exp(−(x − 15 ms)²/(2·(5 ms)²)) + 60 µV·exp(−(x − 40 ms)²/(2·(12 ms)²))
+LFP_c(t) = profile_c·Σ ERP(t − onset) + shared(t) + local_c(t) + white noise (1 µV)
+profile_c = exp(−(depth_c − 300 µm)²/(2·(150 µm)²))   → largest on channel 4</code></pre>
+<p>The background <code>shared(t)</code> is the same on every channel (an AR(1) process with coefficient 0.98, scale 3 µV), so it cancels in the CSD; <code>local_c(t)</code> is small independent AR(1) noise (0.9, 0.3 µV). Ground truth: onsets, sink channel 4, N1 at 15 ms, P2 at 40 ms, spacing 100 µm.</p>
+<h4>MUA</h4>
+<div class="tablewrap"><table class="stack"><thead><tr><th>Unit</th><th>Home channel</th><th>Waveform (negative peak)</th><th>Baseline rate</th><th>Rate 5–55 ms after each stimulus</th></tr></thead><tbody>
+<tr><td>1</td><td>4</td><td>about −90 µV</td><td>6 spikes/s</td><td>80 spikes/s</td></tr>
+<tr><td>2</td><td>4</td><td>about −50 µV</td><td>10 spikes/s</td><td>40 spikes/s</td></tr>
+<tr><td>3</td><td>5</td><td>about −110 µV</td><td>3 spikes/s</td><td>120 spikes/s</td></tr>
+</tbody></table></div>
+<p>Spike trains are Poisson with a 2 ms refractory period; each unit is seen on neighbouring channels with a gain of exp(−|distance|/0.8) (skipped below 0.05). Noise is white, 10 µV. The MUA file holds channels 3–5. Ground truth: every unit's spike times, rates and home channel.</p>
+<h4>Oscillation demo (<code>core/demo/demoLFPOscillations.m</code>)</h4>
+<p>The same LFP plus a 6 Hz theta rhythm (40 µV, identical on all channels, frequency wandering with SD 0.5 Hz, so not phase-locked to the stimuli) and a 40 Hz burst (10 µV, 50–250 ms after each stimulus with 25 ms raised-cosine ramps, channels 3–5, same phase at every stimulus).</p>
+</div></section>
+
+<section class="section" id="imaging"><h2>Imaging stacks</h2>
+<div class="prose">
+<h4>Basic stack (<code>DemoData.imagingStack</code>)</h4>
+<p>96 × 96 px, 150 frames at 10 Hz. A dark vertical vessel at x = 60 whose diameter is 12 + 3·sin(2π·0.2·t) px (9–15 px, period 5 s);
+a bright red blood cell (Gaussian spot, sigma 2 px) moving down the upper part of the vessel at 2 px per frame (it never reaches the diameter line at y = 70);
+a cell at (24, 30), radius 6 px, with calcium transients of ΔF/F = 1 at 3, 7 and 11 s (rise 0.1 s, decay 0.8 s) added on top of the tissue background; sensor noise SD 0.02. <code>roiMask</code> marks the cell.</p>
+<h4>Advanced stack (<code>core/demo/demoImagingAdvanced.m</code>)</h4>
+<ul>
+<li>Every frame translated by a sub-pixel shift that follows a smooth random walk, zero mean, at most 3 px in each direction (the true shifts are stored).</li>
+<li>Three cells: (22, 24) r = 6 px, events at 4.0, 8.5, 13.0 s; (26, 78) r = 5 px, events at 5.5, 10.5 s; (82, 30) r = 7 px, events at 7.0, 12.0 s (ΔF/F amplitudes 1.0, 0.8, 1.2).</li>
+<li>The vessel at x = 60 (12 ± 3 px, period 5 s) and a red blood cell moving 3 px per frame down the whole image, crossing the diameter line (35, 64)–(85, 64) about every 3 s.</li>
+</ul>
+</div></section>
+
+<section class="section" id="groups"><h2>Groups (<code>core/demo/demoGroups.m</code>)</h2>
+<div class="prose">
+<p>24 LDF trial files: the same 8 animals in three conditions (Control, Stimulated, Drug), 8 trials each (−5 to 20 s at 10 Hz), response peaking 4 s after onset on a 110–130 PU baseline.</p>
+<pre><code>amplitude(animal, condition) = trueMean(condition) + animal effect (SD 3 PU)
+                              + animal × condition scatter (SD 2.5 PU)
+trueMean = 18, 30, 24 PU (Control, Stimulated, Drug);  each trial adds jitter (SD 2 PU)</code></pre>
+<p>Population effects: Stimulated − Control = 12 PU, d<sub>z</sub> = 3.27 (paired), Cohen's d = 3.02 (unpaired), ANOVA η² = 0.60. The realised per-file amplitudes are stored as well.</p>
+</div></section>
+
+<section class="section" id="formats"><h2>Formats (<code>core/demo/demoFormats.m</code>)</h2>
+<p>The first 6 s of tank channels 3–6 (3 stimuli at 1, 3 and 5 s) written as an Intan RHD file (format 3.0, resampled to 20 kHz, stimulus on DIGITAL-IN-01 and as a 1 V pulse on ANALOG-IN-1), an Open Ephys binary folder (GUI 0.6 layout, 30 kHz, TTL line 1 and ADC1, first sample number 512000) and an NWB file (raw at 24414.0625 Hz as int16 × 0.195 µV, the whisker stimulus TimeSeries and a trials table). The writers are part of the toolbox (<code>core/io</code>); the tests also read files assembled byte by byte from the published format descriptions.</p></section>
+
+<section class="section" id="batch"><h2>Batch sets (<code>core/demo/demoBatch.m</code>)</h2>
+<div class="tablewrap"><table class="stack"><thead><tr><th>Pipeline</th><th>Files</th><th>What differs between files (file k)</th></tr></thead><tbody>
+<tr><td>LDF</td><td>4 cropped recordings, 200 s at 1000 Hz, 7 stimuli</td><td>Amplitude 15 + 5k PU (20–35), peak delay 2.5 + 0.5k s (3–4.5), baseline 115 + 5k PU</td></tr>
+<tr><td>LFP</td><td>3 recordings, 8 channels, 20 s at 1000 Hz, 10 stimuli</td><td>N1 at 9 + 3k ms (12, 15, 18) of −(80 + 20k) µV, sink on channel 2 + k (3, 4, 5)</td></tr>
+<tr><td>MUA</td><td>2 files</td><td>The demo MUA recording and an exact copy at twice the gain</td></tr>
+<tr><td>Imaging</td><td>3 stacks, 64 × 64 × 100 frames at 10 Hz</td><td>Peak ΔF/F 0.5k (0.5, 1.0, 1.5), transients at 3 and 6.5 s; vessel diameter 8 + 2k ± 2 px</td></tr>
+<tr><td>Response features</td><td>4 trial files, 8 trials each</td><td>Amplitude 15 + 5k PU, peak delay 2.5 + 0.5k s</td></tr>
+</tbody></table></div></section>
+
+<section class="section" id="seeds"><h2>Random seeds</h2>
+<p>All generators use MATLAB's <code>RandStream('mt19937ar')</code> with fixed seeds: <code>DemoData.Seed</code> = 20260924 (+1 LDF, +2 electrophysiology, +3 imaging, +101 theta wander), 20260925 for the groups, 20260965 for the advanced stack and 20260930 + offset for the batch sets. The global random stream is not touched.</p></section>
+
+</main>
+</body>
+</html>

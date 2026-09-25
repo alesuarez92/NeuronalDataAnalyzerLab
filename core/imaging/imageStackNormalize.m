@@ -24,8 +24,8 @@ switch lower(mode)
         end
     case 'percentile'
         pl = lowHigh(1); ph = lowHigh(2);
-        mn = prctile(stack(:), pl);
-        mx = prctile(stack(:), ph);
+        mn = pctl(stack(:), pl);
+        mx = pctl(stack(:), ph);
         out = (stack - mn) / (mx - mn + eps);
         out = max(0, min(1, out));
     otherwise
@@ -33,4 +33,16 @@ switch lower(mode)
         mx = max(stack(:));
         out = (stack - mn) / (mx - mn + eps);
 end
+end
+
+function v = pctl(x, p)
+% Percentile with linear interpolation; toolbox-free stand-in for prctile.
+x = sort(x(isfinite(x(:))));
+n = numel(x);
+if n == 0, v = NaN; return; end
+if n == 1, v = x; return; end
+pos = 1 + (n - 1) * p / 100;
+lo = floor(pos);
+hi = min(lo + 1, n);
+v = x(lo) + (pos - lo) * (x(hi) - x(lo));
 end

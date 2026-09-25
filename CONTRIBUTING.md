@@ -1,7 +1,7 @@
 # Contributing to NeuronalDataAnalyzerLab
 
 Thanks for your interest. This is an early-stage research toolbox
-(currently v0.1.0) and contributions that flow back to the canonical
+(currently v0.2.0) and contributions that flow back to the canonical
 repo are welcome.
 
 ## How to use it

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeuroAnalyzer</title>
+<meta name="description" content="NeuroAnalyzer: a MATLAB toolbox for Laser Doppler flowmetry, LFP, MUA, imaging and response features, with synthetic demo data.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<main id="main">
+
+<section class="hero">
+  <p class="eyebrow">MATLAB toolbox · NMD Lab · v0.2.0</p>
+  <h1>NeuroAnalyzer: step-by-step analysis windows for blood flow, electrophysiology and imaging</h1>
+  <p class="lede">NeuroAnalyzer (repository <code>NeuronalDataAnalyzerLab</code>) is a MATLAB toolbox with one window per analysis step:
+  Laser Doppler flowmetry (LDF), local field potentials (LFP), multi-unit activity (MUA), image stacks and response features.
+  Every window can open synthetic demo data with known answers, so you can check the results before using your own recordings.</p>
+  <div class="actions">
+    <a class="btn primary" href="install.html">Install</a>
+    <a class="btn" href="guide.html">Guide, window by window</a>
+    <a class="btn" href="https://github.com/alesuarez92/NeuronalDataAnalyzerLab">Source on GitHub</a>
+  </div>
+</section>
+
+<figure><div class="shot"><a href="assets/frames/Main.png"><img src="assets/frames/Main.png" alt="The launcher. Each card is one pipeline; its numbered buttons open the windows in order. Try with demo data opens Help on the Welcome topic, which lists the demo files and can write them all to a folder." loading="lazy"></a></div><figcaption>The launcher. Each card is one pipeline; its numbered buttons open the windows in order. <b>Try with demo data</b> opens Help on the Welcome topic, which lists the demo files and can write them all to a folder.</figcaption></figure>
+
+<section class="section" id="pipelines"><h2>Pipelines</h2>
+<div class="grid">
+  <a class="card" href="ldf.html"><span class="tag">LDF</span><h3>Laser Doppler flowmetry</h3>
+    <p>Load a LabChart export, crop, filter and downsample, cut trials around each stimulus and plot the grand average.</p></a>
+  <a class="card" href="ephys.html#lfp"><span class="tag">Electrophysiology</span><h3>LFP: ERP, CSD, time–frequency</h3>
+    <p>Evoked potentials, current source density, spectrum, spectrogram, ERSP / ITPC and band power.</p></a>
+  <a class="card" href="ephys.html#mua"><span class="tag">Electrophysiology</span><h3>MUA: spike detection and sorting</h3>
+    <p>Threshold detection, PCA and clustering, auto-merge, manual merge / split, raster and PSTH, correlograms, quality checks.</p></a>
+  <a class="card" href="imaging.html"><span class="tag">Imaging</span><h3>ROI and line analysis</h3>
+    <p>Motion correction, several ROIs, automatic cell detection, ΔF/F, flow-speed proxy, kymograph and vessel diameter.</p></a>
+  <a class="card" href="features.html"><span class="tag">Response features</span><h3>Features, statistics, figures</h3>
+    <p>Peak latency, onset delay, FWHM, AUC, rise and decay time; group tests with effect sizes; vector figure export.</p></a>
+  <a class="card" href="batch.html"><span class="tag">All pipelines</span><h3>Batch processing</h3>
+    <p>One pipeline, one set of settings, a folder of files: one summary table (CSV / MAT) and a log.</p></a>
+  <a class="card" href="sessions.html"><span class="tag">All windows</span><h3>Sessions and reports</h3>
+    <p>Save inputs (with MD5 checksums), settings and results; reopen them later; write a one-page PDF report.</p></a>
+  <a class="card" href="formats.html"><span class="tag">Data</span><h3>File formats</h3>
+    <p>LabChart .mat, TDT tanks, Intan RHD, Open Ephys binary, NWB 2.x, image stacks (.mat, TIFF); NWB export.</p></a>
+</div></section>
+
+<section class="section" id="tour"><h2>A look at each pipeline</h2><p>Screenshots taken by the automated tests, which drive every window on the demo data in real MATLAB. Use the arrow keys or the buttons to move through them.</p><div data-tour="overview" data-label="One screenshot per pipeline"><noscript><p class="note">The walkthrough needs JavaScript. The frames are in <code>assets/frames/</code>.</p></noscript></div></section>
+
+<section class="section" id="how"><h2>Every window works the same way</h2>
+<div class="chain" aria-label="Order of the step cards"><span class="step">1 Load</span><span class="arrow">→</span><span class="step">2 Settings</span><span class="arrow">→</span><span class="step">3 Run</span><span class="arrow">→</span><span class="step">4 Save</span></div>
+<div class="prose">
+<ul>
+<li>Numbered step cards on the left, plots on the right. The teal button is the suggested next action; buttons that are not possible yet are greyed out.</li>
+<li>The status bar at the bottom says what happened and what to do next.</li>
+<li><b>? Help</b> in each window header opens its quick start and troubleshooting (the same text as the <a href="guide.html">guide</a>).</li>
+<li><b>Try demo data</b> opens the window with synthetic data whose answers are known; the <a href="demo-data.html">demo data page</a> lists them.</li>
+<li>Each step saves a .mat file that the next step loads, so pipelines can be stopped and resumed.</li>
+</ul></div></section>
+
+<section class="section" id="checked"><h2>Checked against known answers</h2>
+<p>The demo recordings are generated by the toolbox with a fixed random seed and store their ground truth. The test suite runs every
+analysis on them, and on analytic and textbook examples, and checks the results within stated tolerances.
+<a href="validation.html">What the tests check</a>.</p></section>
+
+<section class="section" id="start"><h2>Get started</h2>
+<ol class="steps">
+<li><span>Download the latest release and add it to the MATLAB path (<a href="install.html">Install</a>).</span></li>
+<li><span>Run <code>NeuroAnalyzer</code>, click <b>Set folders</b>, then open a window from a card.</span></li>
+<li><span>Click <b>Try demo data</b> in that window and compare your numbers with the <a href="guide.html">guide</a>.</span></li>
+</ol></section>
+
+</main>
+</body>
+</html>

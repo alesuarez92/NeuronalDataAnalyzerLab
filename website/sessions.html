@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sessions and reports · NeuroAnalyzer</title>
+<meta name="description" content="Session files with input checksums and one-page PDF reports in NeuroAnalyzer.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<main id="main">
+
+<section class="page-head"><p class="eyebrow">All windows</p><h1>Sessions and reports</h1><p class="lede">Save everything needed to repeat an analysis, reopen it later, and write a one-page PDF report for the lab notebook.</p></section>
+
+<section class="section" id="how"><h2>How to use it</h2><ol class="steps"><li><span><b>Save session…</b> (last step card of every analysis window): choose a file name, type optional notes (animal, condition, why these settings) and click <b>Save session</b>. The <code>.nasession.mat</code> file stores the input file paths with their size, date and MD5 checksum, every setting, the results and your notes.</span></li><li><span><b>Open session…</b>: choose a <code>.nasession.mat</code> saved by the <b>same window</b>. The input files are reloaded and checked; the settings are applied and the analysis is re-run, so the window looks as it did when you saved.</span></li><li><span>If an input file has moved, put it next to the session file (it is found automatically) or choose it when asked. If a file has <b>changed</b> since the session was saved, the session still opens and the status bar warns you.</span></li><li><span><b>Report (PDF)…</b>: writes one A4 page with a picture of the window and, below it, the NeuroAnalyzer and MATLAB versions, the date, every input file with its MD5, the settings and the key results. Attach it to your lab notebook or use it for the methods section.</span></li></ol></section>
+
+<section class="section" id="walkthrough"><h2>Walkthrough</h2><div data-tour="sessions" data-label="Sessions walkthrough"><noscript><p class="note">The walkthrough needs JavaScript. The frames are in <code>assets/frames/</code>.</p></noscript></div></section>
+
+<section class="section" id="stored"><h2>What is stored and checked</h2><div class="prose"><h4>What is stored</h4>
+<ul>
+<li><b>Inputs</b>: the full path, size in bytes, modification date and MD5 checksum of every input file (for folders such as TDT tanks: one checksum over all files in the folder).</li>
+<li><b>Settings</b>: every parameter of the window (filters, ERP window and threshold, CSD order, time–frequency settings, spike-sorting settings, ROIs and line, features, statistical design, …).</li>
+<li><b>Results</b>: the result structs of the window. Large signals (e.g. filtered LFP / MUA, cropped LDF) are not stored: they are re-computed from the checked input when the session is opened. Arrays larger than 100 MB are replaced by a note.</li>
+</ul>
+<h4>Opening a session</h4>
+<ul>
+<li>The input files are checked first. <b>ok</b>: unchanged; <b>moved</b>: found next to the session file with the same checksum; <b>changed</b>: the checksum differs (the session opens with a warning, results may differ); <b>missing</b>: you are asked to locate it (the session does not open without it).</li>
+<li>The analysis is re-run with the saved settings. MUA Analysis is the exception: the sorted clusters, your merges and splits and the Undo history are restored as saved, because K-means and manual edits cannot be repeated exactly.</li>
+<li>A session saved by one window cannot be opened in another window.</li>
+</ul>
+<h4>The PDF report</h4>
+<ul>
+<li>One page: base MATLAB cannot join several PDF pages without a toolbox, so the window picture and the summary share one A4 page. Long lists are shortened on the page; the session file keeps everything.</li>
+<li>The window picture is taken with <code>exportapp</code> (MATLAB R2020b or later); if that fails, the largest plot is used instead.</li>
+</ul></div></section>
+
+<section class="section" id="io"><h2>Files</h2><div class="io"><div class="card"><h4>In</h4><ul><li>A <code>.nasession.mat</code> file saved by the same window (Open session)</li><li>The input files the session refers to, at their saved location, next to the session file, or chosen when asked</li></ul></div><div class="card"><h4>Out</h4><ul><li><code>&lt;name&gt;.nasession.mat</code>: variable <code>session</code> with <code>app</code>, <code>toolboxVersion</code>, <code>matlabVersion</code>, <code>os</code>, <code>created</code> (ISO 8601), <code>inputs</code> (role, path, name, bytes, modified, md5), <code>settings</code>, <code>results</code>, <code>summary</code>, <code>notes</code></li><li><code>&lt;name&gt;_report.pdf</code>: one A4 page (window image + versions, inputs with MD5, settings, key results)</li></ul></div></div></section>
+
+<section class="section" id="demo"><h2>Try it</h2><div class="prose"><ul>
+<li><b>Try</b>: in any window click <b>Try demo data</b>, run the analysis, then <b>Save session…</b>. Close the window, open it again from the launcher and click <b>Open session…</b>: the same plots and numbers come back.</li>
+<li><b>What you should get</b>: the status bar says "Session … opened (saved … with NeuroAnalyzer v…)" and shows your notes. <b>Report (PDF)…</b> writes a one-page PDF (a few hundred kB).</li>
+</ul></div><p>Troubleshooting: <a href="guide.html#sessions">Sessions and reports in the guide</a>.</p></section>
+
+</main>
+</body>
+</html>
