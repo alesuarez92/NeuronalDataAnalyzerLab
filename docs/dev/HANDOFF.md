@@ -1,4 +1,4 @@
-# Handoff (2026-09-25, session 3)
+# Handoff (2026-09-25, session 3, end)
 
 Working branch: `claude/admiring-cori-52ekpa`. Owner decision: `docs/dev/` stays out of `main`.
 **Delete this file from the branch before merging any PR.**
@@ -27,16 +27,43 @@ Done on the branch (session 3):
   the app pipeline replayed headless gives every Help number exactly (default settings).
   The window itself has still never run in MATLAB: CI is its first real test.
 
+## State at handoff
+- PR #8 (https://github.com/alesuarez92/NeuronalDataAnalyzerLab/pull/8) is open. MATLAB CI
+  on head 248de7c is **green** (run 36150789957): HistologyApp, the walkthrough and the
+  smoke test all passed on the first MATLAB run. Only "Workers Builds" (Cloudflare) is red.
+- Owner's latest request (verbatim): "Push and publish everything and fix the problem of
+  the bot". Read as: fix the Cloudflare preview check, then merge PR #8 and get the
+  website deployed. Treat it as the owner's go for merging #8, once the handoff file has
+  been removed and CI is green.
+
+## Cloudflare "Workers Builds" investigation (in progress)
+- `wrangler.jsonc` (repo root): name neuronalanalyzerlab, assets ./website, 404-page.
+- `npx wrangler@4.140.0 deploy --dry-run` from the repo root **succeeds locally** (133
+  files read from website/). So the config and the files are valid; the failure is in
+  the Cloudflare project's build settings or credentials, which are only visible in the
+  dashboard (build b6e1b8d8-029c-40b7-a850-142fe4d9afc7).
+- Likely causes to check with the owner (they need to open "View logs" in the bot
+  comment, or paste the log): the build/deploy command in Workers Builds settings (for
+  preview branches Cloudflare runs `npx wrangler versions upload`); the root directory
+  setting; a Worker name in the dashboard that differs from "neuronalanalyzerlab"; an
+  expired / missing API token for the build; a build command (e.g. `npm run build`) with
+  no package.json in the repo.
+- Possible repo-side fix to try if the log shows "Missing entry-point" or a missing
+  package.json: add a minimal `package.json` (no dependencies) or set the build command
+  to empty. Do not guess further without the log.
+
 ## Next steps (in order)
-1. Watch the PR's CI; fix what the first MATLAB run of HistologyApp finds. Ask the owner
-   before merging.
-2. After merge: run *Update screenshots* with include_all, copy the `HistologyApp_*`
-   frames into `website/assets/frames/`, add an imaging tour in `website/assets/site.js`
-   and a figure in the guide's Histology section (the workflow only refreshes existing
-   frames).
-3. Techniques explainers (website section + Help "Learn" text): LDF, laminar ephys
+1. Get the Workers Builds log (ask the owner to paste it or open "View logs"); fix the
+   repo side if it is ours, otherwise give the owner the exact dashboard setting.
+2. Merge PR #8: delete `docs/dev/HANDOFF.md` from the branch in a commit (keep a copy of
+   its contents in the chat / the next session's prompt), push, wait for CI green, then
+   squash-merge. Cancel the duplicate push run.
+3. After merge: branch from main again; run *Update screenshots* with include_all, copy
+   the `HistologyApp_*` frames into `website/assets/frames/`, add an imaging tour in
+   `website/assets/site.js` and a figure in the guide's Histology section.
+4. Techniques explainers (website section + Help "Learn" text): LDF, laminar ephys
    (LFP/MUA/CSD), two-photon / calcium, histology and culture imaging.
-4. Later: a virtual-lab histology exercise; remaining validation work; release 0.4.0 on request.
+5. Later: a virtual-lab histology exercise; remaining validation work; release 0.4.0 on request.
 
 ## Working rules learned
 - Keep CI minutes low: open the PR and cancel the duplicate `push` run.
