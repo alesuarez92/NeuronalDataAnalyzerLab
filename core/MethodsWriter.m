@@ -446,10 +446,10 @@ classdef MethodsWriter
 
         %% ldfAverage - Pooled trials, baseline, grand average
         function paras = ldfAverage(s)
-            nFiles = numel(s.inputs);
             nTr = MethodsWriter.getf(s, 'results.nTrials', []);
             if ~MethodsWriter.isNum(nTr), paras = {}; return; end
             counts = MethodsWriter.getf(s, 'results.fileCounts', []);
+            nFiles = max(numel(s.inputs), numel(counts));
             win = MethodsWriter.getf(s, 'results.window', []);
             t = sprintf('Trials from %s', MethodsWriter.plural(nFiles, 'recording file'));
             if numel(counts) > 1 && all(isfinite(counts))
@@ -469,6 +469,11 @@ classdef MethodsWriter
             end
             if logical(MethodsWriter.getf(s, 'settings.grandAverageShown', false))
                 t = [t ' The grand average was computed as the mean &plusmn; SD across all trials.'];
+            end
+            if MethodsWriter.isNum(MethodsWriter.getf(s, 'results.peakChange', []))
+                t = [t ' The response was quantified as the maximum of the mean trial after onset minus ' ...
+                    'the mean pre-stimulus baseline (in the units of the LDF signal and as a percentage of ' ...
+                    'the baseline), and its time after onset.'];
             end
             paras = {t};
         end
