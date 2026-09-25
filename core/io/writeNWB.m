@@ -58,7 +58,7 @@
 % Not written: the cached schema (/specifications), compression /
 % chunking, electrode x/y/z/impedance, units' electrodes/waveforms.
 % This layout was checked against pynwb's validator via a Python mirror
-% during development (see docs/dev/reports/formats.md); the MATLAB file
+% during development; the MATLAB file
 % itself is not validated at run time, so the UI calls it an "NWB-style
 % export (not validated)". References: NWB 2.x format specification
 % (nwb-schema.readthedocs.io); Rübel O. et al. (2022) The Neurodata

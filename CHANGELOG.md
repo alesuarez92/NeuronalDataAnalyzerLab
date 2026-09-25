@@ -26,8 +26,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   *Try demo data* button, Help has *Try it with demo data* per topic, and
   the launcher links to it.
 - **CI walkthroughs**: every window is opened and driven through its steps
-  on demo data in real MATLAB; the frames are published on the
-  `ci/screenshots` branch.
+  on demo data in real MATLAB; the frames are uploaded as a CI artifact
+  (kept 7 days).
 - **MUA Analysis**: auto-merge of over-split clusters (mean-waveform
   correlation and amplitude ratio), manual *Merge selected* / *Split
   selected* / *Undo*, *Raster & PSTH* and *Correlograms* tabs; the sorting

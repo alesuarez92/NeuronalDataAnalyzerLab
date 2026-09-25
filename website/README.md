@@ -71,8 +71,8 @@ python3 -m http.server --directory website 8000
 
 ## Updating
 
-- **Screenshots:** CI publishes the frames to the `ci/screenshots` branch.
-  Copy the ones the pages use into `assets/frames/` and optimise them
+- **Screenshots:** download the `window-screenshots` artifact of a CI run
+  (Actions tab, kept 7 days). Copy the ones the pages use into `assets/frames/` and optimise them
   **losslessly only** (`optipng -o5 -strip all`; never `pngquant` or other
   lossy tools). A frame named in `site.js` or a page must exist in
   `assets/frames/`.

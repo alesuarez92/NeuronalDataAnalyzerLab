@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write   # publish window screenshots to the ci/screenshots branch
+  contents: read
 
 jobs:
   test:
@@ -60,17 +60,3 @@ jobs:
           path: test-artifacts/screens/
           if-no-files-found: warn
           retention-days: 7
-
-      # Artifacts need a browser login to view; also publish the screenshots
-      # as a single force-pushed commit on ci/screenshots for easy review.
-      - name: Publish screenshots branch
-        if: always() && github.event_name == 'push' && hashFiles('test-artifacts/screens/*.png') != ''
-        run: |
-          cd test-artifacts/screens
-          git init -q -b ci/screenshots
-          git config user.name "ci"
-          git config user.email "ci@users.noreply.github.com"
-          echo "Window screenshots from ${GITHUB_REF_NAME} @ ${GITHUB_SHA}" > README.md
-          git add -A
-          git commit -q -m "Screenshots for ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" ci/screenshots
