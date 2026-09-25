@@ -585,7 +585,7 @@ classdef MethodsWriter
                     t = sprintf('%s a threshold by the mean-subtracted stimulus signal', t);
                 end
                 if MethodsWriter.isNum(isi)
-                    t = sprintf('%s; crossings less than %s after the previous one were ignored', t, MethodsWriter.dur(isi));
+                    t = sprintf('%s; crossings less than %s after the previous accepted onset were ignored', t, MethodsWriter.dur(isi));
                 end
                 if nOn > 0, t = sprintf('%s (n = %d onsets)', t, nOn); end
                 parts{end+1} = [t '.'];

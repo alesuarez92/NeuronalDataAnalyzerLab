@@ -68,6 +68,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   apart. Spikes in time bins too small to cluster (or where clustering
   failed) were dropped from the results; they are now kept as unsorted
   (noise).
+- **LFP / ERP and MUA: pulse trains gave a single onset for the whole
+  recording.** A crossing was dropped when it came within the minimum
+  interval of the previous *crossing*, so in a train of pulses every pulse
+  after the first was dropped. Both now use the LDF rule (within the
+  minimum interval of the last *kept* onset): one onset per train. Single
+  pulses give the same onsets as before.
 - **Help / website: MUA detection methods described correctly.** *Rolling
   MAD* uses the same threshold as MAD over the whole recording (it was
   described as a moving window); *Percentile* does not use the multiplier.

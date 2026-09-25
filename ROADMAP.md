@@ -84,7 +84,7 @@ Scoped items that are known to be missing. Each is self-contained.
 
 | | Item | Area | Notes |
 |---|---|---|---|
-| 🟢 | One stimulus-onset rule | LFP / MUA | `ERPAnalysis.detectOnsets` (mean-subtracted stimulus) and `SpikeTrains.stimulusOnsets` (absolute threshold) differ slightly. Unify them and describe one rule in Help. |
+| ✅ | One stimulus-onset rule | LDF / LFP / MUA | All three keep a crossing only if it comes after the minimum interval from the last kept onset (a pulse train gives one onset). LFP still thresholds the mean-subtracted stimulus. |
 | 🟢 | Time–frequency in the ERP export | LFP | *Export ERP / CSD…* does not include spectra, ERSP / ITPC or band power. |
 | 🟢 | Non-rigid motion correction | Imaging | Motion correction handles translation only; add piecewise-rigid registration for tissue deformation. |
 | 🟢 | Neuropil correction | Imaging | Subtract a scaled surround signal from each cell's trace before ΔF/F. |

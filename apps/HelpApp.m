@@ -605,7 +605,7 @@ classdef HelpApp < handle
                 '* Filter type: None, Low-pass, High-pass, Band-pass or Notch; design Butterworth, Chebyshev I or FIR; cutoff(s) in Hz and order.'
                 '* Processing always starts from the loaded data, so applying new settings never filters an already filtered signal.'
                 '## Segment trials'
-                '* Onsets are the samples where the stimulus rises above the threshold; onsets closer than the minimum ISI to the previous one are ignored.'
+                '* Onsets are the samples where the stimulus rises above the threshold; a crossing closer than the minimum ISI to the last accepted onset is ignored, so a train of pulses gives one onset.'
                 '* Each trial runs from onset − pre to onset + post. Trials that would run past the start or end of the recording are skipped.'};
             t.trouble = {
                 '"Invalid LDF file. Missing variable(s): …"', 'Load the file saved by LDF Extract (it contains stim, LDF, t, Fs), not the raw LabChart export.'
@@ -761,7 +761,7 @@ classdef HelpApp < handle
                 'Time–frequency tabs: Spectrum (Welch PSD, log–log, bands shaded), Spectrogram (STFT power in dB, dashed stimulus onsets), ERSP / ITPC (dB vs baseline on a blue–white–red scale centred at 0; ITPC 0–1), Band power (% change vs baseline, mean ± SEM per band)'};
             t.details = {
                 '## ERP'
-                '* Stimulus onsets are upward crossings of the threshold by the mean-subtracted stimulus; onsets closer than the minimum ISI to the previous one are dropped.'
+                '* Stimulus onsets are upward crossings of the threshold by the mean-subtracted stimulus; a crossing closer than the minimum ISI to the last accepted onset is dropped, so a train of pulses gives one onset (the same rule as LDF and MUA).'
                 '* Each epoch runs from onset − pre to onset + post. Epochs that would run past the recording edges are excluded (not zero-filled); the ERP is the mean and SD of the valid epochs.'
                 '## CSD'
                 '* CSD is the negative second spatial derivative of the ERP across the ordered channels divided by spacing²; the first and last rows are copied from their neighbours.'

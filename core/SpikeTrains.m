@@ -6,9 +6,10 @@
 % seconds on the same clock as the stimulus.
 %
 %   onsets = SpikeTrains.stimulusOnsets(stim, t, threshold, minISI)
-%       Rising crossings of stim above threshold (times from t); an onset
-%       less than minISI s after the previous crossing is dropped. Same
-%       rule as "Segment by stimulation onsets" in MUA Analysis.
+%       Rising crossings of stim above threshold (times from t); a crossing
+%       within minISI s of the last kept onset is dropped (a pulse train
+%       gives one onset; same rule as LDFPipeline.detectOnsets). Used by
+%       "Segment by stimulation onsets" in MUA Analysis.
 %   [raster, psth] = SpikeTrains.rasterPSTH(spikeTimes, onsets, window, binWidth, span)
 %       window = [from to] around each onset (s), e.g. [-0.1 0.3];
 %       binWidth (s). Optional span = [tStart tEnd] of the analysed
@@ -52,8 +53,17 @@ classdef SpikeTrains
             onsets = t(onsetIdx(:));
             onsets = onsets(:);
             if isempty(onsets), return; end
-            isi = [Inf; diff(onsets(:))];
-            onsets = onsets(isi > minISI);
+            % Keep a crossing only if it comes more than minISI after the last
+            % KEPT onset (as LDF): a pulse train gives one onset per train
+            keep = false(size(onsets));
+            last = -Inf;
+            for i = 1:numel(onsets)
+                if onsets(i) - last > minISI
+                    keep(i) = true;
+                    last = onsets(i);
+                end
+            end
+            onsets = onsets(keep);
         end
 
         %% rasterPSTH - Spikes around each onset and their trial-averaged rate
