@@ -35,6 +35,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   (`.navlab.mat`) record the attempts, and instructors grade a folder of
   submissions into one CSV table. Help → *Virtual lab* explains the
   simulation and the grading.
+- **Website**: a *Virtual lab* page with a walkthrough of the demo student
+  (screenshots from the automated tests), a Virtual lab section in the
+  guide, and the methods text on the sessions page.
 - **Average LDF** shows the results under *Plot grand average*: baseline,
   peak increase (and % of baseline) and time to peak, with the peak
   marked on the plot; sessions and reports include them.

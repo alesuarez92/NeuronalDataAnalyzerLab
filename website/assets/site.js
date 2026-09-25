@@ -16,6 +16,7 @@
     ["imaging.html", "Imaging"],
     ["features.html", "Features"],
     ["batch.html", "Batch"],
+    ["lab.html", "Virtual lab"],
     ["guide.html", "Guide"],
     ["demo-data.html", "Demo data"],
     ["validation.html", "Validation"],
@@ -25,7 +26,8 @@
   var FOOTER = [
     ["Pipelines", [["ldf.html", "Laser Doppler flowmetry"], ["ephys.html", "Electrophysiology (LFP, MUA)"],
       ["imaging.html", "Imaging"], ["features.html", "Response features and statistics"],
-      ["batch.html", "Batch processing"], ["sessions.html", "Sessions and reports"]]],
+      ["batch.html", "Batch processing"], ["sessions.html", "Sessions and reports"],
+      ["lab.html", "Virtual lab"]]],
     ["Documentation", [["install.html", "Install"], ["guide.html", "Guide, window by window"],
       ["formats.html", "File formats"], ["demo-data.html", "Demo data"],
       ["validation.html", "Validation"], ["references.html", "References"]]],
@@ -41,7 +43,8 @@
     img: "core/demo/demoImagingAdvanced.m",
     groups: "core/demo/demoGroups.m",
     batch: "core/demo/demoBatch.m",
-    formats: "core/demo/demoFormats.m"
+    formats: "core/demo/demoFormats.m",
+    lab: "core/VirtualLab.m"
   };
 
   /* ------------------------------------------------------------------
@@ -50,6 +53,38 @@
      Frames are screenshots taken by the automated tests in real MATLAB.
      ------------------------------------------------------------------ */
   var TOURS = {
+    lab: [
+      { f: "VirtualLabApp_01_learn", w: "Virtual Lab", t: "Learn the technique", g: "lab",
+        x: "Step 1 states the question; the Learn tab explains how laser Doppler flowmetry works, what the raw signal looks like and how the experiment is recorded.",
+        l: "Record stays disabled until a name or ID is typed: the data are made from it." },
+      { f: "VirtualLabApp_02_plan_too_large", w: "Virtual Lab", t: "A plan that is not possible", g: "lab",
+        x: "40 stimuli every 120 s at 1000 Hz would need 4 830 000 samples per channel (about 77 MB).",
+        l: "The line under the plan says why, and Record stays disabled." },
+      { f: "VirtualLabApp_03_plan", w: "Virtual Lab", t: "The demo plan", g: "lab",
+        x: "Probe over the activated barrel, 15 stimuli of 5 s every 25 s after 30 s of baseline, 40 Hz. The Plan tab draws the protocol as the values change.",
+        l: "Recording: 7 min 0 s, 16 800 samples per channel, about 0.3 MB." },
+      { f: "VirtualLabApp_04_recorded", w: "Virtual Lab", t: "Record", g: "lab",
+        x: "The simulator writes a LabChart-style file: stimulus on channel 6, LDF on channel 8, exactly as the acquisition software would.",
+        l: "15 responses on a ~115 PU baseline, with slow vasomotion and the heartbeat ripple." },
+      { f: "VirtualLabApp_05_extract_ldf", w: "Extract LDF", t: "Analyse it yourself: crop", g: "lab",
+        x: "Open in Extract LDF loads the recording into the normal window (stimulus = channel 6, LDF = channel 8). The student crops it (here the whole 0–420 s) and saves it.",
+        l: "40 Hz · 7 min 0.0 s · 16 800 samples; 15 stimulus pulses." },
+      { f: "VirtualLabApp_06_process_ldf", w: "LDF Processing", t: "Cut trials", g: "lab",
+        x: "No filter, threshold 2.5 (5 V stimulus), 5 s before to 20 s after each onset, minimum interval 10 s; then Save trials and Save session….",
+        l: "15 trials; the mean rises from ~113 PU to ~152 PU about 6 s after onset." },
+      { f: "VirtualLabApp_07_average_ldf", w: "Average LDF Viewer", t: "Grand average", g: "lab",
+        x: "Relative to baseline, Plot grand average. The numbers the student needs are under the button, and the peak is marked on the plot.",
+        l: "Baseline 113.4 · peak increase +38.7 (34.1%) · time to peak 5.9 s · 15 trials." },
+      { f: "VirtualLabApp_08_feedback", w: "Virtual Lab", t: "Check my results", g: "lab",
+        x: "The student types those numbers, attaches the two sessions and clicks Check my results. Every item has a plain-language reason.",
+        l: "Score 100%: 14 of 14 OK. The reference values stay hidden." },
+      { f: "VirtualLabApp_09_feedback_wrong_latency", w: "Virtual Lab", t: "A wrong answer is caught", g: "lab",
+        x: "With a time to peak of 3.9 s instead of 5.9 s, that row turns to Fix and the explanation says how the time to peak is measured.",
+        l: "Score 93%: 13 OK, 1 to fix (attempt 2)." },
+      { f: "VirtualLabApp_10_solution", w: "Virtual Lab", t: "Show solution", g: "lab",
+        x: "Show solution reveals the reference values and the noise-free answer, and the submission records that the solution was shown.",
+        l: "Careful analysis of this recording: 38.1 PU at 5.7 s; noise-free truth: 38.6 PU at 5.8 s." }
+    ],
     ldf: [
       { f: "ExtractLDFApp_02_demo_loaded", w: "Extract LDF", t: "Load the export",
         x: "Try demo data loads a LabChart-style export: 300 s at 1000 Hz, stimulus on channel 6, LDF on channel 8. The range 20–280 s is filled in.",

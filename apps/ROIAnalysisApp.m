@@ -1266,7 +1266,7 @@ classdef ROIAnalysisApp < handle
 
         %% exportResultsTo - Save the current result without dialogs; true on success
         % .csv: Time + one column per measure and ROI (single ROI: Intensity,
-        % Movement, DFF, Speed; several: <measure>_<ROI name>), or
+        % Movement, DFF; several: <measure>_<ROI name>), or
         % Diameter_px (+ Diameter_standard_px, Replaced when robust); the
         % kymograph as a matrix (first row = time). .mat: struct results
         % with every series, all ROI masks and names, line, shifts and settings.
