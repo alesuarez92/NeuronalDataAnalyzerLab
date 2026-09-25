@@ -1,0 +1,40 @@
+name: Release
+
+# Pushing a version tag (e.g. v0.2.0) on main publishes the GitHub Release:
+# notes = that version's section of CHANGELOG.md, assets = GitHub's source
+# ZIP / tarball. The tag must match core/UITheme.m (version = '...').
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write   # create the release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the app version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          app=$(sed -n "s/^ *version = '\(.*\)'.*/\1/p" core/UITheme.m | head -1)
+          echo "tag=$tag app=$app"
+          test "$tag" = "$app"
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md
+          printf '\nInstall: download the source ZIP below, unzip it, open MATLAB in that folder and run `NeuroAnalyzer`. See the README for details.\n' >> notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "NeuroAnalyzer $GITHUB_REF_NAME" --notes-file notes.md --verify-tag

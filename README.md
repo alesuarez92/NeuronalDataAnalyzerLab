@@ -1,6 +1,6 @@
 # NeuronalDataAnalyzerLab
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-lightgrey.svg)](LICENSE.txt)
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2021a+-orange.svg)](https://www.mathworks.com/products/matlab.html)
 
@@ -8,7 +8,7 @@
 > not the green *Code → Download ZIP* button at the top of this page.
 > The green button gives you the in-development `main` branch; the
 > Releases page gives you a tagged, tested version (currently
-> [v0.1.0](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.1.0)).
+> [v0.2.0](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.2.0)).
 > Full walk-through below in [Install](#install).
 
 ![Main launcher window: LDF, electrophysiology, imaging, response features and batch processing](docs/main-launcher.png)
@@ -26,7 +26,7 @@ and reopened as a **session** with input-file checksums, and produce a
 one-page **PDF report**. Every window has **synthetic demo data with known
 answers**, so results can be checked before using real recordings.
 
-> **Status: early release (v0.1.0).** The UI works end-to-end on the lab's
+> **Status: early release (v0.2.0).** The UI works end-to-end on the lab's
 > data formats, but the public surface is not yet stable. See
 > [CHANGELOG.md](CHANGELOG.md) for what's in this release and what's next.
 
@@ -128,7 +128,9 @@ the SDK.
   See [tests/README.md](tests/README.md). CI runs code analysis and the
   tests on every push ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 - **Versioning:** semver, single source of truth in `core/UITheme.version`.
-  Each release is tagged (`v0.1.0`, ...) and recorded in
+  Each release is tagged (`v0.2.0`, ...); pushing the tag runs
+  [release.yml](.github/workflows/release.yml), which publishes the GitHub
+  Release with that version's CHANGELOG section as notes and recorded in
   [CHANGELOG.md](CHANGELOG.md).
 - **Contributing:** see [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Roadmap:** planned work and open items for contributors are in

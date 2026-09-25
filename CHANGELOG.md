@@ -7,6 +7,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-25
+
 ### Changed
 
 - **Redesigned every window** on a shared UI kit (`core/UIKit.m`): numbered
@@ -54,6 +56,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   results.
 - **Batch processing**: new window (Main → Batch processing) and `core/Batch.m` run one pipeline (LDF trials + response features, LFP ERP/CSD per channel, MUA spike sorting per channel, imaging ΔF/F and vessel diameter, response features) on a folder of files with one set of settings, writing one summary table (CSV + MAT) and a log; files that fail are listed with their error and the batch goes on. LDF Processing's filtering and trial cutting moved to `core/LDFPipeline.m` (same results).
 - **Sessions and reports** (`core/Session.m`, `core/Report.m`): every analysis window has **Save session…**, **Open session…** and **Report (PDF)…** in its last step card. A `.nasession.mat` stores the input files (path, size, date, MD5), all settings, the results and notes, and reopening it checks the inputs (changed / moved / missing) and re-runs the analysis. The report is a one-page A4 PDF with an image of the window, the versions, inputs with MD5, settings and key results.
+- Unit tests for `SignalFeatures` and `core/imaging` checked against
+  analytic answers (`SignalFeaturesTest`, `ImagingTest`).
+- GitHub Actions CI: MATLAB code analysis and unit tests on every push.
+- Smoothing and percentile normalization work without the Image Processing
+  / Statistics toolboxes; the launcher warns when the Signal Processing
+  Toolbox is missing.
+- Releases: pushing a version tag publishes the GitHub Release with that
+  version's changelog section (`.github/workflows/release.yml`).
 
 ### Fixed
 
@@ -78,15 +88,6 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   discarded; propagation-speed estimates had the wrong sign/magnitude;
   vessel diameter crashed on `[x1 y1 x2 y2]` lines.
 - Input validation across dialogs and file loaders instead of crashes.
-
-### Added
-
-- Unit tests for `SignalFeatures` and `core/imaging` checked against
-  analytic answers (`SignalFeaturesTest`, `ImagingTest`).
-- GitHub Actions CI: MATLAB code analysis and unit tests on every push.
-- Smoothing and percentile normalization work without the Image Processing
-  / Statistics toolboxes; the launcher warns when the Signal Processing
-  Toolbox is missing.
 
 ### Removed
 
@@ -138,5 +139,6 @@ formats, but the public surface is not yet stable. Expect tightening
 of error handling, more validation around input formats, and additional
 analyses in 0.2.x.
 
-[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.1.0

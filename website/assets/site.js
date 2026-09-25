@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "0.1.0";
+  var VERSION = "0.2.0";
   var REPO = "https://github.com/alesuarez92/NeuronalDataAnalyzerLab";
 
   var NAV = [
@@ -251,7 +251,7 @@
         l: "Available once the analysis has run." },
       { f: "ExtractLDFApp_s02_session_reopened", w: "Extract LDF", t: "Session reopened",
         x: "Open session… in a new window reloads and checks the input file, applies the settings and redoes the crop.",
-        l: "Status bar: “Session … opened (saved … with NeuroAnalyzer v0.1.0)” and the notes." },
+        l: "Status bar: “Session … opened (saved … with NeuroAnalyzer v0.2.0)” and the notes." },
       { f: "LFPAnalysisApp_s02_session_reopened", w: "LFP Analysis", t: "LFP session reopened",
         x: "The ERP and CSD are re-computed from the checked input with the saved settings.", l: "The same CSD as before saving." },
       { f: "MUAAnalysisApp_s02_session_reopened", w: "MUA Analysis", t: "MUA session reopened",
