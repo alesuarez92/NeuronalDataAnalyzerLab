@@ -146,8 +146,9 @@ function testStimulusOnsets(tests)
     t = (0:10)' * 0.1;
     stim = [0 0 1 1 0 1 0 0 1 1 0]';
     verifyEqual(tests, SpikeTrains.stimulusOnsets(stim, t, 0.5, 0.25), [0.2; 0.5; 0.8], 'AbsTol', 1e-12);
-    % Each crossing is compared with the previous crossing: 0.3 s apart < 0.4 s
-    verifyEqual(tests, SpikeTrains.stimulusOnsets(stim, t, 0.5, 0.4), 0.2, 'AbsTol', 1e-12);
+    % Each crossing is compared with the last KEPT onset: 0.5 s is 0.3 s after
+    % 0.2 s (dropped), 0.8 s is 0.6 s after it (kept)
+    verifyEqual(tests, SpikeTrains.stimulusOnsets(stim, t, 0.5, 0.4), [0.2; 0.8], 'AbsTol', 1e-12);
     verifyEmpty(tests, SpikeTrains.stimulusOnsets(stim, t, 2, 0));
 end
 
@@ -314,15 +315,16 @@ function testDriftBinningKeepsEverySpike(tests)
     rng(0, 'twister');
     plain = MUAPipeline.sort(x, s.t_mua, s.mua_fs, base);
     drift = base;
-    % 13 s bins over 30 s: the last bin (4 s, ~80 spikes) is below 450 / 3 = 150
-    % spikes per bin, so it is not clustered; its spikes must stay (as noise)
-    drift.enableDriftCorrection = true; drift.driftMethod = 'Time Binning'; drift.driftBinWidth = 13;
-    drift.minSpikesPerCluster = 450;
+    % 14 s bins over 30 s: the last bin (28-30 s, ~40 of 601 spikes) is below
+    % 300 / 3 = 100 spikes per bin, so it is not clustered; its spikes must stay
+    % (as noise). (Sorting needs at least 2 x minSpikesPerCluster spikes.)
+    drift.enableDriftCorrection = true; drift.driftMethod = 'Time Binning'; drift.driftBinWidth = 14;
+    drift.minSpikesPerCluster = 300;
     rng(0, 'twister');
     res = MUAPipeline.sort(x, s.t_mua, s.mua_fs, drift);
     verifyEqual(tests, numel(res.spikeTimes), numel(plain.spikeTimes));
     verifyEqual(tests, sort(res.spikeTimes(:)), sort(plain.spikeTimes(:)), 'AbsTol', 1e-12);
-    verifyEqual(tests, res.clusterIdx(res.spikeTimes > 26), zeros(nnz(res.spikeTimes > 26), 1));
+    verifyEqual(tests, res.clusterIdx(res.spikeTimes > 28), zeros(nnz(res.spikeTimes > 28), 1));
 end
 
 %% testMergeSimilarClusters_keepsDifferentSizes - Similar shape, different size: not merged
