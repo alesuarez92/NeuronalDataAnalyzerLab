@@ -11,9 +11,17 @@
 %   - PlantGrowth (R dataset): one-way ANOVA, Tukey HSD, Kruskal-Wallis;
 % and against identities (t quantiles, F = t^2 for two groups, the
 % studentized range for 2 groups = sqrt(2) |t|, symmetry, zero effect).
+% Repeated measures: rmAnova against the sum-of-squares decomposition,
+% Mauchly's test and the Greenhouse-Geisser / Huynh-Feldt epsilons written
+% out independently in the test (with a different contrast basis), F = t^2
+% for two conditions, and the Friedman statistic against its textbook
+% formula (with and without ties; k = 2 equals the sign-test chi-square).
+% The literal values of these examples agree with pingouin 0.6.1
+% (rm_anova, sphericity, epsilon) and SciPy (friedmanchisquare, nct).
 % The group demo (core/demo/demoGroups) must give a significant paired
 % effect in the simulated direction, with effect sizes close to the
-% simulated truth. FigureExport must write non-empty PDF/SVG/EPS/PNG files
+% simulated truth, and a significant repeated-measures effect over the
+% three conditions. FigureExport must write non-empty PDF/SVG/EPS/PNG files
 % without changing the source axes.
 % =========================================================================
 
@@ -253,6 +261,194 @@ function testHolm(tests)
     verifyEqual(tests, GroupStats.holm([0.01 0.04 0.03 0.005]), [0.03 0.06 0.06 0.02], 'AbsTol', 1e-12);
 end
 
+%% ---- Repeated measures ------------------------------------------------------
+
+% 5 subjects x 3 conditions (one tie in subject 2)
+function Y = rmSmall()
+    Y = [1 3 4; 2 5 5; 3 4 8; 2 6 7; 4 6 9];
+end
+
+% 8 subjects x 4 conditions, condition 3 much more variable: sphericity violated
+function Y = rmViolated()
+    Y = [10 12 20 11; 11 13 30 12; 9 14 15 13; 12 12 40 12; ...
+         10 15 22 14; 13 13 35 15; 11 16 18 13; 10 14 28 12];
+end
+
+function testRmAnova_sumsOfSquaresByHand(tests)
+    Y = rmSmall();
+    [n, k] = size(Y);
+    % Decomposition written out: total = conditions + subjects + error
+    M = sum(Y(:)) / numel(Y);
+    SSt = 0; SSc = 0; SSs = 0;
+    for i = 1:n
+        for j = 1:k
+            SSt = SSt + (Y(i, j) - M)^2;
+        end
+        SSs = SSs + k * (sum(Y(i, :)) / k - M)^2;
+    end
+    for j = 1:k
+        SSc = SSc + n * (sum(Y(:, j)) / n - M)^2;
+    end
+    SSe = SSt - SSc - SSs;
+    F = (SSc / (k - 1)) / (SSe / ((n - 1) * (k - 1)));
+    verifyEqual(tests, [SSc SSe], [44.4, 104 / 15], 'AbsTol', 1e-12);   % exact fractions
+    r = GroupStats.rmAnova(Y, {'A', 'B', 'C'});
+    verifyEqual(tests, r.test, 'Repeated-measures ANOVA');
+    verifyEqual(tests, [r.table.SSc r.table.SSs r.table.SSe], [SSc SSs SSe], 'AbsTol', 1e-10);
+    verifyEqual(tests, r.stat, F, 'RelTol', 1e-12);
+    verifyEqual(tests, r.stat, 25.615385, 'AbsTol', 1e-6);
+    verifyEqual(tests, r.table.p, betainc(8 / (8 + 2 * F), 4, 1), 'AbsTol', 1e-14);   % P(F(2, 8) > F)
+    verifyEqual(tests, r.table.p, 0.000333, 'AbsTol', 1e-6);
+    verifyEqual(tests, r.effect, SSc / (SSc + SSe), 'AbsTol', 1e-12);          % partial eta^2
+    verifyEqual(tests, r.effect2, SSc / (SSc + SSs + SSe), 'AbsTol', 1e-12);   % generalized eta^2
+    verifyEqual(tests, [r.effect r.effect2], [0.864935 0.603261], 'AbsTol', 1e-6);
+    verifyEqual(tests, r.means, mean(Y, 1), 'AbsTol', 1e-12);
+    verifyEqual(tests, r.n, [5 5 5]);
+end
+
+function testRmAnova_mauchlyAndEpsilonsByHand(tests)
+    Y = rmSmall();
+    [n, k] = size(Y);
+    p = k - 1;
+    % Orthonormal contrasts from successive differences (not the Helmert
+    % basis used by GroupStats; the statistics do not depend on the basis)
+    [Q, ~] = qr([1 -1 0; 0 1 -1]', 0);
+    Mc = Q' * cov(Y) * Q;
+    W = det(Mc) / (trace(Mc) / p)^p;
+    chi2 = -((n - 1) - (2 * p^2 + p + 2) / (6 * p)) * log(W);
+    gg = trace(Mc)^2 / (p * trace(Mc * Mc));
+    hf = min(1, (n * p * gg - 2) / (p * (n - 1 - p * gg)));
+    r = GroupStats.rmAnova(Y);
+    s = r.sphericity;
+    verifyTrue(tests, s.testable);
+    verifyEqual(tests, s.W, W, 'AbsTol', 1e-12);
+    verifyEqual(tests, s.chi2, chi2, 'AbsTol', 1e-10);
+    verifyEqual(tests, s.df, 2);
+    verifyEqual(tests, s.p, exp(-chi2 / 2), 'AbsTol', 1e-12);   % chi-square with 2 df
+    verifyEqual(tests, [s.W s.chi2 s.p], [0.687870 1.122467 0.570505], 'AbsTol', 1e-6);
+    verifyEqual(tests, s.epsGG, gg, 'AbsTol', 1e-12);
+    verifyEqual(tests, s.epsGG, 0.762120, 'AbsTol', 1e-6);
+    verifyEqual(tests, s.epsHF, hf, 'AbsTol', 1e-12);
+    verifyEqual(tests, s.epsHF, 1);
+    verifyEqual(tests, s.pGG, GroupStats.fUpper(r.stat, 2 * gg, 8 * gg), 'AbsTol', 1e-14);
+    verifyEqual(tests, s.pGG, 0.001414, 'AbsTol', 1e-6);
+    % Sphericity not rejected: the uncorrected p is the reported one
+    verifyEqual(tests, s.correction, 'none');
+    verifyEqual(tests, r.df, [2 8]);
+    verifyEqual(tests, r.p, r.table.p, 'AbsTol', 1e-15);
+end
+
+function testRmAnova_violatedSphericityUsesGreenhouseGeisser(tests)
+    Y = rmViolated();
+    r = GroupStats.rmAnova(Y);
+    s = r.sphericity;
+    verifyEqual(tests, r.stat, 19.343282, 'AbsTol', 1e-5);
+    verifyEqual(tests, [s.W s.chi2], [0.00272034 33.80115], 'AbsTol', 1e-5);
+    verifyEqual(tests, s.df, 5);
+    verifyLessThan(tests, s.p, 0.05);
+    verifyEqual(tests, s.epsGG, 0.347359, 'AbsTol', 1e-6);
+    verifyEqual(tests, s.epsHF, 0.354520, 'AbsTol', 1e-6);
+    verifyEqual(tests, s.correction, 'Greenhouse-Geisser');
+    verifyEqual(tests, r.df, [3 21] * s.epsGG, 'AbsTol', 1e-12);
+    verifyEqual(tests, r.p, s.pGG, 'AbsTol', 1e-15);
+    verifyEqual(tests, r.p, 0.002722, 'AbsTol', 1e-5);
+    verifyGreaterThan(tests, r.p, r.table.p);
+    verifySubstring(tests, GroupStats.statText(r), 'F(1.04, 7.29)');
+    verifyEqual(tests, s.epsLB, 1 / 3, 'AbsTol', 1e-15);
+    % Holm post hoc: 6 pairs, adjusted p >= raw p, d_z CI contains d_z
+    verifyNumElements(tests, r.posthoc, 6);
+    verifyEqual(tests, [r.posthoc.p], GroupStats.holm([r.posthoc.pRaw]), 'AbsTol', 1e-15);
+    for i = 1:6
+        verifyLessThan(tests, r.posthoc(i).effectCI(1), r.posthoc(i).effect);
+        verifyGreaterThan(tests, r.posthoc(i).effectCI(2), r.posthoc(i).effect);
+    end
+end
+
+function testRmAnova_twoConditionsIsPairedTSquared(tests)
+    [g1, g2] = sleepData();
+    r = GroupStats.rmAnova([g1(:) g2(:)]);
+    t = GroupStats.ttestPaired(g2, g1);
+    verifyEqual(tests, r.stat, t.stat^2, 'RelTol', 1e-10);
+    verifyEqual(tests, r.p, t.p, 'AbsTol', 1e-12);
+    verifyEqual(tests, r.df, [1 9]);
+    verifyFalse(tests, r.sphericity.testable);
+    verifyEqual(tests, [r.sphericity.epsGG r.sphericity.epsHF], [1 1]);
+    verifyEqual(tests, r.posthoc(1).p, t.p, 'AbsTol', 1e-12);   % one pair: Holm = raw
+    verifyEqual(tests, r.posthoc(1).diff, 1.58, 'AbsTol', 1e-12);
+end
+
+function testFriedman_textbookFormula(tests)
+    Y = rmSmall();
+    [n, k] = size(Y);
+    % Within-subject ranks (subject 2 has a tie: ranks 1, 2.5, 2.5)
+    R = [1 2 3; 1 2.5 2.5; 1 2 3; 1 2 3; 1 2 3];
+    Rj = sum(R, 1);
+    chi2 = 12 / (n * k * (k + 1)) * sum(Rj.^2) - 3 * n * (k + 1);   % 9.1
+    C = 1 - (2^3 - 2) / (n * (k^3 - k));                              % 0.95
+    r = GroupStats.friedman(Y, {'A', 'B', 'C'});
+    verifyEqual(tests, r.stat, chi2 / C, 'AbsTol', 1e-12);
+    verifyEqual(tests, r.stat, 9.578947, 'AbsTol', 1e-6);
+    verifyEqual(tests, r.df, 2);
+    verifyEqual(tests, r.p, exp(-r.stat / 2), 'AbsTol', 1e-12);
+    verifyEqual(tests, r.effect, r.stat / (n * (k - 1)), 'AbsTol', 1e-12);   % Kendall's W
+    verifyNumElements(tests, r.posthoc, 3);
+    verifyEqual(tests, [r.posthoc.p], GroupStats.holm([r.posthoc.pRaw]), 'AbsTol', 1e-15);
+    % No ties, perfect agreement: chi2 = n (k - 1), W = 1
+    r = GroupStats.friedman([1 2 3 4; 2 3 4 5; 0 1 5 9]);
+    verifyEqual(tests, r.stat, 3 * 3, 'AbsTol', 1e-12);
+    verifyEqual(tests, r.effect, 1, 'AbsTol', 1e-12);
+    % k = 2: Friedman chi2 = (b - c)^2 / (b + c) (sign test), 7 increases and 2 decreases
+    a = [1 2 3 4 5 6 7 8 9]; b = a + [1 1 1 1 1 1 1 -1 -1];
+    r = GroupStats.friedman([a(:) b(:)]);
+    verifyEqual(tests, r.stat, (7 - 2)^2 / 9, 'AbsTol', 1e-12);
+end
+
+function testDzCI_noncentralT(tests)
+    % Central case equals the t distribution
+    for t = [-2.5 -0.3 0 1.3 4]
+        verifyEqual(tests, GroupStats.nctcdf(t, 7, 0), GroupStats.tcdf(t, 7), 'AbsTol', 1e-8);
+    end
+    % Large df: normal shifted by delta
+    verifyEqual(tests, GroupStats.nctcdf(1.5, Inf, 0.5), GroupStats.normcdf(1), 'AbsTol', 1e-12);
+    % Limits: observed t is the 97.5th / 2.5th percentile
+    ci = GroupStats.dzCI(1, 8);
+    verifyEqual(tests, GroupStats.nctcdf(sqrt(8), 7, ci(1) * sqrt(8)), 0.975, 'AbsTol', 1e-8);
+    verifyEqual(tests, GroupStats.nctcdf(sqrt(8), 7, ci(2) * sqrt(8)), 0.025, 'AbsTol', 1e-8);
+    verifyEqual(tests, ci, [0.115464 1.840386], 'AbsTol', 1e-5);   % SciPy nct
+    % Symmetric for -d
+    verifyEqual(tests, GroupStats.dzCI(-1, 8), -fliplr(ci), 'AbsTol', 1e-7);
+end
+
+function testCompare_repeatedMeasures(tests)
+    Y = rmViolated();
+    names = {'A', 'B', 'C', 'D'};
+    res = GroupStats.compare(num2cell(Y, 1), names, 'rm');
+    verifyEqual(tests, res.design, 'rm');
+    verifyEqual(tests, res.main.test, 'Repeated-measures ANOVA');
+    verifyEqual(tests, res.check.test, 'Friedman test');
+    verifyNumElements(tests, res.comparisons, 6);
+    verifyEqual(tests, res.comparisons(1).label, ['B ' char(8722) ' A']);
+    verifySubstring(tests, res.assumptions, 'Mauchly');
+    verifySubstring(tests, res.assumptions, 'Greenhouse-Geisser');
+    verifySubstring(tests, res.summary, 'Greenhouse-Geisser');
+    verifySubstring(tests, res.summary, 'n = 8 subjects x 4 conditions');
+    np = GroupStats.compare(num2cell(Y, 1), names, 'repeated', 'nonparametric');
+    verifyEqual(tests, np.main.test, 'Friedman test');
+    verifyEqual(tests, np.check.test, 'Repeated-measures ANOVA');
+    verifyEqual(tests, np.comparisons(1).method, 'Wilcoxon signed-rank, Holm');
+    verifySubstring(tests, np.assumptions, 'Mauchly');
+    % A subject with a missing value is excluded from every condition
+    Y(3, 2) = NaN;
+    res = GroupStats.compare(num2cell(Y, 1), names, 'rm');
+    verifyEqual(tests, res.nExcluded, [1 1 1 1]);
+    verifyEqual(tests, [res.desc.n], [7 7 7 7]);
+    verifyEqual(tests, res.main.stat, GroupStats.rmAnova(Y([1:2 4:8], :)).stat, 'AbsTol', 1e-12);
+    verifySubstring(tests, res.assumptions, '1 subject(s) excluded');
+    % Unequal group sizes
+    verifyError(tests, @() GroupStats.compare({1:4, 1:4, 1:3}, {'A', 'B', 'C'}, 'rm'), ...
+        'NeuroAnalyzer:GroupStats:rmLength');
+end
+
 %% ---- compare (what the app shows) ------------------------------------------
 
 function testCompare_pairedSummaryAndDirection(tests)
@@ -352,6 +548,35 @@ function testDemoGroups_anovaThreeGroups(tests)
     verifyEqual(tests, res.comparisons(1).label, ['Stimulated ' char(8722) ' Control']);
     verifyLessThan(tests, res.comparisons(1).p, 0.05);
     verifyEqual(tests, [res.desc.mean], mean(demo.truth.amplitude, 1), 'AbsTol', 1.5);
+end
+
+function testDemoGroups_repeatedMeasures(tests)
+    demo = demoGroups(fullfile(tests.TestData.tmp, 'groups'));
+    vals = demoPeakAmplitudes(demo);
+    res = GroupStats.compare(vals, demo.conditions, 'rm');
+    verifyEqual(tests, res.main.test, 'Repeated-measures ANOVA');
+    verifyLessThan(tests, res.main.p, 0.001);
+    verifyEqual(tests, res.main.n, [8 8 8]);
+    verifyTrue(tests, res.main.sphericity.testable);
+    % Stimulated - Control: about +12 PU (the realized difference), CI above 0, Holm p < 0.05
+    c = res.comparisons(1);
+    verifyEqual(tests, c.label, ['Stimulated ' char(8722) ' Control']);
+    realizedDiff = mean(demo.truth.amplitude(:, 2) - demo.truth.amplitude(:, 1));
+    verifyEqual(tests, c.diff, realizedDiff, 'AbsTol', 1.5);
+    verifyGreaterThan(tests, c.ci(1), 0);
+    verifyLessThan(tests, c.p, 0.05);
+    verifyGreaterThan(tests, c.effectCI(1), 0);
+    % Friedman agrees
+    verifyLessThan(tests, res.check.p, 0.05);
+    verifyTrue(tests, res.checkAgrees);
+    np = GroupStats.compare(vals, demo.conditions, 'rm', 'nonparametric');
+    verifyEqual(tests, np.main.test, 'Friedman test');
+    verifyLessThan(tests, np.main.p, 0.05);
+    % Two conditions: repeated-measures F = paired t^2
+    rm2 = GroupStats.compare(vals(1:2), demo.conditions(1:2), 'rm');
+    pt = GroupStats.compare(vals(1:2), demo.conditions(1:2), 'paired');
+    verifyEqual(tests, rm2.main.stat, pt.main.stat^2, 'RelTol', 1e-10);
+    verifyEqual(tests, rm2.main.p, pt.main.p, 'AbsTol', 1e-12);
 end
 
 %% ---- FigureExport ------------------------------------------------------------

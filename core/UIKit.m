@@ -45,17 +45,21 @@ classdef UIKit
     methods(Static)
 
         %% window - Standard sub-app window: header | body | status | footer
-        function W = window(titleText, subtitleText, helpTopic, sz)
+        % showLogo (optional, default false): NeuroAnalyzer logo left of
+        % the title (launcher and Help).
+        function W = window(titleText, subtitleText, helpTopic, sz, showLogo)
             T = UITheme;
             if nargin < 3, helpTopic = ''; end
             if nargin < 4 || isempty(sz), sz = [1100 720]; end
+            if nargin < 5, showLogo = false; end
             W.Fig = uifigure('Name', titleText, 'Color', T.bgGray, 'Resize', 'on', ...
                 'Position', UIKit.centeredPosition(sz), 'Visible', 'off');
+            UIKit.setAppIcon(W.Fig);
             main = uigridlayout(W.Fig, [4 1], ...
                 'RowHeight', {T.headerHeight, '1x', T.statusHeight, T.footerHeight}, ...
                 'ColumnWidth', {'1x'}, 'Padding', [0 0 0 0], 'RowSpacing', 0, ...
                 'BackgroundColor', T.bgGray);
-            [W.Header, W.HelpBtn] = UIKit.header(main, titleText, subtitleText, helpTopic);
+            [W.Header, W.HelpBtn] = UIKit.header(main, titleText, subtitleText, helpTopic, [], showLogo);
             bodyPanel = uipanel(main, 'BorderType', 'none', 'BackgroundColor', T.bgGray);
             W.Body = uigridlayout(bodyPanel, [1 1], 'Padding', [14 12 14 8], ...
                 'RowSpacing', 10, 'ColumnSpacing', 10, 'BackgroundColor', T.bgGray);
@@ -73,6 +77,7 @@ classdef UIKit
             if nargin < 4 || isempty(sz), sz = [420 360]; end
             D.Fig = uifigure('Name', titleText, 'Color', T.bgGray, 'Resize', 'off', ...
                 'Position', UIKit.centeredPosition(sz), 'WindowStyle', 'modal');
+            UIKit.setAppIcon(D.Fig);
             main = uigridlayout(D.Fig, [3 1], ...
                 'RowHeight', {64, '1x', 52}, 'ColumnWidth', {'1x'}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 0, 'BackgroundColor', T.bgGray);
@@ -88,31 +93,58 @@ classdef UIKit
             uilabel(D.Buttons, 'Text', '');
         end
 
-        %% header - Dark title bar with optional subtitle and Help button
-        function [panel, helpBtn] = header(parent, titleText, subtitleText, helpTopic, titleSize)
+        %% header - Dark title bar with optional subtitle, logo and Help button
+        % showLogo (optional, default false): white NeuroAnalyzer logo
+        % (core/icons/logo_header.png) to the left of the title.
+        function [panel, helpBtn] = header(parent, titleText, subtitleText, helpTopic, titleSize, showLogo)
             T = UITheme;
-            if nargin < 5, titleSize = T.fontTitle; end
+            if nargin < 5 || isempty(titleSize), titleSize = T.fontTitle; end
+            if nargin < 6, showLogo = false; end
+            logoFile = fullfile(fileparts(mfilename('fullpath')), 'icons', 'logo_header.png');
+            showLogo = showLogo && exist(logoFile, 'file') == 2;
             panel = uipanel(parent, 'BackgroundColor', T.headerBg, 'BorderType', 'none');
-            g = uigridlayout(panel, [2 2], 'ColumnWidth', {'1x', 96}, ...
+            if showLogo
+                cols = {40, '1x', 96}; c0 = 1;   % logo | title | Help
+            else
+                cols = {'1x', 96}; c0 = 0;
+            end
+            g = uigridlayout(panel, [2 numel(cols)], 'ColumnWidth', cols, ...
                 'RowHeight', {'1x', 'fit'}, 'Padding', [T.headerPaddingH 8 16 8], ...
-                'RowSpacing', 2, 'ColumnSpacing', 8, 'BackgroundColor', T.headerBg);
+                'RowSpacing', 2, 'ColumnSpacing', 10, 'BackgroundColor', T.headerBg);
+            if showLogo
+                try
+                    im = uiimage(g, 'ImageSource', logoFile, 'ScaleMethod', 'fit', ...
+                        'Tooltip', 'NeuroAnalyzer');
+                    im.Layout.Row = [1 2]; im.Layout.Column = 1;
+                catch
+                end
+            end
             t = uilabel(g, 'Text', titleText, 'FontSize', titleSize, 'FontWeight', 'bold', ...
                 'FontColor', T.headerTitleColor, 'VerticalAlignment', 'bottom');
-            t.Layout.Row = 1; t.Layout.Column = 1;
+            t.Layout.Row = 1; t.Layout.Column = c0 + 1;
             s = uilabel(g, 'Text', subtitleText, 'FontSize', T.fontSubtitle, ...
                 'FontColor', T.headerSubtitleColor, 'VerticalAlignment', 'top');
-            s.Layout.Row = 2; s.Layout.Column = 1;
+            s.Layout.Row = 2; s.Layout.Column = c0 + 1;
             helpBtn = [];
             if ~isempty(helpTopic)
                 % Fixed-height button, vertically centred in the header
                 hg = uigridlayout(g, [3 1], 'RowHeight', {'1x', T.buttonHeight, '1x'}, ...
                     'Padding', [0 0 0 0], 'RowSpacing', 0, 'BackgroundColor', T.headerBg);
-                hg.Layout.Row = [1 2]; hg.Layout.Column = 2;
+                hg.Layout.Row = [1 2]; hg.Layout.Column = c0 + 2;
                 uilabel(hg, 'Text', '');
                 helpBtn = UIKit.button(hg, '? Help', @(~,~)HelpApp(helpTopic), 'header', ...
                     'Step-by-step guide for this window');
                 helpBtn.Layout.Row = 2;
             end
+        end
+
+        %% setAppIcon - NeuroAnalyzer icon in the window's title bar / taskbar
+        % Uses core/icons/logo_app.png; silently skipped where the uifigure
+        % Icon property is not available (before R2020b) or the file is missing.
+        function setAppIcon(fig)
+            f = fullfile(fileparts(mfilename('fullpath')), 'icons', 'logo_app.png');
+            if exist(f, 'file') ~= 2, return; end
+            try fig.Icon = f; catch, end
         end
 
         %% button - Themed push button

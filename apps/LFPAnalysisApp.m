@@ -12,11 +12,22 @@
 %                     stimulus at time (k-1)/Fs; edge epochs are NaN-filled
 %                     and excluded, the valid epoch count is reported.
 %                     (Computed by core/ERPAnalysis: detectOnsets, average.)
-%   4 CSD           - second spatial derivative of the ERP across a user
+%   4 CSD           - current source density of the ERP across a user
 %                     channel order (>= 3 channels from the last ERP) and
-%                     inter-electrode spacing (um); edge rows replicated.
-%                     (ERPAnalysis.csd.)
-%   5 Export        - ERP (mean, SD, t, y = channel average) and CSD to .mat.
+%                     inter-electrode spacing (um), by the chosen Method:
+%                     Standard (second spatial derivative, edge rows
+%                     replicated, V/m^2 without conductivity:
+%                     ERPAnalysis.csd, unchanged), iCSD delta / step /
+%                     spline (Pettersen et al. 2006) or kCSD (Potworowski
+%                     et al. 2012), both in A/m^3 (core/CSDMethods). Only
+%                     the relevant parameters are shown: conductivity
+%                     (S/m) and source diameter (um) for iCSD / kCSD,
+%                     Gaussian smoothing (um) for iCSD, basis width R (um)
+%                     and regularisation lambda for kCSD (0 = chosen by
+%                     cross-validation). The CSD tab title names the method.
+%   5 Export        - ERP (mean, SD, t, y = channel average) and CSD to .mat
+%                     (with csd_method, csd_params, csd_unit, csd_grid and,
+%                     for kCSD, the chosen R / lambda and CV errors).
 %   6 Time-frequency- one channel (dropdown), frequency range (Hz), wavelet
 %                     cycles, epoch and baseline windows (s), and editable
 %                     band presets (delta 1-4, theta 4-8, alpha 8-13, beta
@@ -37,14 +48,16 @@
 % LFP plus 6 Hz theta on every channel and a phase-locked 40 Hz burst
 % 50-250 ms after each stimulus on channels 3-5) with channel 4 chosen for
 % the time-frequency step. Programmatic use (no dialogs): openFile(path),
-% setChannels(idx), runERP(params), computeCSD(spacingUm, order),
+% setChannels(idx), runERP(params), setCSDMethod(name, params),
+% computeCSD(spacingUm, order) (uses the selected method),
 % exportResults(path), loadOscillationDemo(), runSpectrum(ch),
 % runSpectrogram(ch, fRange), runERSP(ch, fRange, baseline),
 % runBandPower(ch, bands); the run* methods return true on success.
 % Sessions (step 5 buttons; core/Session.m, core/Report.m):
 % saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
 % sessionState(), restoreSession(s). A session stores the LFP file (with
-% MD5), the channel selection, ERP / CSD / time-frequency settings and
+% MD5), the channel selection, ERP / CSD (method and parameters included) /
+% time-frequency settings and
 % results; opening it re-runs every analysis that had been run.
 % =========================================================================
 
@@ -65,6 +78,15 @@ classdef LFPAnalysisApp < handle
         ERPInfoLabel     % "Averaged n of m epochs"
         SpacingEdit      % CSD inter-electrode spacing (um)
         ChannelOrderEdit % CSD channel order, e.g. "5 4 3 2 1"
+        CSDMethodDrop    % CSD method (ItemsData: CSDMethods ids standard/delta/step/spline/kcsd)
+        CSDSigmaEdit     % Conductivity (S/m), iCSD / kCSD
+        CSDDiameterEdit  % Source disc diameter (um), iCSD / kCSD
+        CSDSmoothEdit    % Gaussian smoothing SD across depth (um), iCSD; 0 = off
+        CSDREdit         % kCSD basis width (um); 0 = cross-validated
+        CSDLambdaEdit    % kCSD regularisation (relative); 0 = cross-validated
+        CSDInfoLabel     % What the selected method computes / last kCSD choice
+        CSDGrid          % Grid of the CSD card (rows re-laid out per method)
+        CSDRows          % struct array: key, label handle, control handle, height
         CSDBtn
         ExportBtn
 
@@ -125,6 +147,9 @@ classdef LFPAnalysisApp < handle
         LastCSD
         LastCSDOrder
         LastCSDSpacing   % um
+        LastCSDMethod = ''   % CSDMethods id used for LastCSD
+        LastCSDParams        % Method parameters used (UI values; RUm / lambda 0 = cross-validated)
+        LastCSDInfo          % CSDMethods info struct (unit, grid, chosen kCSD R / lambda, ...)
         Exported = false
 
         % Time-frequency results (step 6)
@@ -202,18 +227,57 @@ classdef LFPAnalysisApp < handle
             app.ERPInfoLabel = infoLabel(g, 'Not run yet');
 
             % --- 4 CSD ---
-            g = cardGrid(left, {22, ch, ch, bh}, 2);
-            lbl = UIKit.step(g, 4, 'CSD');
-            lbl.Layout.Column = [1 2];
-            app.SpacingEdit = UIKit.field(g, 'Spacing (µm)', 'numeric', 100, ...
+            % Rows are re-laid out per method (layoutCSDCard): parameters that
+            % do not apply are hidden and the card height follows.
+            g = cardGrid(left, {22, ch, ch, ch, ch, ch, ch, ch, ch, 44, bh}, 2);
+            app.CSDGrid = g;
+            titleLbl = UIKit.step(g, 4, 'CSD');
+            titleLbl.Layout.Column = [1 2];
+            [app.CSDMethodDrop, methodLbl] = labelledField(g, 'Method', 'dropdown', ...
+                {{'Standard', 'iCSD delta', 'iCSD step', 'iCSD spline', 'kCSD'}, 'Standard'}, ...
+                ['Standard: second spatial difference of the ERP (assumes laterally infinite sources). ' ...
+                'iCSD delta / step / spline: inverse CSD for disc-shaped sources of the given diameter ' ...
+                '(Pettersen et al. 2006). kCSD: kernel CSD with cross-validated regularisation ' ...
+                '(Potworowski et al. 2012). iCSD and kCSD give A/m³.']);
+            app.CSDMethodDrop.ItemsData = CSDMethods.methodIds();
+            app.CSDMethodDrop.Value = 'standard';
+            app.CSDMethodDrop.ValueChangedFcn = @(~,~)app.onCSDMethodChanged();
+            [app.SpacingEdit, spacingLbl] = labelledField(g, 'Spacing (µm)', 'numeric', 100, ...
                 'Distance between neighbouring electrode contacts in micrometres', [0 Inf]);
             app.SpacingEdit.LowerLimitInclusive = 'off';
-            app.ChannelOrderEdit = UIKit.field(g, 'Channel order', 'text', '', ...
+            [app.ChannelOrderEdit, orderLbl] = labelledField(g, 'Channel order', 'text', '', ...
                 ['Channels from the last ERP, top (superficial) to bottom (deep), ' ...
                 'e.g. "5 4 3 2 1". At least 3.']);
+            [app.CSDSigmaEdit, sigmaLbl] = labelledField(g, 'σ (S/m)', 'numeric', 0.3, ...
+                ['Extracellular conductivity in siemens per metre (cortex: about 0.3 S/m). ' ...
+                'The iCSD / kCSD result (A/m³) scales with it.'], [0 Inf]);
+            app.CSDSigmaEdit.LowerLimitInclusive = 'off';
+            [app.CSDDiameterEdit, diamLbl] = labelledField(g, 'Diameter (µm)', 'numeric', 500, ...
+                ['Diameter in micrometres of the active tissue in the plane of the cortex (source discs). ' ...
+                'iCSD / kCSD model discs of this size; the standard method assumes an infinite size.'], [0 Inf]);
+            app.CSDDiameterEdit.LowerLimitInclusive = 'off';
+            [app.CSDSmoothEdit, smoothLbl] = labelledField(g, 'Smoothing (µm)', 'numeric', 0, ...
+                ['SD in micrometres of a Gaussian filter across depth applied to the iCSD estimate ' ...
+                '(0 = off). Inverse methods amplify noise: try about 0.5-1 x the spacing for noisy data.'], [0 Inf]);
+            [app.CSDREdit, rLbl] = labelledField(g, 'R (µm, 0 = auto)', 'numeric', 0, ...
+                ['Width (SD, micrometres) of the Gaussian kCSD basis sources. 0 = chosen by leave-one-out ' ...
+                'cross-validation among 0.5, 0.75, 1, 1.5, 2 and 3 x the spacing.'], [0 Inf]);
+            [app.CSDLambdaEdit, lamLbl] = labelledField(g, 'λ (0 = auto)', 'numeric', 0, ...
+                ['kCSD ridge regularisation, relative to the mean kernel diagonal (no unit; e.g. 1e-4). ' ...
+                '0 = chosen by leave-one-out cross-validation from 1e-9 to 1.'], [0 Inf]);
+            app.CSDInfoLabel = infoLabel(g, '');
+            app.CSDInfoLabel.Layout.Column = [1 2];
             app.CSDBtn = UIKit.button(g, 'Compute CSD', @(~,~)app.computeCSD(), 'secondary', ...
-                'Second spatial derivative of the ERP across the ordered channels (needs >= 3)');
+                'Current source density of the ERP across the ordered channels with the selected method (needs >= 3)');
             app.CSDBtn.Layout.Column = [1 2];
+            app.CSDRows = struct( ...
+                'key', {'title', 'method', 'spacing', 'order', 'sigma', 'diameter', 'smooth', 'R', 'lambda', 'info', 'button'}, ...
+                'label', {titleLbl, methodLbl, spacingLbl, orderLbl, sigmaLbl, diamLbl, smoothLbl, rLbl, lamLbl, app.CSDInfoLabel, app.CSDBtn}, ...
+                'ctrl', {[], app.CSDMethodDrop, app.SpacingEdit, app.ChannelOrderEdit, app.CSDSigmaEdit, ...
+                    app.CSDDiameterEdit, app.CSDSmoothEdit, app.CSDREdit, app.CSDLambdaEdit, [], []}, ...
+                'height', {22, ch, ch, ch, ch, ch, ch, ch, ch, 44, bh});
+            app.layoutCSDCard();
+            app.updateCSDInfo();
 
             % --- 5 Export ---
             g = cardGrid(left, {22, bh, UIKit.sessionButtonsHeight()});
@@ -309,7 +373,8 @@ classdef LFPAnalysisApp < handle
 
             setEnable({app.ChannelList, app.SelectAllBtn, app.SelectNoneBtn}, hasData);
             app.ERBBtn.Enable = onOff(nSel > 0);
-            setEnable({app.SpacingEdit, app.ChannelOrderEdit, app.CSDBtn}, hasERP);
+            setEnable({app.CSDMethodDrop, app.SpacingEdit, app.ChannelOrderEdit, app.CSDSigmaEdit, ...
+                app.CSDDiameterEdit, app.CSDSmoothEdit, app.CSDREdit, app.CSDLambdaEdit, app.CSDBtn}, hasERP);
             app.ExportBtn.Enable = onOff(hasERP);
             UIKit.setSessionEnable(app.SessionBtns, hasData);
             setEnable({app.TFChannelDrop, app.TFFminEdit, app.TFFmaxEdit, app.TFCyclesEdit, ...
@@ -330,7 +395,7 @@ classdef LFPAnalysisApp < handle
                 next = tfBtns(find(~tfDone, 1));
             elseif ~hasERP
                 next = app.ERBBtn;
-            elseif nERP >= 3 && ~hasCSD
+            elseif nERP >= 3 && (~hasCSD || ~strcmp(app.LastCSDMethod, app.CSDMethodDrop.Value))
                 next = app.CSDBtn;
             elseif ~app.Exported
                 next = app.ExportBtn;
@@ -398,6 +463,7 @@ classdef LFPAnalysisApp < handle
             app.LastERP = []; app.LastTime = []; app.LastERPStd = [];
             app.LastNValid = []; app.LastOnsetTimes = [];
             app.LastCSD = []; app.LastCSDOrder = []; app.LastCSDSpacing = [];
+            app.LastCSDMethod = ''; app.LastCSDParams = []; app.LastCSDInfo = [];
             app.Exported = false;
             app.LastSpectrum = []; app.LastSpectrogram = []; app.LastERSP = []; app.LastBandPower = [];
             app.TFDone = struct('spectrum', false, 'spectrogram', false, 'ersp', false, 'bandpower', false);
@@ -578,6 +644,7 @@ classdef LFPAnalysisApp < handle
             app.LastNValid = nValid;
             app.LastOnsetTimes = onsetTimes;
             app.LastCSD = []; app.LastCSDOrder = []; app.LastCSDSpacing = [];   % CSD now stale
+            app.LastCSDMethod = ''; app.LastCSDParams = []; app.LastCSDInfo = [];
             app.Exported = false;
             app.ChannelOrderEdit.Value = num2str(chIdx);
             resetAxes(app.AxCSD);
@@ -607,10 +674,16 @@ classdef LFPAnalysisApp < handle
                 nValid, numel(onsetTimes), numel(onsetTimes) - nValid, nextHint), 'success');
         end
 
-        %% computeCSD - Validate spacing / channel order, second spatial derivative
+        %% computeCSD - Validate spacing / channel order, CSD with the selected method
         % Optional spacingUm (um) and order (numeric vector or text) fill
         % the step-4 fields first (programmatic use); [] keeps a field.
-        function computeCSD(app, spacingUm, order)
+        % The method and its parameters come from the step-4 fields (set
+        % them with setCSDMethod). 'standard' is ERPAnalysis.csd, exactly as
+        % before (V/m^2, no conductivity); the other methods are
+        % core/CSDMethods on contacts at depths (0:n-1) * spacing (A/m^3).
+        % Returns true on success.
+        function ok = computeCSD(app, spacingUm, order)
+            ok = false;
             if isempty(app.LastERP) || isempty(app.LastTime)
                 UIKit.alert(app.UIFig, 'No ERP data available. Run ERP analysis first.', 'CSD');
                 return;
@@ -642,40 +715,92 @@ classdef LFPAnalysisApp < handle
                 return;
             end
 
-            % Second spatial derivative (discrete Laplacian) of the ERP in the
-            % user's channel order; edge rows replicated (ERPAnalysis.csd)
-            csd = ERPAnalysis.csd(app.LastERP, app.SpacingEdit.Value, reorder);
-            t   = app.LastTime;
+            method = app.CSDMethodDrop.Value;
+            [~, label] = CSDMethods.methodId(method);
+            params = app.csdFieldValues();
+            spacing = app.SpacingEdit.Value;
+            if strcmp(method, 'standard')
+                % Second spatial derivative (discrete Laplacian) of the ERP in the
+                % user's channel order; edge rows replicated (ERPAnalysis.csd)
+                csd = ERPAnalysis.csd(app.LastERP, spacing, reorder);
+                info = struct('method', 'standard', 'label', label, 'unit', 'V/m^2 (no conductivity)', ...
+                    'toAm3', params.sigma, 'depthsUm', (0:numel(chan_order) - 1) * spacing, ...
+                    'zGridUm', (0:numel(chan_order) - 1) * spacing, 'csdGrid', csd);
+            else
+                depths = (0:numel(chan_order) - 1) * spacing;
+                p = struct('sigma', params.sigma, 'diameterUm', params.diameterUm, 'smoothUm', params.smoothUm);
+                if params.RUm > 0, p.RUm = params.RUm; end
+                if params.lambda > 0, p.lambda = params.lambda; end
+                dlg = UIKit.busy(app.UIFig, sprintf('Computing the CSD (%s)…', label));
+                try
+                    [csd, info] = CSDMethods.estimate(app.LastERP(reorder, :), depths, method, p);
+                catch ME
+                    UIKit.done(dlg);
+                    app.csdInvalid(sprintf('CSD (%s) failed: %s', label, ME.message));
+                    return;
+                end
+                UIKit.done(dlg);
+            end
 
             app.LastCSD = csd;
             app.LastCSDOrder = chan_order;
-            app.LastCSDSpacing = app.SpacingEdit.Value;
+            app.LastCSDSpacing = spacing;
+            app.LastCSDMethod = method;
+            app.LastCSDParams = params;
+            app.LastCSDInfo = info;
             app.Exported = false;
 
-            % Plot in the CSD tab
-            T = UITheme;
-            ax = app.AxCSD;
-            resetAxes(ax);
-            imagesc(ax, t, 1:length(chan_order), csd);
-            colormap(ax, jet);
-            cb = colorbar(ax);
-            cb.Label.String = 'CSD (amplitude / m^2)';
-            m = max(abs(csd(:)));
-            if isfinite(m) && m > 0, ax.CLim = [-m m]; end   % symmetric: sinks vs sources
-            hold(ax, 'on');
-            xline(ax, 0, '--', 'Color', T.sectionTitleColor, 'LineWidth', 1);
-            hold(ax, 'off');
-            axis(ax, 'tight');
-            UIKit.styleAxes(ax, 'Current Source Density (CSD)', 'Time (s)', 'Channel (ordered)');
-            ax.XGrid = 'off'; ax.YGrid = 'off';
-            ax.YDir = 'reverse';
-            ax.YTick = 1:length(chan_order);
-            ax.YTickLabel = arrayfun(@(c) sprintf('Ch %d', c), chan_order, 'UniformOutput', false);
+            app.plotCSD();
             app.Tabs.SelectedTab = app.TabCSD;
-
+            app.updateCSDInfo();
             app.updateControls();
-            UIKit.setStatus(app.StatusLabel, sprintf('CSD computed over %d channels (%g µm spacing). Next: Export.', ...
-                numel(chan_order), app.LastCSDSpacing), 'success');
+            ok = true;
+            UIKit.setStatus(app.StatusLabel, sprintf('CSD (%s%s) computed over %d channels (%g µm spacing). Next: Export.', ...
+                label, app.csdParamText(), numel(chan_order), app.LastCSDSpacing), 'success');
+        end
+
+        %% setCSDMethod - Choose the CSD method and its parameters (no dialog)
+        % name: 'standard' | 'delta' | 'step' | 'spline' | 'kcsd' or the
+        % dropdown labels ('iCSD step', 'kCSD', ...). params (optional
+        % struct): sigma (S/m), diameterUm, smoothUm (um, 0 = off), RUm
+        % (um) and lambda (relative); RUm / lambda empty or 0 = chosen by
+        % cross-validation. Missing fields keep the current values. Returns
+        % true when applied; the next computeCSD uses them.
+        function ok = setCSDMethod(app, name, params)
+            ok = false;
+            id = CSDMethods.methodId(name);
+            if isempty(id)
+                UIKit.setStatus(app.StatusLabel, ['Unknown CSD method. Use Standard, iCSD delta, ' ...
+                    'iCSD step, iCSD spline or kCSD.'], 'error');
+                return;
+            end
+            if nargin >= 3 && ~isempty(params)
+                if ~isstruct(params)
+                    UIKit.setStatus(app.StatusLabel, 'CSD parameters must be a struct.', 'error');
+                    return;
+                end
+                map = {'sigma', app.CSDSigmaEdit, true; 'diameterUm', app.CSDDiameterEdit, true; ...
+                    'smoothUm', app.CSDSmoothEdit, false; 'RUm', app.CSDREdit, false; ...
+                    'lambda', app.CSDLambdaEdit, false};
+                vals = cell(1, size(map, 1));
+                for k = 1:size(map, 1)
+                    vals{k} = map{k, 2}.Value;
+                    if ~isfield(params, map{k, 1}), continue; end
+                    v = params.(map{k, 1});
+                    if isempty(v), v = 0; end
+                    if ~(isnumeric(v) && isscalar(v) && isfinite(v) && v >= 0) || (map{k, 3} && v <= 0)
+                        UIKit.setStatus(app.StatusLabel, sprintf('Invalid CSD parameter %s.', map{k, 1}), 'error');
+                        return;
+                    end
+                    vals{k} = double(v);
+                end
+                for k = 1:size(map, 1), map{k, 2}.Value = vals{k}; end
+            end
+            app.CSDMethodDrop.Value = id;
+            app.layoutCSDCard();
+            app.updateCSDInfo();
+            app.updateControls();
+            ok = true;
         end
 
         %% exportResults - Save ERP (and CSD if computed) to .mat
@@ -721,6 +846,18 @@ classdef LFPAnalysisApp < handle
                 out.csd = app.LastCSD;
                 out.csd_channel_order = app.LastCSDOrder;
                 out.csd_spacing_um = app.LastCSDSpacing;
+                I = app.LastCSDInfo;
+                out.csd_method = app.LastCSDMethod;
+                out.csd_method_label = I.label;
+                out.csd_unit = I.unit;
+                out.csd_params = app.LastCSDParams;
+                out.csd_depth_um = I.depthsUm;
+                out.csd_grid = I.csdGrid;
+                out.csd_grid_depth_um = I.zGridUm;
+                if strcmp(app.LastCSDMethod, 'kcsd')
+                    out.csd_kcsd = struct('R_um', I.R, 'lambda', I.lambda, 'lambdaRel', I.lambdaRel, ...
+                        'RGridUm', I.RGridUm, 'lambdaGrid', I.lambdaGrid, 'cvError', I.cvError);
+                end
             end
 
             try
@@ -977,7 +1114,9 @@ classdef LFPAnalysisApp < handle
                 st.settings.erp = struct('params', app.ERPParams, 'channels', app.SelectedChannels);
             end
             st.settings.csd = struct('spacingUm', app.SpacingEdit.Value, 'order', app.ChannelOrderEdit.Value, ...
-                'computed', ~isempty(app.LastCSD), 'usedOrder', app.LastCSDOrder, 'usedSpacingUm', app.LastCSDSpacing);
+                'computed', ~isempty(app.LastCSD), 'usedOrder', app.LastCSDOrder, 'usedSpacingUm', app.LastCSDSpacing, ...
+                'method', app.CSDMethodDrop.Value, 'params', app.csdFieldValues(), ...
+                'usedMethod', app.LastCSDMethod, 'usedParams', app.LastCSDParams);
             st.settings.tf = struct('channel', app.TFChannelDrop.Value, ...
                 'fRange', [app.TFFminEdit.Value, app.TFFmaxEdit.Value], 'cycles', app.TFCyclesEdit.Value, ...
                 'epoch', [app.TFEpochFromEdit.Value, app.TFEpochToEdit.Value], ...
@@ -1012,11 +1151,13 @@ classdef LFPAnalysisApp < handle
                     mat2str(app.LastTime(iMin(:)'), 3));
             end
             if ~isempty(app.LastCSD)
-                st.results.csd = struct('csd', app.LastCSD, 'order', app.LastCSDOrder, 'spacingUm', app.LastCSDSpacing);
+                st.results.csd = struct('csd', app.LastCSD, 'order', app.LastCSDOrder, 'spacingUm', app.LastCSDSpacing, ...
+                    'method', app.LastCSDMethod, 'params', app.LastCSDParams, 'info', app.LastCSDInfo);
                 [~, idx] = min(app.LastCSD(:));
                 [row, col] = ind2sub(size(app.LastCSD), idx);
-                st.summary{end+1} = sprintf('CSD: order %s, %g um; strongest sink at Ch %d, %.3g s', ...
-                    mat2str(app.LastCSDOrder), app.LastCSDSpacing, app.LastCSDOrder(row), app.LastTime(col));
+                st.summary{end+1} = sprintf('CSD (%s%s): order %s, %g um; strongest sink at Ch %d, %.3g s', ...
+                    app.LastCSDInfo.label, app.csdParamText(), mat2str(app.LastCSDOrder), app.LastCSDSpacing, ...
+                    app.LastCSDOrder(row), app.LastTime(col));
             end
             if ~isempty(app.LastSpectrum)
                 st.results.spectrum = app.LastSpectrum;
@@ -1053,6 +1194,11 @@ classdef LFPAnalysisApp < handle
                 app.runERP(cfg.erp.params);
                 if isempty(app.LastERP), return; end
                 if isfield(cfg, 'csd') && cfg.csd.computed
+                    if isfield(cfg.csd, 'usedMethod') && ~isempty(cfg.csd.usedMethod)
+                        app.setCSDMethod(cfg.csd.usedMethod, cfg.csd.usedParams);
+                    else
+                        app.setCSDMethod('standard');   % sessions saved before the CSD methods
+                    end
                     app.computeCSD(cfg.csd.usedSpacingUm, cfg.csd.usedOrder);
                 end
             end
@@ -1078,6 +1224,7 @@ classdef LFPAnalysisApp < handle
             if isfield(cfg, 'csd')
                 app.SpacingEdit.Value = cfg.csd.spacingUm;
                 app.ChannelOrderEdit.Value = cfg.csd.order;
+                if isfield(cfg.csd, 'method'), app.setCSDMethod(cfg.csd.method, cfg.csd.params); end
             end
             if isfield(cfg, 'tab')
                 tab = findobj(app.Tabs, 'Type', 'uitab', 'Title', cfg.tab);
@@ -1089,6 +1236,145 @@ classdef LFPAnalysisApp < handle
     end
 
     methods (Access = private)
+        %% csdVisibleKeys - CSD card rows shown for a method (CSDRows keys)
+        function keys = csdVisibleKeys(~, method)
+            keys = {'title', 'method', 'spacing', 'order'};
+            switch method
+                case {'delta', 'step', 'spline'}
+                    keys = [keys, {'sigma', 'diameter', 'smooth'}];
+                case 'kcsd'
+                    keys = [keys, {'sigma', 'diameter', 'R', 'lambda'}];
+            end
+            keys = [keys, {'info', 'button'}];
+        end
+
+        %% layoutCSDCard - Show only the rows of the selected method; size the card to fit
+        % Visible rows are packed at the top; hidden ones get height 0 at
+        % the end. The card (row 4 of the scrolling column) gets a fixed
+        % height for the visible rows, so other cards keep theirs.
+        function layoutCSDCard(app)
+            rows = app.CSDRows;
+            show = app.csdVisibleKeys(app.CSDMethodDrop.Value);
+            n = numel(rows);
+            heights = num2cell(zeros(1, n));
+            nVis = sum(ismember({rows.key}, show));
+            iVis = 0; iHid = nVis;
+            total = 0;
+            for k = 1:n
+                vis = ismember(rows(k).key, show);
+                if vis
+                    iVis = iVis + 1; r = iVis;
+                    heights{r} = rows(k).height;
+                    total = total + rows(k).height;
+                else
+                    iHid = iHid + 1; r = iHid;
+                end
+                parts = {rows(k).label, rows(k).ctrl};
+                for j = 1:2
+                    c = parts{j};
+                    if isempty(c), continue; end
+                    c.Layout.Row = r;
+                    c.Visible = onOff(vis);
+                end
+            end
+            app.CSDGrid.RowHeight = heights;
+            % padding 8 + 10, 6 px between all rows (hidden rows included)
+            app.LeftGrid.RowHeight{4} = total + 6 * (n - 1) + 18;
+        end
+
+        %% onCSDMethodChanged - Method dropdown changed: re-layout, explain, next step
+        function onCSDMethodChanged(app)
+            app.layoutCSDCard();
+            app.updateCSDInfo();
+            app.updateControls();
+            [~, label] = CSDMethods.methodId(app.CSDMethodDrop.Value);
+            UIKit.setStatus(app.StatusLabel, sprintf('CSD method: %s. Click Compute CSD.', label), 'info');
+        end
+
+        %% updateCSDInfo - One-line description of the selected method (and the last kCSD choice)
+        function updateCSDInfo(app)
+            switch app.CSDMethodDrop.Value
+                case 'standard'
+                    txt = '−d²V/dz² by second differences (V/m², no σ); end rows copied. Assumes laterally infinite sources.';
+                case 'delta'
+                    txt = 'iCSD: thin discs at each contact, inverted exactly (Pettersen et al. 2006). A/m³.';
+                case 'step'
+                    txt = 'iCSD: CSD constant within ± half a spacing of each contact (Pettersen et al. 2006). A/m³.';
+                case 'spline'
+                    txt = 'iCSD: smooth cubic-spline CSD between the contacts (Pettersen et al. 2006). A/m³.';
+                otherwise
+                    txt = 'kCSD: Gaussian basis sources, ridge-regularised; 0 = cross-validated (Potworowski et al. 2012). A/m³.';
+                    I = app.LastCSDInfo;
+                    if strcmp(app.LastCSDMethod, 'kcsd') && ~isempty(I)
+                        txt = sprintf('kCSD (Potworowski et al. 2012), last run: R = %g µm, λ = %.2g (relative). A/m³.', ...
+                            I.R, I.lambdaRel);
+                    end
+            end
+            app.CSDInfoLabel.Text = txt;
+        end
+
+        %% csdFieldValues - Step-4 parameter fields as a struct (RUm / lambda 0 = cross-validated)
+        function p = csdFieldValues(app)
+            p = struct('sigma', app.CSDSigmaEdit.Value, 'diameterUm', app.CSDDiameterEdit.Value, ...
+                'smoothUm', app.CSDSmoothEdit.Value, 'RUm', app.CSDREdit.Value, 'lambda', app.CSDLambdaEdit.Value);
+        end
+
+        %% csdParamText - ", sigma 0.3 S/m, diameter 500 um, ..." for the last CSD ('' for standard)
+        function txt = csdParamText(app)
+            txt = '';
+            p = app.LastCSDParams;
+            I = app.LastCSDInfo;
+            if isempty(p) || strcmp(app.LastCSDMethod, 'standard'), return; end
+            txt = sprintf(', σ %g S/m, diameter %g µm', p.sigma, p.diameterUm);
+            if strcmp(app.LastCSDMethod, 'kcsd')
+                how = 'fixed';
+                if p.RUm == 0 || p.lambda == 0, how = 'cross-validated'; end
+                txt = sprintf('%s, R %g µm, λ %.2g (%s)', txt, I.R, I.lambdaRel, how);
+            elseif p.smoothUm > 0
+                txt = sprintf('%s, smoothing %g µm', txt, p.smoothUm);
+            end
+        end
+
+        %% plotCSD - CSD image (finer grid for spline / kCSD), method in the title
+        function plotCSD(app)
+            T = UITheme;
+            I = app.LastCSDInfo;
+            order = app.LastCSDOrder;
+            t = app.LastTime;
+            ax = app.AxCSD;
+            resetAxes(ax);
+            if numel(I.zGridUm) > numel(order)
+                y = 1 + (I.zGridUm - I.zGridUm(1)) / app.LastCSDSpacing;   % grid depth in channel units
+                img = I.csdGrid;
+            else
+                y = 1:numel(order);
+                img = app.LastCSD;
+            end
+            imagesc(ax, t, y, img);
+            colormap(ax, jet);
+            cb = colorbar(ax);
+            if strcmp(app.LastCSDMethod, 'standard')
+                cb.Label.String = 'CSD (amplitude / m^2)';
+            else
+                cb.Label.String = 'CSD (A/m^3 if the LFP is in V)';
+            end
+            m = max(abs(img(:)));
+            if isfinite(m) && m > 0, ax.CLim = [-m m]; end   % symmetric: sinks vs sources
+            hold(ax, 'on');
+            xline(ax, 0, '--', 'Color', T.sectionTitleColor, 'LineWidth', 1);
+            hold(ax, 'off');
+            axis(ax, 'tight');
+            ttl = sprintf('Current Source Density (CSD) · %s', I.label);
+            if ~strcmp(app.LastCSDMethod, 'standard')
+                ttl = sprintf('%s (%s)', ttl, regexprep(app.csdParamText(), '^, ', ''));
+            end
+            UIKit.styleAxes(ax, ttl, 'Time (s)', 'Channel (ordered)');
+            ax.XGrid = 'off'; ax.YGrid = 'off';
+            ax.YDir = 'reverse';
+            ax.YTick = 1:length(order);
+            ax.YTickLabel = arrayfun(@(c) sprintf('Ch %d', c), order, 'UniformOutput', false);
+        end
+
         %% applyTFFields - Step-6 fields, band table and focus from a session's settings.tf
         function applyTFFields(app, tf)
             if ismember(tf.channel, app.TFChannelDrop.ItemsData), app.TFChannelDrop.Value = tf.channel; end
@@ -1546,6 +1832,14 @@ function g = cardGrid(parent, rowHeights, nCols)
     g = uigridlayout(c, [numel(rowHeights) nCols], 'RowHeight', rowHeights, ...
         'ColumnWidth', repmat({'1x'}, 1, nCols), 'Padding', [10 8 10 10], ...
         'RowSpacing', 6, 'ColumnSpacing', 8, 'BackgroundColor', T.cardBg);
+end
+
+%% Local helper: UIKit.field that also returns its label (to hide both)
+function [c, lbl] = labelledField(grid, labelText, kind, value, tooltip, limits)
+    if nargin < 6, limits = []; end
+    c = UIKit.field(grid, labelText, kind, value, tooltip, limits);
+    lbl = findobj(grid.Children, 'flat', 'Type', 'uilabel', 'Text', labelText);
+    lbl = lbl(1);
 end
 
 %% Local helper: clear axes incl. legend/colorbar and reset tick modes
