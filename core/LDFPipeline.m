@@ -22,8 +22,10 @@
 %   [LDF, stim, t, Fs, b, a] = LDFPipeline.process(LDF, stim, t, Fs, p)
 %       Downsample and filter. The LDF is decimated (decimate: anti-alias
 %       low-pass + downsample, length ceil(N/r), orientation kept); the
-%       TTL stimulus and the time vector are sample-picked (downsample)
-%       and all three are trimmed to a common length; Fs becomes Fs/r.
+%       TTL stimulus keeps the maximum of each block of r samples
+%       (downsampleTrigger: pulses shorter than r are not lost), the time
+%       vector is sample-picked (downsample), and all three are trimmed
+%       to a common length; Fs becomes Fs/r.
 %       The filter (p.filterType 1 none, 2 low-pass, 3 high-pass,
 %       4 band-pass, 5 notch/band-stop; p.designType 1 Butterworth,
 %       2 Chebyshev I with 0.5 dB ripple, 3 FIR (fir1)) is designed at the
@@ -99,8 +101,9 @@ classdef LDFPipeline
                 LDFdec = decimate(double(LDF(:)), p.downsample);
                 if isrow(LDF), LDFdec = LDFdec.'; end  % keep original orientation
                 LDF = LDFdec;
-                % Stim is a TTL: plain sample picking keeps edges sharp
-                stim = downsample(stim, p.downsample);
+                % Stim is a TTL: keep the maximum of each block of samples, so
+                % pulses shorter than the factor are not lost (edges stay sharp)
+                stim = LDFPipeline.downsampleTrigger(stim, p.downsample);
                 t = downsample(t, p.downsample);
                 n = min([numel(LDF), numel(stim), numel(t)]);
                 LDF = LDF(1:n); stim = stim(1:n); t = t(1:n);
@@ -134,6 +137,22 @@ classdef LDFPipeline
                 % Apply filter (zero-phase)
                 LDF = filtfilt(b, a, LDF);
             end
+        end
+
+        %% downsampleTrigger - Downsample a trigger without losing short pulses
+        % Output sample k is the maximum of the r input samples ending at
+        % input sample (k-1)*r + 1, the sample plain downsampling keeps
+        % (sample 1 alone for k = 1). Long pulses give the same onsets as
+        % downsample(stim, r); pulses shorter than r samples, which plain
+        % downsampling can skip, still appear. Length ceil(N / r),
+        % orientation kept. Base MATLAB.
+        function y = downsampleTrigger(stim, r)
+            x = double(stim(:));
+            n = numel(x);
+            m = ceil(n / r);
+            padded = [-Inf(r - 1, 1); x; -Inf(m * r - n, 1)];
+            y = max(reshape(padded(1:m * r), r, m), [], 1);
+            if iscolumn(stim), y = y(:); end
         end
 
         %% filterMode - filterType index -> butter/cheby1/fir1 mode string

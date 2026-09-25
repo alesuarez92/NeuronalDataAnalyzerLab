@@ -81,7 +81,12 @@ function testProcessMatchesLegacyCode(tests)
         [L, st, t, Fs, b, a] = LDFPipeline.process(s.LDF, s.stim, s.t, s.Fs, p);
         [Lr, str, tr, Fsr, br, ar] = legacyProcess(s.LDF, s.stim, s.t, s.Fs, p);
         verifyEqual(tests, L, Lr, 'AbsTol', 1e-12, sprintf('set %d: LDF', k));
-        verifyEqual(tests, st, str, sprintf('set %d: stim', k));
+        % The trigger keeps each block's maximum (short pulses survive): same
+        % onsets as the legacy sample picking, never below it
+        verifyEqual(tests, LDFPipeline.detectOnsets(st, Fs, 2.5, 10), ...
+            LDFPipeline.detectOnsets(str, Fsr, 2.5, 10), sprintf('set %d: stim onsets', k));
+        verifyEqual(tests, size(st), size(str), sprintf('set %d: stim size', k));
+        verifyTrue(tests, all(st(:) >= str(:)), sprintf('set %d: stim below legacy', k));
         verifyEqual(tests, t, tr, sprintf('set %d: t', k));
         verifyEqual(tests, Fs, Fsr);
         verifyEqual(tests, b, br);
@@ -235,4 +240,30 @@ end
 
 function deleteIfExists(f)
     if exist(f, 'file') == 2, delete(f); end
+end
+
+%% testShortPulsesSurviveDownsampling - Pulses shorter than the factor are not lost
+function testShortPulsesSurviveDownsampling(tests)
+    Fs = 1000; r = 10;
+    stim = zeros(1, 20000);
+    on = 1003:1537:19000;                    % 12 pulses of 5 samples (5 ms)
+    for o = on, stim(o:o + 4) = 5; end
+    y = LDFPipeline.downsampleTrigger(stim, r);
+    verifyNumElements(tests, y, ceil(numel(stim) / r));
+    found = LDFPipeline.detectOnsets(y, Fs / r, 2.5, 1);
+    verifyNumElements(tests, found, numel(on));
+    % Each onset is the first kept sample at or after the pulse start
+    lag = (found - 1) * r + 1 - on;
+    verifyGreaterThanOrEqual(tests, lag, 0);
+    verifyLessThan(tests, lag, r);
+    % Plain sample picking loses some of them (the bug this fixes)
+    verifyLessThan(tests, numel(LDFPipeline.detectOnsets(stim(1:r:end), Fs / r, 2.5, 1)), numel(on));
+    % Column input stays a column; long pulses give the same onsets as sample picking
+    verifyEqual(tests, size(LDFPipeline.downsampleTrigger(stim(:), r)), [ceil(numel(stim) / r) 1]);
+    long = zeros(1, 10007);
+    for o = [500 3000 7001], long(o:o + 299) = 5; end
+    for rr = [3 10 100]
+        verifyEqual(tests, LDFPipeline.detectOnsets(LDFPipeline.downsampleTrigger(long, rr), Fs / rr, 2.5, 0.1), ...
+            LDFPipeline.detectOnsets(long(1:rr:end), Fs / rr, 2.5, 0.1));
+    end
 end
