@@ -1339,12 +1339,13 @@ classdef MethodsWriter
             d = fig.UserData;
             [txt, refs] = MethodsWriter.fromSessions(d.sessions);
             full = MethodsWriter.compose(txt, refs);
-            % A text area drops empty lines: keep paragraph breaks as a single
-            % space (dialogText turns them back into empty lines)
+            % A text area drops empty (and blank) lines: it shows one line per
+            % paragraph (each paragraph is one line, so pasted into a word
+            % processor they are still separate paragraphs)
             lines = strsplit(full, newline)';
-            lines(cellfun(@isempty, lines)) = {' '};
-            d.ta.Value = lines;
-            d.generated = full;
+            shown = lines(~cellfun(@(x) isempty(strtrim(x)), lines));
+            d.ta.Value = shown;
+            d.generated = strjoin(shown, newline);   % compared with dialogText to detect edits
             names = cellfun(@(x) MethodsWriter.sessionName(x), d.sessions, 'UniformOutput', false);
             if numel(d.sessions) == 1
                 d.status.Text = sprintf('Drafted from 1 session: %s. Square brackets mark what you must add.', names{1});
@@ -1363,7 +1364,7 @@ classdef MethodsWriter
 
         %% dialogText - Current (edited) text of the dialog
         function txt = dialogText(fig)
-            txt = strjoin(regexprep(cellstr(fig.UserData.ta.Value), '^\s+$', ''), newline);
+            txt = strjoin(cellstr(fig.UserData.ta.Value), newline);
         end
 
         %% copyText - Copy the edited text to the clipboard

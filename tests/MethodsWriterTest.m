@@ -220,7 +220,8 @@ function testDialog(tests)
     tests.verifyNumElements(ta, 1);
     shown = MethodsWriter.dialogText(fig);
     [txt, refs] = MethodsWriter.fromSession(s);
-    tests.verifyEqual(shown, MethodsWriter.compose(txt, refs));
+    % The text area has no empty lines: one line per paragraph
+    tests.verifyEqual(shown, regexprep(MethodsWriter.compose(txt, refs), '\n(\s*\n)+', '\n'));
     lbl = findobj(fig, 'Type', 'uilabel');
     tests.verifyTrue(any(contains(strjoin(cellfun(@char, {lbl.Text}, 'UniformOutput', false), ' '), ...
         MethodsWriter.CheckNote)), 'Check note shown');
