@@ -88,7 +88,7 @@ Scoped items that are known to be missing. Each is self-contained.
 | 🟢 | Time–frequency in the ERP export | LFP | *Export ERP / CSD…* does not include spectra, ERSP / ITPC or band power. |
 | 🟢 | Non-rigid motion correction | Imaging | Motion correction handles translation only; add piecewise-rigid registration for tissue deformation. |
 | 🟢 | Neuropil correction | Imaging | Subtract a scaled surround signal from each cell's trace before ΔF/F. |
-| 🟢 | Reproducible sorting | MUA | K-means uses MATLAB's global random stream; expose a seed in *Configure...* so a sorting can be repeated exactly. |
+| ✅ | Reproducible sorting | MUA | *Configure...* has a Random seed (default 0); the window sets it before every run, so the same data and settings give the same clusters. |
 
 ### Documentation
 

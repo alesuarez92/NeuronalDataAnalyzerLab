@@ -40,8 +40,11 @@
 % dbscanEpsilon (NaN = auto), enableDriftCorrection, driftMethod ('Time
 % Binning' | 'Dynamic Clustering'), driftBinWidth (s),
 % enableGridSearchCheck, autoMerge (merge over-split clusters after
-% clustering), mergeThreshold (min shape correlation, 0.95) and
-% mergeMinAmpRatio (min amplitude ratio, 0.85).
+% clustering), mergeThreshold (min shape correlation, 0.95),
+% mergeMinAmpRatio (min amplitude ratio, 0.85) and randomSeed (0; MUA
+% Analysis sets rng(randomSeed, 'twister') before sort and restores the
+% previous state after, so a window run is reproducible; sort itself does
+% not touch the random generator, callers such as Batch seed it).
 %
 % Method: threshold detection (dead time 0.3 ms) -> snippets re-centred
 % on their extremum (duplicate detections dropped) -> features -> K-means /
@@ -74,6 +77,7 @@ classdef MUAPipeline
             p.numComponents = 3;
             p.normalize = 1;
             p.minSpikesPerCluster = 20;
+            p.randomSeed = 0;   % MUA Analysis sets rng(randomSeed) before sorting (reproducible)
             p.enableDriftCorrection = 0;
             p.driftMethod = 'Time Binning';
             p.driftBinWidth = 30;

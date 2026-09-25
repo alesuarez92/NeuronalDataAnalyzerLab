@@ -147,3 +147,23 @@ function testMUARasterWithoutStimulus(tests)
     end
     shot(tests, app, 'MUAAnalysisApp_x10_no_stimulus', 'Raster & PSTH');
 end
+
+%% testMUASortingIsReproducible - Same data + settings = same clusters, whatever
+% the state of MATLAB's random generator (the window seeds it with Random seed)
+function testMUASortingIsReproducible(tests)
+    hasTb = license('test', 'Statistics_Toolbox') && license('test', 'Signal_Toolbox') && ...
+        exist('kmeans', 'file') == 2 && exist('findpeaks', 'file') == 2;
+    tests.assumeTrue(hasTb, 'Spike sorting needs the Signal Processing and Statistics toolboxes');
+    app = MUAAnalysisApp(); c = onCleanup(@() delete(app.UIFig));
+    prevRng = rng; r = onCleanup(@() rng(prevRng));
+    tests.verifyTrue(logical(app.loadDemo()));
+    p = app.SpikeSortParams;
+    rng(1, 'twister');
+    tests.verifyTrue(logical(app.runSorting(p)));
+    first = app.SpikeResults.clusterIdx;
+    rng(987, 'twister');                         % a different global state
+    before = rng;
+    tests.verifyTrue(logical(app.runSorting(p)));
+    tests.verifyEqual(app.SpikeResults.clusterIdx, first);
+    tests.verifyEqual(rng, before);              % the caller's generator is restored
+end

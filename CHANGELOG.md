@@ -74,6 +74,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   after the first was dropped. Both now use the LDF rule (within the
   minimum interval of the last *kept* onset): one onset per train. Single
   pulses give the same onsets as before.
+- **MUA Analysis: sorting could differ between runs.** K-means / GMM /
+  t-SNE used MATLAB's random generator in whatever state it was. The
+  settings now have a **Random seed** (default 0) that is set before every
+  run (and the previous state restored), so the same data and settings
+  always give the same clusters.
 - **Help / website: MUA detection methods described correctly.** *Rolling
   MAD* uses the same threshold as MAD over the whole recording (it was
   described as a moving window); *Percentile* does not use the multiplier.

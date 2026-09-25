@@ -802,8 +802,8 @@ classdef MUAAnalysisApp < handle
             T = UITheme;
             p = MUAPipeline.completeParams(app.SpikeSortParams);
             D = UIKit.dialog('Spike sorting settings', 'Detection, features, clustering and drift', ...
-                'MUA Analysis', [520 860]);
-            nRows = 23;
+                'MUA Analysis', [520 900]);
+            nRows = 24;
             D.Body.RowHeight = repmat({T.controlHeight}, 1, nRows);
             D.Body.RowHeight([1 10 19]) = {22};
             D.Body.RowSpacing = 6;
@@ -896,6 +896,11 @@ classdef MUAAnalysisApp < handle
             GridSearchCheck = placeField(D.Body, 23, 'Optimize merge thresholds (grid search)', 'checkbox', ...
                 logical(p.enableGridSearchCheck), ...
                 'Try several merge thresholds and keep the one with the best silhouette (slower)');
+            seedBox = placeField(D.Body, 24, 'Random seed', 'numeric', p.randomSeed, ...
+                ['K-means, GMM and t-SNE start from random choices. The random generator is set to this ' ...
+                 'number before every run, so the same data and settings always give the same clusters. ' ...
+                 'Change it to see how stable the sorting is.'], [0 2^32 - 1]);
+            seedBox.RoundFractionalValues = 'on';
 
             filterCheckbox.ValueChangedFcn = @(~,~)updateDialogEnable();
             clusterPopup.ValueChangedFcn = @(~,~)updateDialogEnable();
@@ -948,6 +953,7 @@ classdef MUAAnalysisApp < handle
                 params.autoMerge = double(autoMergeCheck.Value);
                 params.mergeThreshold = mergeThrBox.Value;
                 params.mergeMinAmpRatio = p.mergeMinAmpRatio;  % not in the dialog; kept
+                params.randomSeed = seedBox.Value;
                 disp(params);
                 delete(D.Fig);
                 app.SpikeSortParams = params;
@@ -1093,7 +1099,12 @@ classdef MUAAnalysisApp < handle
             end
 
             try
+                % Same data + settings -> same clusters: seed the global stream, restore it after
+                prevRng = rng;
+                restoreRng = onCleanup(@() rng(prevRng));
+                rng(MUAPipeline.completeParams(params).randomSeed, 'twister');
                 [res, info] = MUAPipeline.sort(x, t, app.MUAData.fs, params, @(msg) app.setStage(msg));
+                clear restoreRng
             catch ME
                 if strncmp(ME.identifier, 'NeuroAnalyzer:MUAPipeline:', 26)
                     app.failSort(ME.message, MUAPipeline.errorTitle(ME.identifier));

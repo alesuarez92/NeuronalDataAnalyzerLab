@@ -828,7 +828,8 @@ classdef HelpApp < handle
                 '* **Percentile**: the 99.9th percentile of the absolute signal; the multiplier k is not used.'
                 'A short dead time (~0.3 ms) avoids counting a spike twice; the refractory period (ms) is used for the per-cluster ISI quality check.'
                 '## Sorting'
-                'For each spike a waveform snippet is aligned and features are computed (PCA, ICA*, waveform, wavelet* or t-SNE; *only offered when FastICA / the Wavelet Toolbox is available). K-means and GMM try 2–10 clusters and keep the number with the best mean silhouette; DBSCAN is density based (epsilon auto-tuned if left empty) and labels unclustered spikes 0 = noise. Optional drift correction matches clusters across time bins.'};
+                'For each spike a waveform snippet is aligned and features are computed (PCA, ICA*, waveform, wavelet* or t-SNE; *only offered when FastICA / the Wavelet Toolbox is available). K-means and GMM try 2–10 clusters and keep the number with the best mean silhouette; DBSCAN is density based (epsilon auto-tuned if left empty) and labels unclustered spikes 0 = noise. Optional drift correction matches clusters across time bins (mean-waveform correlation ≥ 0.85, distance relative to the waveform size ≤ 0.5; spikes in bins too small to cluster are kept as noise).'
+                'K-means, GMM and t-SNE start from random choices. **Random seed** (in Configure..., default 0) is set before every run, so the same data and settings always give the same clusters; change it to see how stable the sorting is.'};
             t.trouble = {
                 '"No stimulation data in the loaded file; cannot segment"', 'The MUA file has no stim_data; save it again from Extract Ephys (it stores the stimulus channel).'
                 'Very few or no spikes', 'Lower the threshold multiplier, check the polarity, or enable filtering before detection.'
