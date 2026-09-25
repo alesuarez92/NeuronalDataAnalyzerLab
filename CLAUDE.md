@@ -1,4 +1,4 @@
-# CLAUDE.md — agent contract for NeuroAnalyzer (NMD Lab)
+# CLAUDE.md — agent contract for NeuroAnalyzer
 
 If you're an AI coding agent (Claude Code, Codex, Cursor, Aider) opening this repo, **start here**.
 

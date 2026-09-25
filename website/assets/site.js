@@ -370,7 +370,7 @@
     });
     inner.appendChild(el("div", null,
       "<h4>NeuroAnalyzer v" + VERSION + "</h4>" +
-      "<p>© Alejandro Suarez, Ph.D. (NMD Lab). All rights reserved. See the " +
+      "<p>© Alejandro Suarez, Ph.D. All rights reserved. See the " +
       '<a href="' + REPO + '/blob/main/LICENSE.txt">licence</a>.</p>' +
       "<p>MATLAB is a registered trademark of The MathWorks, Inc.</p>"));
     f.appendChild(inner);

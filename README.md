@@ -13,7 +13,7 @@
 
 ![Main launcher window: LDF, electrophysiology, imaging, response features and batch processing](docs/main-launcher.png)
 
-Neuroscience analysis toolbox (NMD Lab) for **Laser Doppler Flowmetry**,
+Neuroscience analysis toolbox for **Laser Doppler Flowmetry**,
 **electrophysiology** (LFP: ERP, CSD, time–frequency; MUA: spike detection,
 sorting with cluster merge/split, raster/PSTH, correlograms; TDT, Intan,
 Open Ephys and NWB recordings), **ROI / coregistered image analysis**
