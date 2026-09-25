@@ -9,8 +9,9 @@ function s = demoHistology(opts)
 %     (edges touching), 30 in Region A (left half, x <= 200) and
 %     30 in Region B (right half).
 %   * Channel 2 "Marker (GFP)": a soft disk 3 px larger than the nucleus in
-%     marker-positive cells: 24 of 60 on day 1, 39 of 60 on day 3 (every
-%     day-1 positive stays positive).
+%     marker-positive cells: 24 of 60 on day 1 (12 in Region A, 12 in B),
+%     39 of 60 on day 3 (18 in A, 21 in B; every day-1 positive stays
+%     positive).
 %   * Things that must NOT be counted: 20 small bright specks (debris,
 %     under 15 px) and one long fibre (60 x 5 px) in channel 1.
 %   * Uneven illumination (a broad bright patch and a left-right ramp,
@@ -89,11 +90,12 @@ end
 nCell = size(centers, 1);
 bright = 0.45 + 0.3 * rand(rs, nCell, 1);
 
-% --- Marker-positive cells: 24 on day 1, 15 more on day 3 ---
-ord = randperm(rs, nCell);
+% --- Marker-positive cells: 12 + 12 on day 1, 18 + 21 on day 3 (A + B) ---
+% Cells 1-30 are in Region A, 31-60 in Region B (placed half by half)
+ordA = randperm(rs, 30); ordB = 30 + randperm(rs, 30);
 positive = false(nCell, 2);
-positive(ord(1:24), 1) = true;
-positive(ord(1:39), 2) = true;
+positive([ordA(1:12), ordB(1:12)], 1) = true;
+positive([ordA(1:18), ordB(1:21)], 2) = true;
 
 % --- Debris (away from cells) and one fibre ---
 debris = zeros(0, 2);

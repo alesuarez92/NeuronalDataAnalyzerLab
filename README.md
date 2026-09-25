@@ -18,7 +18,9 @@ Neuroscience analysis toolbox for **Laser Doppler Flowmetry**,
 sorting with cluster merge/split, raster/PSTH, correlograms; TDT, Intan,
 Open Ephys and NWB recordings), **ROI / coregistered image analysis**
 (motion correction, multiple ROIs, cell detection, ΔF/F, kymograph,
-robust vessel diameter), and **signal characterization**
+robust vessel diameter), **histology and culture images** (cell counts,
+marker-positive cells, counts per region and per mm², section and time-point
+alignment), and **signal characterization**
 (response features, group statistics, publication figures).
 
 Every analysis can run on a whole folder (**batch processing**), be saved
@@ -83,11 +85,12 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | `NeuroAnalyzer.m` | Entry point; run this to open the launcher. |
 | `core/` | `Main.m` launcher, `UITheme`, project-path manager, data loader, validation, processing, signal-feature library. |
 | `core/imaging/` | ROI / line-based image analysis: ΔF/F, kymograph, vessel diameter, intensity, movement, motion correction, cell detection. |
+| `core/Histology.m` | Still images of sections and cultures: loading with pixel size, channel and image alignment, cell counting, marker co-localisation, counts per region. |
 | `core/io/` | Readers for Intan RHD, Open Ephys binary and NWB; NWB export. |
 | `core/demo/`, `core/DemoData.m` | Synthetic demo recordings with ground truth. |
 | `core/Batch.m`, `core/Session.m`, `core/Report.m`, `core/MethodsWriter.m` | Batch processing, session files, PDF reports, methods text. |
 | `core/VirtualLab.m` | Virtual lab: simulated experiments with known answers, reference analysis and feedback. |
-| `apps/` | Sub-app windows: Extract / Process / Average LDF, Extract Ephys, LFP & MUA processing and analysis, ROI Analysis, Signal Characterization, Batch Processing, Virtual Lab, Help. |
+| `apps/` | Sub-app windows: Extract / Process / Average LDF, Extract Ephys, LFP & MUA processing and analysis, ROI Analysis, Histology / culture, Signal Characterization, Batch Processing, Virtual Lab, Help. |
 | `docs/` | Workflow and principle figures shown in the Help window. |
 | `tests/` | Unit tests. Run via `run_tests`. |
 | `Utilities/` | Third-party utilities (e.g. TDT MATLAB SDK). |

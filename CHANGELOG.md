@@ -9,6 +9,24 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **Histology / culture** (launcher → Imaging → *Histology / culture*,
+  `apps/HistologyApp.m`, `core/Histology.m`): count cells in still images
+  of sections or cultures. Load one or several images (TIFF pages or
+  PNG / JPG colours as channels, or .mat; the pixel size is read from
+  ImageJ TIFFs), optionally align the channels (colour shift) and the
+  images onto the first (automatic shift for time points, or clicked
+  landmarks with an affine fit for serial sections), count cells in the
+  nuclear channel (background subtraction, automatic threshold, touching
+  cells split at their narrow waist, size and shape limits in µm), score
+  each cell as positive or negative for every other channel, and count per
+  hand-drawn region and per mm². A *Checks* tab explains in plain language
+  where the pixel size came from, how well the alignment worked, which
+  threshold was used and what was left out. Export as .csv (one row per
+  cell, plus counts per image and region) or .mat; sessions, report and
+  methods text (citing Otsu 1979) as in every window. New demo
+  `demo_histology.mat` (two culture images with 60 nuclei, 24 then 39
+  marker-positive, touching pairs, debris, a fibre and a stage shift, all
+  known) and a Help topic with the answers.
 - **Methods text**: a *Methods text…* button next to the session
   buttons of every analysis window drafts a methods section from the
   analysis: every step in the past tense with the values actually used

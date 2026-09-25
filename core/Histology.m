@@ -524,8 +524,8 @@ classdef Histology
                                     'unreliable (weak match, %.3f): the images may show different fields, be rotated or ' ...
                                     'too different. Check the overlay or use landmarks.'], k, ctx.shifts(k, 2), ctx.shifts(k, 1), ctx.peak(k)));
                             else
-                                C = addRow(C, 'ok', 'Alignment', sprintf('Image %d moved by %.1f px right and %.1f px down to match image 1 (clear match, %.2f).', ...
-                                    k, -ctx.shifts(k, 2), -ctx.shifts(k, 1), ctx.peak(k)));
+                                C = addRow(C, 'ok', 'Alignment', sprintf('Image %d moved %s to match image 1 (clear match, %.2f).', ...
+                                    k, moveText(-ctx.shifts(k, 1), -ctx.shifts(k, 2)), ctx.peak(k)));
                             end
                         end
                     case 'landmarks'
@@ -743,6 +743,12 @@ function o = parabolaPeak(v)
 end
 
 %% addRow - Append one {level, topic, text} row to a checks table
+%% moveText - '9.2 px right and 6.4 px up' for a move of (dy, dx) px
+function t = moveText(dy, dx)
+    lr = {'right', 'left'}; ud = {'down', 'up'};
+    t = sprintf('%.1f px %s and %.1f px %s', abs(dx), lr{1 + (dx < 0)}, abs(dy), ud{1 + (dy < 0)});
+end
+
 function C = addRow(C, lvl, topic, txt)
     C(end + 1, :) = {lvl, topic, txt};
 end

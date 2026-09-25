@@ -14,8 +14,8 @@
 <body>
 <main id="main">
 
-<section class="page-head"><p class="eyebrow">Pipeline</p><h1>Imaging: ROI and line analysis</h1><p class="lede">ROI Analysis measures regions or a line over time in a stack of coregistered frames, such as two-photon calcium or blood-flow imaging.</p></section>
-<nav class="toc" aria-label="On this page"><a href="#what">Methods</a><a href="#walkthrough">Walkthrough</a><a href="#io">Inputs and outputs</a><a href="#demo">Demo expectations</a></nav>
+<section class="page-head"><p class="eyebrow">Pipeline</p><h1>Imaging: stacks, sections and cultures</h1><p class="lede">ROI Analysis measures regions or a line over time in a stack of coregistered frames, such as two-photon calcium or blood-flow imaging. Histology / culture counts cells and marker-positive cells in still images of sections or cultures.</p></section>
+<nav class="toc" aria-label="On this page"><a href="#what">Methods</a><a href="#walkthrough">Walkthrough</a><a href="#io">Inputs and outputs</a><a href="#demo">Demo expectations</a><a href="#histology">Histology and culture</a></nav>
 
 <section class="section" id="what"><h2>Methods</h2>
 <div class="two">
@@ -62,6 +62,31 @@
 <li><b>Vessel diameter</b>: without Robust diameter the trace jumps to ~50 px whenever the blood cell crosses the line; with <b>Robust diameter</b> it follows the 9–15 px sine (error &lt; 2.5 px) and the replaced frames are circled.</li>
 </ul></div>
 <p>Step-by-step instructions and troubleshooting: <a href="guide.html#roi">ROI Analysis in the guide</a>.</p></section>
+
+<section class="section" id="histology"><h2>Histology and culture images</h2>
+<p>The <b>Histology / culture</b> window (launcher → Imaging) is for still images of fixed sections or cultures: one or more images (sections, time points, wells), each with a nuclear channel and one or more marker channels.</p>
+<div class="prose">
+<h4>What it does</h4>
+<ul>
+<li><b>Load</b> TIFF (every page is a channel), PNG / JPG (the colours are channels) or .mat. The <b>pixel size</b> is read from ImageJ TIFFs, otherwise typed; sizes are given in µm² and densities per mm².</li>
+<li><b>Align</b> (optional): the channels onto channel 1 (the colour shift of many microscopes), and images 2, 3 … onto image 1, either by an <b>automatic shift</b> (the same field imaged again) or by <b>landmarks</b> clicked in both images (serial sections: shift, rotation, scaling and shear).</li>
+<li><b>Count cells</b> in the nuclear channel: background subtraction (uneven illumination), an automatic threshold (Otsu's method<sup class="cite">[<a href="references.html#ref-otsu1979" aria-label="Reference 24">24</a>]</sup>, never below 3 noise SD), touching cells split at their narrow waist, and size and shape limits that leave out debris and fibres.</li>
+<li><b>Markers</b>: a cell is positive when enough of it (default 50%) is bright in the marker channel.</li>
+<li><b>Regions</b>: polygons clicked on the image give counts, % positive and cells per mm² per region.</li>
+<li>A <b>Checks</b> tab says in plain words where the pixel size came from, how well the alignment worked, which threshold was used and what was not counted.</li>
+</ul>
+</div>
+<h4>Demo expectations</h4>
+<div class="prose"><ul>
+<li><b>Data</b>: <code>demo_histology.mat</code> (or <b>Try demo data</b>): two images of the same culture field, <b>Culture, day 1</b> and <b>Culture, day 3</b>, 400 × 400 px at <b>1 µm per pixel</b> (0.16 mm²). Channel 1 <b>Nuclei (DAPI)</b>, channel 2 <b>Marker (GFP)</b>.</li>
+<li><b>60 nuclei</b> in each image (48 single and <b>6 touching pairs</b>): <b>30 in the left half and 30 in the right half</b>. Count cells should give <b>60</b> in both images (<b>375 cells per mm²</b>); the pairs are split into two cells each.</li>
+<li><b>Marker-positive</b>: <b>24 of 60 on day 1</b> and <b>39 of 60 on day 3</b> (every day-1 positive cell stays positive).</li>
+<li><b>Not counted</b>: <b>20 small specks</b> of debris (under 15 µm², removed by <b>Min size</b>) and <b>1 long fibre</b> (removed by <b>Max elongation</b>). Uneven illumination is removed by the background step.</li>
+<li><b>Alignment</b>: day 3 was imaged after the dish went back on the stage, shifted by <b>6.4 px down and 9.2 px left</b> ([dy dx] = [6.4 −9.2]); <b>Shift (automatic)</b> recovers it to about 0.2 px. The marker channel is shifted by [1 2] px from the nuclei in both images (<b>Align channels</b> corrects it).</li>
+<li><b>Regions</b>: add <b>Region A</b> = left half (x ≤ 200.5) and <b>Region B</b> = right half: <b>30 cells</b> each (<b>375 per mm²</b>, 0.08 mm² each). Marker-positive per region: <b>12 and 12 on day 1</b>, <b>18 and 21 on day 3</b> (after aligning). Without aligning, the Checks tab warns that the regions cover different tissue in the two images.</li>
+<li><b>Checks tab</b> (aligned, default settings): pixel size read from the file; image 2 moved by about 9.2 px right and 6.4 px up; the marker channel was about 2.7 px off (corrected); <b>20 small objects</b> and <b>1 elongated object</b> not counted; <b>6 extra cells</b> found by splitting the touching pairs.</li>
+</ul></div>
+<p>Step-by-step instructions and troubleshooting: <a href="guide.html#histology">Histology / culture in the guide</a>.</p></section>
 
 </main>
 </body>

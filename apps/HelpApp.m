@@ -277,7 +277,7 @@ classdef HelpApp < handle
             end
             UIKit.done(dlg);
             UIKit.setStatus(app.W.Status, sprintf(['Demo files written to %s (LDF export, cropped LDF, ' ...
-                'LDF trials, TDT tank, LFP, MUA, imaging stack, oscillation LFP, advanced imaging, groups, ' ...
+                'LDF trials, TDT tank, LFP, MUA, imaging stack, oscillation LFP, advanced imaging, histology, groups, ' ...
                 'Intan / Open Ephys / NWB).'], folder), 'success');
             if offerImport
                 uiconfirm(app.UIFig, sprintf(['The demo files are in\n%s\n\nUse this folder as the ' ...
@@ -446,7 +446,7 @@ classdef HelpApp < handle
             map = {'Welcome', 'index'; 'LDF Extract', 'ldf'; 'LDF Process', 'ldf'; ...
                 'Filtering', 'ldf'; 'LDF Average', 'ldf'; 'Ephys Extract', 'ephys'; ...
                 'LFP Analysis', 'ephys'; 'MUA Analysis', 'ephys'; 'ROI Analysis', 'imaging'; ...
-                'Signal Characterization', 'features'; 'Batch processing', 'batch'; ...
+                'Histology', 'imaging'; 'Signal Characterization', 'features'; 'Batch processing', 'batch'; ...
                 'Sessions and reports', 'sessions'};
             k = find(strcmpi(map(:, 1), strtrim(char(topic))), 1);
             if isempty(k), page = 'guide'; else, page = map{k, 2}; end
@@ -462,6 +462,7 @@ classdef HelpApp < handle
                 'Filtering', 'ProcessingLDFApp'; 'LDF Average', 'LDFGrandAverageApp'; ...
                 'Ephys Extract', 'ExtractEphysApp'; 'LFP Analysis', 'LFPAnalysisApp'; ...
                 'MUA Analysis', 'MUAAnalysisApp'; 'ROI Analysis', 'ROIAnalysisApp'; ...
+                'Histology', 'HistologyApp'; ...
                 'Signal Characterization', 'SignalCharacterizationApp'; 'Batch processing', 'BatchApp'; ...
                 'Virtual lab', 'VirtualLabApp'};
             k = find(strcmpi(map(:, 1), strtrim(char(topic))), 1);
@@ -477,7 +478,7 @@ classdef HelpApp < handle
                 HelpApp.topicWelcome(), HelpApp.topicLDFExtract(), HelpApp.topicLDFProcess(), ...
                 HelpApp.topicFiltering(), HelpApp.topicLDFAverage(), HelpApp.topicEphysExtract(), ...
                 HelpApp.topicLFPAnalysis(), HelpApp.topicMUAAnalysis(), HelpApp.topicROIAnalysis(), ...
-                HelpApp.topicSignalCharacterization(), HelpApp.topicBatch(), HelpApp.topicSessions(), ...
+                HelpApp.topicHistology(), HelpApp.topicSignalCharacterization(), HelpApp.topicBatch(), HelpApp.topicSessions(), ...
                 HelpApp.topicVirtualLab()];
         end
 
@@ -504,6 +505,7 @@ classdef HelpApp < handle
                 '| demo_imaging.mat | ROI Analysis | 96 × 96 × 150 frames at 10 Hz: a pulsing vessel, a moving red blood cell and a cell with calcium transients (`roiMask` included) |'
                 '| demo_lfp_oscillations.mat | LFP Analysis (step 6) | demo_lfp.mat plus 6 Hz theta (40 µV, all channels) and a phase-locked 40 Hz burst (10 µV, 50–250 ms after each stimulus, channels 3–5) |'
                 '| demo_imaging_advanced.mat | ROI Analysis | Jittered stack (±3 px), three cells with distinct event times, a pulsing vessel and a red blood cell crossing the diameter line |'
+                '| demo_histology.mat | Histology / culture | Two images of one culture (day 1, day 3), nuclei + marker channels, 400 × 400 px at 1 µm: 60 nuclei, 24 then 39 marker-positive, debris and a fibre, day 3 shifted on the stage |'
                 '| groups/ | Signal Characterization (Groups & statistics) | 24 LDF trial files: the same 8 animals in Control, Stimulated and Drug (true peaks 18, 30 and 24 PU) |'
                 '| formats/ | Ephys Extract | The first 6 s of demo channels 3–6 as an Intan .rhd, an Open Ephys binary folder and an NWB file |'
                 'Each file also stores the ground truth in a `truth` variable. Use **Generate all demo files…** to write them to a folder (and optionally make it your Import folder), or the **Try it with demo data** button on any topic to open that window with its demo already loaded.'};
@@ -905,6 +907,61 @@ classdef HelpApp < handle
                 'Motion correction shifts look noisy / wrong', 'It corrects translation only (not rotation or warping) and needs structure in the image; very dim or uniform stacks give unreliable shifts. Untick it to go back to the raw frames.'
                 'ROIs are slightly off after turning motion correction on or off', 'ROIs and the line keep their pixel positions; re-run **Detect cells** or redraw them on the image you analyse.'};
             t.images = {'ROIAnalysisWorkflow.png', 'ROIAnalysisPrinciple.png'};
+        end
+
+        %% topicHistology - Histology / culture (still images: count cells, markers, regions, align)
+        function t = topicHistology()
+            t = mkTopic('Histology', 'Imaging · still images', ...
+                'Count cells in still images of sections or cultures, find the cells positive for a marker, compare regions, and align sections or time points.');
+            t.quick = {
+                '**1 Load images**: click **Load images…** and choose one or more files (or **Try demo data**). TIFF: every page is a channel; PNG / JPG: the colours are channels; .mat: variable `images` (H × W × channels × images). Several files = several sections, time points or wells, with the same channels. Check the **Pixel size (µm)**: it is read from ImageJ TIFFs; otherwise type the value of your microscope.'
+                '**2 Align (optional)**: tick **Align channels** if the colours of one cell do not sit on top of each other. With several images choose **Align images**: **Shift (automatic)** for the same field imaged again (time points), **Landmarks (click points)** for serial sections (click the same 3 or more features in image 1 and in the other image, then **Finish**). Click **Align** and switch images to check the overlay.'
+                '**3 Count cells**: choose the channel in which every cell is visible (usually nuclei). The defaults suit nuclei of about 8–12 µm; click **Count cells**. Circles mark counted cells, grey × marks objects that were not counted. Switch **Show** to **What was thresholded** to see what counted as cell.'
+                '**4 Regions and markers**: every other channel is a marker; a cell is positive when at least **Positive if (% of cell)** of it is bright in that channel (yellow circles = positive for every marker). Click **Add region**, click the corners on the image, then **Finish**, to get counts and densities per region.'
+                '**5 Export**: **Export results…** writes a .csv with one row per cell plus `<name>_counts.csv` (per image and region), or a .mat with everything. **Save session…**, **Report (PDF)…** and **Methods text…** keep the analysis.'
+                '**Read the Checks tab** before using the numbers: it says where the pixel size came from, how well the images and channels were aligned, which threshold was used and what was left out.'};
+            t.demo = {
+                '* **Data**: `demo_histology.mat` (or **Try demo data**): two images of the same culture field, **Culture, day 1** and **Culture, day 3**, 400 × 400 px at **1 µm per pixel** (0.16 mm²). Channel 1 **Nuclei (DAPI)**, channel 2 **Marker (GFP)**.'
+                '* **60 nuclei** in each image (48 single and **6 touching pairs**): **30 in the left half and 30 in the right half**. Count cells should give **60** in both images (**375 cells per mm²**); the pairs are split into two cells each.'
+                '* **Marker-positive**: **24 of 60 on day 1** and **39 of 60 on day 3** (every day-1 positive cell stays positive).'
+                '* **Not counted**: **20 small specks** of debris (under 15 µm², removed by **Min size**) and **1 long fibre** (removed by **Max elongation**). Uneven illumination is removed by the background step.'
+                '* **Alignment**: day 3 was imaged after the dish went back on the stage, shifted by **6.4 px down and 9.2 px left** ([dy dx] = [6.4 −9.2]); **Shift (automatic)** recovers it to about 0.2 px. The marker channel is shifted by [1 2] px from the nuclei in both images (**Align channels** corrects it).'
+                '* **Regions**: add **Region A** = left half (x ≤ 200.5) and **Region B** = right half: **30 cells** each (**375 per mm²**, 0.08 mm² each). Marker-positive per region: **12 and 12 on day 1**, **18 and 21 on day 3** (after aligning). Without aligning, the Checks tab warns that the regions cover different tissue in the two images.'
+                '* **Checks tab** (aligned, default settings): pixel size read from the file; image 2 moved by about 9.2 px right and 6.4 px up; the marker channel was about 2.7 px off (corrected); **20 small objects** and **1 elongated object** not counted; **6 extra cells** found by splitting the touching pairs.'};
+            t.inputs = {
+                'TIFF (.tif / .tiff): every page is a channel (one RGB page: its colours); the pixel size is read from ImageJ / resolution tags when present'
+                'PNG, JPG, BMP: the colour channels (a grey image is one channel); type the pixel size'
+                '.mat: `images` (H × W × C × N) or `image` (H × W × C); optional `channelNames`, `imageNames`, `pixelSizeUm`'
+                'Several files at once: one image each (sections, time points, wells), all with the same channels and size'};
+            t.outputs = {
+                '.csv: one row per counted cell: image, cell number, x and y (µm), area (µm²), elongation, region, and for every marker positive yes / no and the part of the cell that is bright (%)'
+                '`<name>_counts.csv`: one row per image and region: cells, area (mm²), cells per mm², positive cells and % per marker, cells positive for all markers'
+                '.mat: struct `results` with the same tables, the settings (µm units), regions, alignment (shifts, landmarks, errors), the label images and the per-cell marker values'};
+            t.details = {
+                '## Counting cells (step 3)'
+                '* **Background**: a smooth background (a grey-level opening with a square of about 2 × **Background radius**) is subtracted. This removes uneven illumination and haze but keeps anything smaller than the square, so use 2–3 × the radius of a cell.'
+                '* **Smoothing**: a light Gaussian blur against pixel noise.'
+                '* **Threshold**: automatic = Otsu''s method, but never below 3 robust noise SD above the background (so an empty image does not produce cells). A typed value replaces it; the Checks tab warns when it is below the noise floor.'
+                '* **Objects**: holes are filled and touching bright pixels (8 neighbours) form one object.'
+                '* **Split touching cells**: inside each object, the distance to the edge peaks at every cell centre. Two peaks stay separate cells only if the object narrows between them (to less than 0.85 × the smaller radius); the pixels are then shared out by distance to each centre, so the cut runs through the narrow waist.'
+                '* **Size and shape**: objects smaller than **Min size**, larger than **Max size** or longer than **Max elongation** × their width are not counted (grey × on the image, and a line in the Checks tab).'
+                '## Markers (co-localisation)'
+                '* For every counted cell, the marker channel is background-subtracted and thresholded in the same way (automatic per channel, or **Marker threshold**). The cell is **positive** when at least **Positive if (% of cell)** of its pixels are above that threshold. The Cells tab shows the percentage for every cell.'
+                '## Regions and densities'
+                '* A region is a polygon drawn on image 1 and used for every image (so align the images first). A cell belongs to the region that contains its centre. **Cells per mm²** = cells / the region''s area inside the image × pixel size². Without regions the whole image is one region.'
+                '## Alignment (coregistration)'
+                '* **Align channels**: every channel is moved onto channel 1 by FFT cross-correlation (about half-pixel accuracy): this corrects the colour shift of many microscopes.'
+                '* **Shift (automatic)**: images 2, 3 … are moved onto image 1 by phase correlation of the chosen channel (after removing the background). Translation only; the Checks tab says how clear the match was.'
+                '* **Landmarks**: from 3 or more matching point pairs an affine transform (shift, rotation, scaling, shear) is fitted by least squares and applied with bilinear interpolation; the Checks tab shows how well the points agree (px).'};
+            t.trouble = {
+                'Two cells counted as one', 'Strongly overlapping nuclei (no narrow waist between them) stay one object by design. Make sure **Split touching cells** is ticked; for dense tissue lower **Max size** so the Checks tab lists the clumps, and count them by eye.'
+                'One cell counted as two', 'Irregular or dividing nuclei can have two distance peaks. Raise **Background radius** (a too small radius cuts cells) or untick **Split touching cells** for sparse cultures.'
+                'Densities (per mm²) look wrong', 'The pixel size is probably wrong. The Checks tab says whether it came from the file or was typed; for PNG / JPG it must be typed (µm per pixel of your objective and camera, including binning).'
+                'Background counted as cells, or dim cells missed', 'Switch **Show** to **What was thresholded**: red is what counts as cell. Type a **Threshold** (0 = automatic) and count again; the Checks tab gives the automatic value to start from.'
+                'Debris or fibres are counted', 'Raise **Min size** (µm²) or lower **Max elongation**. A round nucleus of 8 µm is about 50 µm²; elongation 1–1.5.'
+                'Marker calls look wrong', 'Check that the marker sits on its nucleus in the Composite view; if it is offset, tick **Align channels** and click **Align**. Then adjust **Positive if (% of cell)** or **Marker threshold**.'
+                '"Load images with the same channels together"', 'All images of one analysis need the same number of channels (and the same size). Load images with different stainings separately.'
+                'Automatic shift unreliable (Checks tab)', 'The images may show different fields, or be rotated: use **Landmarks (click points)** instead.'};
         end
 
         %% topicSignalCharacterization - Signal Characterization

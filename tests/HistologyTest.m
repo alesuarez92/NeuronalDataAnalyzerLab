@@ -143,6 +143,8 @@ function testAlignImagesAndCountPerRegion(tests)
         verifyEqual(tests, S(r).areaMm2, s.truth.counts(r).areaMm2, 'RelTol', 1e-9);
         verifyEqual(tests, S(r).perMm2, s.truth.counts(r).perMm2, 'RelTol', 1e-9);
     end
+    % The answers given in Help: 12 + 12 positive on day 1, 18 + 21 on day 3
+    verifyEqual(tests, reshape([s.truth.counts.nPositive], 2, 2)', [12 18; 12 21]);
     whole = Histology.regionCounts(R, {P}, [], s.pixelSizeUm);
     verifyEqual(tests, whole.nCells, s.truth.nCells);
     verifyEqual(tests, whole.areaMm2, 0.16, 'RelTol', 1e-9);

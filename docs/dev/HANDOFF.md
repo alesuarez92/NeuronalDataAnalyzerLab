@@ -1,4 +1,4 @@
-# Handoff (2026-09-25, session 2)
+# Handoff (2026-09-25, session 3)
 
 Working branch: `claude/admiring-cori-52ekpa`. Owner decision: `docs/dev/` stays out of `main`.
 **Delete this file from the branch before merging any PR.**
@@ -10,48 +10,30 @@ Working branch: `claude/admiring-cori-52ekpa`. Owner decision: `docs/dev/` stays
   into the branch (no content change) and pushed normally.
 - Owner said **go** for both: Histology / culture window first, then the Techniques pages.
 
-## In flight: Histology / culture window (NEW STRAND, no PR yet)
-Committed on the branch:
-- `core/Histology.m` (base MATLAB, runs in Octave): readImage (TIFF pages = channels,
-  PNG/JPG, .mat `images` H x W x C x N; pixel size from ImageJ/TIFF tags), background
-  (min/max-filter opening), autoThreshold (Otsu, >= 3 robust noise SD), labelComponents
-  (run-based union-find, 8-conn), fillHoles, countCells (split touching cells: distance
-  map peaks, a lower peak is a new cell only if disconnected from higher peaks in
-  D >= SplitNeck*height, default 0.85; pixels assigned by power distance), positive
-  (>= MinFraction of the cell above the marker threshold), regionCounts (per polygon,
-  per mm2), alignChannels (FFT cross-correlation, ~0.5 px accuracy), alignImagesRigid
-  (registerStackRigid on high-passed channel), fitAffine / warpAffine (landmarks),
-  checks (plain-language Checks tab rows).
-- `core/demo/demoHistology.m`: 2 images (culture day 1 / day 3), 400x400 px at 1 um,
-  60 nuclei (6 edge-touching pairs), 24 / 39 marker-positive, 20 debris, 1 fibre,
-  illumination, day-3 stage shift [6.4 -9.2], chromatic shift [1 2]. Regions A/B = halves.
-- `tests/HistologyTest.m`: 15 tests, all pass in Octave (exact counts, positives,
-  per-region counts after alignment, affine, TIFF/.mat loading).
-- `apps/HistologyApp.m`: full window (steps 1 Load, 2 Align, 3 Count, 4 Regions and
-  markers, 5 Export + session buttons; image with overlays; tabs Counts / Cells / Checks;
-  sessions; scriptable API). **Written but never run** (no MATLAB here): expect small
-  UI bugs; CI is the first real test.
+## In flight: Histology / culture window (NEW STRAND, PR open)
+Done on the branch (session 3):
+- `core/Histology.m`, `core/demo/demoHistology.m`, `apps/HistologyApp.m` (session 2).
+- Wired in: launcher Imaging card (second button, "or" between), Help topic `Histology`
+  (quick start, demo answers, how it works, troubleshooting; demoWindow, websitePage),
+  `MethodsWriter.histology` (+ Otsu 1979 reference, PipelineOrder), `DemoData` kind
+  `histology` (demo_histology.mat, writeAll), CHANGELOG, README, ROADMAP, website
+  (imaging page section, guide section, demo-data row, reference 24 Otsu).
+- Demo: positives now chosen per half, so the per-region answers hold by construction:
+  day 1 12 + 12, day 3 18 + 21 (A + B). Checks text names directions ("9.2 px right and
+  6.4 px up").
+- Tests: `tests/HistologyWalkthroughTest.m` (frames `HistologyApp_01..08_*.png`),
+  AppSmokeTest.testHistology, MethodsWriterTest.testHistology, DemoDataTest histology,
+  HistologyTest locks the per-region answers. Verified in Octave: HistologyTest 15/15;
+  the app pipeline replayed headless gives every Help number exactly (default settings).
+  The window itself has still never run in MATLAB: CI is its first real test.
 
 ## Next steps (in order)
-1. Integrate the window:
-   - `core/Main.m`: Imaging card, second button "Histology / culture" (column 3; move the
-     chainNote or shorten it); update the header comment.
-   - `apps/HelpApp.m`: topic `Histology` (window uses helpTopic 'Histology'): quick start,
-     demo answers (60 nuclei, 30/30 per region, 375 per mm2; positives 24 then 39;
-     region A 18 positive on day 3, region B 21; shift 6.4/-9.2; debris 20, fibre 1),
-     inputs/outputs, how it works (from the Histology.m header), troubleshooting
-     (strongly overlapping nuclei count as one; pixel size; threshold view). Add to
-     `topicData`, `demoWindow` ('Histology' -> 'HistologyApp'), `websitePage` ('imaging').
-   - `core/MethodsWriter.m`: `histology(s)` paragraph + 'HistologyApp' in PipelineOrder
-     and `describe` (settings.count, alignedMethod, regions, pixel size).
-   - `core/DemoData.m`: kind 'histology' (demo_histology.mat) in `file` and `writeAll`
-     (+ HelpApp generateDemoFiles status text).
-   - `tests/AppSmokeTest.m`: testHistology. New `tests/HistologyWalkthroughTest.m`
-     (loadDemo, align shift, count, add regions A/B, exportResultsTo csv+mat, session
-     save/open, frames `HistologyApp_<NN>_<step>.png`).
-   - CHANGELOG `[Unreleased]`, README (window list), website imaging page (text; frames
-     come from the Update screenshots workflow after merge), ROADMAP if it lists this.
-2. Open the PR (cancel the duplicate push run); fix CI; ask the owner before merging.
+1. Watch the PR's CI; fix what the first MATLAB run of HistologyApp finds. Ask the owner
+   before merging.
+2. After merge: run *Update screenshots* with include_all, copy the `HistologyApp_*`
+   frames into `website/assets/frames/`, add an imaging tour in `website/assets/site.js`
+   and a figure in the guide's Histology section (the workflow only refreshes existing
+   frames).
 3. Techniques explainers (website section + Help "Learn" text): LDF, laminar ephys
    (LFP/MUA/CSD), two-photon / calcium, histology and culture imaging.
 4. Later: a virtual-lab histology exercise; remaining validation work; release 0.4.0 on request.

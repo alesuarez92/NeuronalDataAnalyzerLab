@@ -75,6 +75,7 @@ function testExtractEphys(tests),           openAndCapture(tests, 'ExtractEphysA
 function testLFPAnalysis(tests),            openAndCapture(tests, 'LFPAnalysisApp', @() LFPAnalysisApp()); end
 function testMUAAnalysis(tests),            openAndCapture(tests, 'MUAAnalysisApp', @() MUAAnalysisApp()); end
 function testROIAnalysis(tests),            openAndCapture(tests, 'ROIAnalysisApp', @() ROIAnalysisApp()); end
+function testHistology(tests),              openAndCapture(tests, 'HistologyApp', @() HistologyApp()); end
 function testSignalCharacterization(tests), openAndCapture(tests, 'SignalCharacterizationApp', @() SignalCharacterizationApp()); end
 function testBatch(tests),                  openAndCapture(tests, 'BatchApp', @() BatchApp()); end
 function testVirtualLab(tests),             openAndCapture(tests, 'VirtualLabApp', @() VirtualLabApp()); end
