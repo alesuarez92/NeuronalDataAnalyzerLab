@@ -9,6 +9,14 @@ If you're an AI coding agent (Claude Code, Codex, Cursor, Aider) opening this re
 
 This project uses the **minimal tier** of the per-project doc system: no `docs/` subtree yet. Session continuity lives in commit messages. Upgrade to standard tier when work needs cross-session tracking.
 
+## Product goal (owner's words, guides every change)
+
+Make processing very easy to understand and accessible for experimental
+scientists who are not programmers: they use every tool effectively
+without writing code, and they understand what each step does and why.
+Every feature, message, Help page and lesson is judged against this:
+plain language, no hidden steps, explanations and checks inside the app.
+
 ## Classification ritual
 
 Before any meaningful work, announce one of:
