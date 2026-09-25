@@ -159,7 +159,8 @@ function testStandardUnchangedOnDemoLFP(tests)
     verifyEqual(tests, CSDMethods.estimate(erp, depths, 'Standard'), ref);
     verifyEqual(tests, CSDMethods.standard(erp(8:-1:1, :), depths), ERPAnalysis.csd(erp, 100, 8:-1:1));
     % Legacy formula (LFPAnalysisApp before ERPAnalysis)
-    c = -diff(erp, 2, 1) / (100e-6)^2;
+    dz = 100 * 1e-6;   % as ERPAnalysis.csd computes it (100e-6 differs in the last bit)
+    c = -diff(erp, 2, 1) / dz^2;
     verifyEqual(tests, ref, [c(1, :); c; c(end, :)]);
     [~, info] = CSDMethods.estimate(erp, depths, 'standard');
     verifyEqual(tests, info.toAm3, 0.3);
