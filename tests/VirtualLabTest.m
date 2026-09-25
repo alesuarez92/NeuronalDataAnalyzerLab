@@ -115,9 +115,9 @@ function testReferenceAnalysisRecoversTruth(tests)
 end
 
 function testOverlappingResponsesShrinkThePeak(tests)
-    % 10 s between 5 s stimuli: flow is not back to baseline (~10 s), so
+    % 8 s between 5 s stimuli: flow is not back to baseline (~10 s), so
     % every baseline contains the previous response
-    d = goodDesign(); d.isiS = 10; d.nStim = 30;
+    d = goodDesign(); d.isiS = 8; d.nStim = 30;
     tr = VirtualLab.truth('Ana', d);
     ref = VirtualLab.referenceAnalysis('Ana', d);
     verifyLessThan(tests, ref.peakChangePU, 0.9 * tr.peakChangePU);

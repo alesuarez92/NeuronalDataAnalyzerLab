@@ -218,7 +218,7 @@ function testDialog(tests)
     c = onCleanup(@() delete(fig));
     ta = findobj(fig, 'Type', 'uitextarea');
     tests.verifyNumElements(ta, 1);
-    shown = strjoin(cellstr(ta.Value), newline);
+    shown = MethodsWriter.dialogText(fig);
     [txt, refs] = MethodsWriter.fromSession(s);
     tests.verifyEqual(shown, MethodsWriter.compose(txt, refs));
     lbl = findobj(fig, 'Type', 'uilabel');

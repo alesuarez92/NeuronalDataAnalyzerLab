@@ -1339,7 +1339,11 @@ classdef MethodsWriter
             d = fig.UserData;
             [txt, refs] = MethodsWriter.fromSessions(d.sessions);
             full = MethodsWriter.compose(txt, refs);
-            d.ta.Value = strsplit(full, newline)';
+            % A text area drops empty lines: keep paragraph breaks as a single
+            % space (dialogText turns them back into empty lines)
+            lines = strsplit(full, newline)';
+            lines(cellfun(@isempty, lines)) = {' '};
+            d.ta.Value = lines;
             d.generated = full;
             names = cellfun(@(x) MethodsWriter.sessionName(x), d.sessions, 'UniformOutput', false);
             if numel(d.sessions) == 1
@@ -1359,7 +1363,7 @@ classdef MethodsWriter
 
         %% dialogText - Current (edited) text of the dialog
         function txt = dialogText(fig)
-            txt = strjoin(cellstr(fig.UserData.ta.Value), newline);
+            txt = strjoin(regexprep(cellstr(fig.UserData.ta.Value), '^\s+$', ''), newline);
         end
 
         %% copyText - Copy the edited text to the clipboard

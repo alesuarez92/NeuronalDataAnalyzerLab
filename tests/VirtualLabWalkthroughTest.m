@@ -103,7 +103,7 @@ function testStudentDoesTheExperiment(tests)
     shot(tests, pr.UIFig, 'VirtualLabApp_06_process_ldf', 'Trials');
 
     av = LDFGrandAverageApp(); c4 = onCleanup(@() delete(av.UIFig));
-    verifyEqual(tests, av.openFiles({trials}), 1);
+    verifyEqual(tests, av.openFiles({trials}), 15);   % trials added
     av.setRelative(true);
     av.plotGrandAverage();
     m = av.responseMeasures();
