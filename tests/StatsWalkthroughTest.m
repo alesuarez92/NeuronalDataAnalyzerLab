@@ -8,7 +8,11 @@
 % to a box plot, a rank-based test, and export publication figures. A
 % frame is saved after every step to
 % test-artifacts/screens/walkthrough/SignalCharacterizationApp_xNN_<step>.png
-% for the Help pages and the website. The test fails if any step errors
+% for the Help pages and the website. testRepeatedMeasures runs the
+% repeated-measures design on the same demo (all three conditions, animals
+% matched by #): repeated-measures ANOVA with sphericity, then Friedman,
+% a session round trip, and the error for unequal group sizes; frames
+% SignalCharacterizationApp_rNN_<step>.png. The test fails if any step errors
 % or the known demo effect is not found. Skipped when no display is
 % available.
 % =========================================================================
@@ -129,6 +133,70 @@ function testGroupsAndStatistics(tests)
     tests.verifyTrue(logical(app.exportGroupResults(fullfile(out, 'group_values.csv'))));
     verifyFile(tests, fullfile(out, 'group_values.csv'));
     verifyFile(tests, fullfile(out, 'group_values_report.txt'));
+end
+
+function testRepeatedMeasures(tests)
+    app = SignalCharacterizationApp(); c = onCleanup(@() delete(app.UIFig));
+    G = 'Groups & statistics';
+    tests.verifyTrue(logical(app.loadGroupDemo()));
+    truth = app.GroupDemo.truth;
+    realizedDiff = mean(truth.amplitude(:, 2) - truth.amplitude(:, 1));
+
+    % 1 Repeated-measures ANOVA over Control, Stimulated, Drug (same 8 animals)
+    tests.verifyTrue(logical(app.runGroupStats('Peak amplitude', 'rm', 'parametric')));
+    r = app.GroupResult;
+    tests.verifyEqual(r.design, 'rm');
+    tests.verifyEqual(app.DesignMenu.Value, 'Repeated measures (same animals, 3+ conditions)');
+    tests.verifyEqual(r.main.test, 'Repeated-measures ANOVA');
+    tests.verifyLessThan(r.main.p, 0.001);
+    tests.verifyEqual(r.groupNames, {'Control', 'Stimulated', 'Drug'});
+    tests.verifyEqual(cellfun(@numel, r.values), [8 8 8]);
+    tests.verifyNumElements(r.comparisons, 3);
+    tests.verifyEqual(r.comparisons(1).diff, realizedDiff, 'AbsTol', 2);
+    tests.verifyLessThan(r.comparisons(1).p, 0.05);
+    tests.verifyEqual(r.check.test, 'Friedman test');
+    tests.verifySize(app.PostHocTable.Data, [3 5]);
+    q = app.StatsTable.Data(:, 1);
+    tests.verifyTrue(any(strcmp(q, 'Sphericity')), 'Results table has no sphericity row');
+    tests.verifyTrue(any(strcmp(q, 'Greenhouse-Geisser')));
+    tests.verifyTrue(any(strcmp(q, 'Huynh-Feldt')));
+    rep = strjoin(reshape(cellstr(app.ReportText.Value), 1, []), ' ');
+    tests.verifyTrue(contains(rep, 'Animals (matched by subject number)'));
+    shot(tests, app, 'SignalCharacterizationApp_r01_rm_anova_plot', {G, 'Plot'});
+    shot(tests, app, 'SignalCharacterizationApp_r02_rm_anova_results', {G, 'Results'});
+
+    % 2 Box-plot style keeps the animal lines
+    app.setGroupPlotStyle('box');
+    shot(tests, app, 'SignalCharacterizationApp_r03_rm_boxplot', {G, 'Plot'});
+    app.setGroupPlotStyle('mean');
+
+    % 3 Friedman test (rank-based), repeated-measures ANOVA as the check
+    tests.verifyTrue(logical(app.runGroupStats('Peak amplitude', 'rm', 'nonparametric')));
+    r = app.GroupResult;
+    tests.verifyEqual(r.main.test, 'Friedman test');
+    tests.verifyLessThan(r.main.p, 0.05);
+    tests.verifyEqual(r.check.test, 'Repeated-measures ANOVA');
+    tests.verifyTrue(any(strcmp(app.StatsTable.Data(:, 1), 'Sphericity')));
+    shot(tests, app, 'SignalCharacterizationApp_r04_friedman_plot', {G, 'Plot'});
+    shot(tests, app, 'SignalCharacterizationApp_r05_friedman_results', {G, 'Results'});
+
+    % 4 Session round trip keeps the repeated-measures design
+    tests.verifyTrue(logical(app.runGroupStats('Peak amplitude', 'rm', 'parametric')));
+    p = fullfile(tests.TestData.exportDir, ['rm_session' Session.Extension]);
+    tests.verifyTrue(logical(app.saveSessionTo(p, 'Repeated measures')));
+    b = SignalCharacterizationApp(); c2 = onCleanup(@() delete(b.UIFig));
+    tests.verifyTrue(logical(b.openSession(p)));
+    tests.verifyEqual(b.DesignMenu.Value, app.DesignMenu.Value);
+    tests.verifyEqual(b.GroupResult.design, 'rm');
+    tests.verifyEqual(b.GroupResult.main.p, app.GroupResult.main.p, 'AbsTol', 1e-12);
+    tests.verifyEqual(b.GroupResult.summary, app.GroupResult.summary);
+
+    % 5 Unequal group sizes: clear error, no result change
+    last = find(strcmp({app.GroupFiles.group}, 'Drug'), 1, 'last');
+    tests.verifyTrue(logical(app.removeGroupFile(last)));
+    tests.verifyFalse(logical(app.runGroupStats('Peak amplitude', 'rm')));
+    tests.verifyTrue(contains(app.W.Status.Text, 'group sizes differ'));
+    shot(tests, app, 'SignalCharacterizationApp_r06_rm_unequal_sizes', {G, 'Files'});
 end
 
 function testSingleFileFigureExport(tests)

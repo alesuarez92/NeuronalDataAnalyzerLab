@@ -16,10 +16,12 @@
 %   1 Files and groups (several files per group, e.g. one per animal)
 %   2 Feature (one value per subject: feature of each file's mean trace,
 %     mean of its per-series values, or every series as a subject)
-%   3 Statistical test (paired / unpaired / one-way ANOVA; parametric or
-%     rank-based; GroupStats) -> Results tab (statistic, df, p, effect
-%     size, CI, n, assumptions) and Plot tab (subjects, pairs, mean ± SEM
-%     or box, significance brackets)
+%   3 Statistical test (paired / unpaired / one-way ANOVA / repeated
+%     measures; parametric or rank-based; GroupStats) -> Results tab
+%     (statistic, df, p, effect size, CI, n, sphericity and corrections
+%     for repeated measures, assumptions) and Plot tab (subjects, pairs or
+%     each animal's line across conditions, mean ± SEM or box,
+%     significance brackets)
 %   4 Export (publication figure via FigureExport; values + report)
 % One updateControls() sets every enable state from the current data.
 % Scriptable (CI walkthroughs, no dialogs): openFile(path), loadDemo(),
@@ -82,7 +84,7 @@ classdef SignalCharacterizationApp < handle
         GroupBaseStartEdit
         GroupBaseEndEdit
         GroupDirectionMenu
-        DesignMenu         % Paired / Unpaired / ANOVA
+        DesignMenu         % Paired / Unpaired / ANOVA / Repeated measures
         MethodMenu         % Parametric / Nonparametric
         GroupAMenu         % Reference group (two-group designs)
         GroupBMenu         % Compared group (two-group designs)
@@ -131,8 +133,9 @@ classdef SignalCharacterizationApp < handle
             'Time series (t, y)'}
         SubjectModes = {'File (mean trace)', 'File (mean of series)', 'Each series'}
         SubjectKeys = {'meantrace', 'meanvalues', 'series'}
-        Designs = {'Paired (same animals)', 'Unpaired (independent)', 'ANOVA (2+ groups)'}
-        DesignKeys = {'paired', 'unpaired', 'anova'}
+        Designs = {'Paired (same animals)', 'Unpaired (independent)', 'ANOVA (2+ groups)', ...
+            'Repeated measures (same animals, 3+ conditions)'}
+        DesignKeys = {'paired', 'unpaired', 'anova', 'rm'}
         Methods = {'Parametric', 'Nonparametric (ranks)'}
         MethodKeys = {'parametric', 'nonparametric'}
         PlotStyles = {'Mean ± SEM', 'Box plot (median, IQR)'}
@@ -283,7 +286,7 @@ classdef SignalCharacterizationApp < handle
             T = UITheme;
             g = uigridlayout(app.GroupsTab, [1 2], 'ColumnWidth', {320, '1x'}, 'RowHeight', {'1x'}, ...
                 'Padding', [8 8 8 8], 'ColumnSpacing', 10, 'BackgroundColor', T.bgGray);
-            left = uigridlayout(g, [4 1], 'RowHeight', {146, 198, 206, 112 + UIKit.sessionButtonsHeight() + 6}, ...
+            left = uigridlayout(g, [4 1], 'RowHeight', {146, 198, 220, 112 + UIKit.sessionButtonsHeight() + 6}, ...
                 'Padding', [0 0 0 0], 'RowSpacing', 8, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
 
@@ -361,7 +364,10 @@ classdef SignalCharacterizationApp < handle
             app.DesignMenu = UIKit.field(f3, 'Design', 'dropdown', {app.Designs, app.Designs{1}}, ...
                 ['Paired: the same animals measured in two conditions (paired t-test / Wilcoxon ' ...
                  'signed-rank). Unpaired: two independent groups (Welch t-test / Mann-Whitney U). ' ...
-                 'ANOVA: all groups at once (one-way ANOVA + Tukey-Kramer / Kruskal-Wallis).']);
+                 'ANOVA: all groups at once, independent animals (one-way ANOVA + Tukey-Kramer / ' ...
+                 'Kruskal-Wallis). Repeated measures: the same animals in every group, matched by the ' ...
+                 '# column (repeated-measures ANOVA with sphericity corrections + Holm-corrected ' ...
+                 'paired t-tests / Friedman + Wilcoxon).']);
             app.MethodMenu = UIKit.field(f3, 'Method', 'dropdown', {app.Methods, app.Methods{1}}, ...
                 ['Parametric: t-tests / ANOVA on the values (compare means; assume roughly normal data). ' ...
                  'Nonparametric: rank-based tests (no normality assumption). The other family is ' ...
@@ -461,7 +467,7 @@ classdef SignalCharacterizationApp < handle
                 'Tooltip', ['Mean ± SEM (bar and whiskers) or box plot (median, quartiles, whiskers to ' ...
                 'the most extreme value within 1.5 IQR); every subject is always shown'], ...
                 'ValueChangedFcn', @(~,~)app.plotGroupStats());
-            uilabel(pt, 'Text', ['Dots: subjects · grey lines: pairs · brackets: tested differences ' ...
+            uilabel(pt, 'Text', ['Dots: subjects · grey lines: same animal · brackets: tested differences ' ...
                 '(* p<0.05, ** p<0.01, *** p<0.001)'], 'FontSize', T.fontSmall, ...
                 'FontColor', T.mutedColor, 'HorizontalAlignment', 'right');
             app.StatsAxes = uiaxes(pt);
@@ -504,7 +510,7 @@ classdef SignalCharacterizationApp < handle
             % --- Groups & statistics ---
             names = app.groupNames();
             hasGF = ~isempty(app.GroupFiles);
-            isAnova = strcmp(app.designKey(), 'anova');
+            isAnova = any(strcmp(app.designKey(), {'anova', 'rm'}));   % all groups at once
             twoOk = numel(names) >= 2 && ~strcmp(app.GroupAMenu.Value, app.GroupBMenu.Value);
             canRun = numel(names) >= 2 && (isAnova || twoOk);
             hasGR = ~isempty(app.GroupResult);
@@ -1247,7 +1253,9 @@ classdef SignalCharacterizationApp < handle
         %% runGroupStats - Compute the feature per subject and run the test (no dialogs)
         % All arguments optional (default: the current fields):
         %   feature  one of the feature names, e.g. 'Peak amplitude'
-        %   design   'paired' | 'unpaired' | 'anova' (or a Design menu item)
+        %   design   'paired' | 'unpaired' | 'anova' | 'rm' (repeated measures:
+        %            every group, animals matched by the # column; group
+        %            sizes must be equal) (or a Design menu item)
         %   method   'parametric' | 'nonparametric' (or a Method menu item)
         %   pair     {groupA, groupB} for two-group designs (difference B - A)
         % Result in app.GroupResult (GroupStats.compare output plus feature,
@@ -1284,7 +1292,20 @@ classdef SignalCharacterizationApp < handle
                 return;
             end
             dkey = app.designKey();
-            if strcmp(dkey, 'anova')
+            if strcmp(dkey, 'rm')
+                counts = cellfun(@(nm) sum(strcmp({app.GroupFiles.group}, nm)), names);
+                if any(counts ~= counts(1)) && ~strcmp(app.subjectModeKey(), 'series')
+                    msg = sprintf(['Repeated measures need one file per animal in every group (%s). ' ...
+                        'Animals are matched by the # column of the Files tab: #1 of every group is the ' ...
+                        'same animal. Add the missing files or remove the extra ones.'], ...
+                        strjoin(arrayfun(@(i) sprintf('%s: %d', names{i}, counts(i)), 1:numel(names), ...
+                        'UniformOutput', false), ', '));
+                    UIKit.setStatus(app.W.Status, 'Test not run: group sizes differ.', 'error');
+                    UIKit.alert(app.UIFig, msg, 'Group statistics');
+                    return;
+                end
+            end
+            if any(strcmp(dkey, {'anova', 'rm'}))
                 use = names;
             else
                 use = {app.GroupAMenu.Value, app.GroupBMenu.Value};
@@ -1312,6 +1333,9 @@ classdef SignalCharacterizationApp < handle
             if strcmp(dkey, 'paired')
                 keep = isfinite(vals{1}) & isfinite(vals{2});
                 labels = {labels{1}(keep), labels{2}(keep)};
+            elseif strcmp(dkey, 'rm')
+                keep = all(isfinite([vals{:}]), 2);
+                labels = cellfun(@(l) l(keep), labels, 'UniformOutput', false);
             else
                 labels = cellfun(@(l, v) l(isfinite(v)), labels, vals, 'UniformOutput', false);
             end
@@ -1401,8 +1425,9 @@ classdef SignalCharacterizationApp < handle
             per = @(f) strjoin(arrayfun(@(i) f(i), 1:numel(names), 'UniformOutput', false), '  ·  ');
             nTxt = per(@(i) sprintf('%s %d', names{i}, r.desc(i).n));
             if strcmp(r.design, 'paired'), nTxt = sprintf('%s  (%d pairs)', nTxt, r.desc(1).n); end
+            if strcmp(r.design, 'rm'), nTxt = sprintf('%s  (%d animals in every group)', nTxt, r.desc(1).n); end
             if numel(m.df) == 2
-                dfTxt = sprintf('%g, %g', m.df(1), m.df(2));
+                dfTxt = sprintf('%s, %s', GroupStats.dfText(m.df(1)), GroupStats.dfText(m.df(2)));
             elseif isnan(m.df)
                 dfTxt = char(8212);
             else
@@ -1423,7 +1448,8 @@ classdef SignalCharacterizationApp < handle
                 'df', dfTxt
                 'p (two-sided)', sprintf('%.4g   %s', m.p, GroupStats.stars(m.p))
                 'Effect size', effTxt};
-            if ~strcmp(r.design, 'anova')
+            rows = [rows; app.sphericityRows()];
+            if ~any(strcmp(r.design, {'anova', 'rm'}))
                 c = r.comparisons(1);
                 if all(isfinite(c.ci))
                     rows(end + 1, :) = {'Difference [95% CI]', sprintf('%s = %.4g [%.4g, %.4g]', c.label, c.diff, c.ci(1), c.ci(2))};
@@ -1449,11 +1475,53 @@ classdef SignalCharacterizationApp < handle
                 else
                     ciTxt = char(8212);
                 end
+                meth = ph(i).method;
+                if isfield(ph, 'effectCI') && all(isfinite(ph(i).effectCI))
+                    meth = sprintf('%s; %s = %.3g [%.3g, %.3g]', meth, ph(i).effectName, ph(i).effect, ...
+                        ph(i).effectCI(1), ph(i).effectCI(2));
+                elseif isfield(ph, 'effect') && isfinite(ph(i).effect)
+                    meth = sprintf('%s; %s = %.3g', meth, ph(i).effectName, ph(i).effect);
+                end
                 data(i, :) = {ph(i).label, sprintf('%.4g', ph(i).diff), ciTxt, ...
-                    sprintf('%.4g  %s', ph(i).p, GroupStats.stars(ph(i).p)), ph(i).method};
+                    sprintf('%.4g  %s', ph(i).p, GroupStats.stars(ph(i).p)), meth};
             end
             app.PostHocTable.Data = data;
             app.ReportText.Value = app.reportLines();
+        end
+
+        %% sphericityRows - Results-table rows on sphericity (repeated measures only)
+        % Mauchly's test, the Greenhouse-Geisser / Huynh-Feldt epsilons with
+        % their corrected df and p, and which p is reported (from the
+        % repeated-measures ANOVA, whether it is the main test or the check).
+        function rows = sphericityRows(app)
+            rows = cell(0, 2);
+            r = app.GroupResult;
+            if ~strcmp(r.design, 'rm'), return; end
+            if isfield(r.main, 'sphericity'), a = r.main; else, a = r.check; end
+            s = a.sphericity;
+            k = numel(r.groupNames);
+            if k < 3
+                rows = {'Sphericity', 'Holds by definition with two conditions (no correction)'};
+                return;
+            end
+            if s.testable
+                mTxt = sprintf('Mauchly''s W = %.3f, χ²(%d) = %.3g, %s  (%s)', s.W, round(s.df), s.chi2, ...
+                    GroupStats.formatP(s.p), ifelseText(s.p < 0.05, 'violated', 'not rejected'));
+            else
+                mTxt = 'Mauchly''s test not computable (fewer animals than conditions)';
+            end
+            dfs = @(d) sprintf('%s, %s', GroupStats.dfText(d(1)), GroupStats.dfText(d(2)));
+            if strcmp(s.correction, 'none')
+                used = 'Uncorrected (sphericity not rejected)';
+            else
+                used = sprintf('%s corrected (Mauchly p < 0.05 or not computable)', s.correction);
+            end
+            rows = {
+                'Sphericity', mTxt
+                'Greenhouse-Geisser', sprintf('ε = %.3f;  F(%s), %s', s.epsGG, dfs(s.dfGG), GroupStats.formatP(s.pGG))
+                'Huynh-Feldt', sprintf('ε = %.3f;  F(%s), %s', s.epsHF, dfs(s.dfHF), GroupStats.formatP(s.pHF))
+                'Uncorrected', sprintf('F(%s), %s', dfs([a.table.dfc a.table.dfe]), GroupStats.formatP(s.pUncorrected))
+                'p reported (ANOVA)', used};
         end
 
         %% reportLines - Copy-ready summary, assumptions, settings and pairs
@@ -1472,6 +1540,14 @@ classdef SignalCharacterizationApp < handle
                     r.groupNames{1}, char(8596), r.groupNames{2});
                 for j = 1:numel(r.labels{1})
                     lines{end + 1, 1} = sprintf('  %d: %s  %s  %s', j, r.labels{1}{j}, char(8596), r.labels{2}{j}); %#ok<AGROW>
+                end
+            elseif strcmp(r.design, 'rm')
+                sep = sprintf('  %s  ', char(8596));
+                lines{end + 1, 1} = '';
+                lines{end + 1, 1} = sprintf('Animals (matched by subject number): %s', strjoin(r.groupNames, sep));
+                for j = 1:numel(r.labels{1})
+                    lines{end + 1, 1} = sprintf('  %d: %s', j, strjoin(cellfun(@(l) l{j}, r.labels, ...
+                        'UniformOutput', false), sep)); %#ok<AGROW>
                 end
             end
         end
@@ -1502,6 +1578,15 @@ classdef SignalCharacterizationApp < handle
                 for j = 1:numel(a)
                     plot(ax, [1 2] + offs{1}(j), [a(j) b(j)], '-', 'Color', [0.74 0.76 0.80], 'LineWidth', 0.8);
                 end
+            elseif strcmp(r.design, 'rm')
+                % Every animal's line across the conditions (same jitter in each column)
+                Ym = [r.values{:}];
+                for j = 1:size(Ym, 1)
+                    plot(ax, (1:k) + offs{1}(j), Ym(j, :), '-', 'Color', [0.74 0.76 0.80], 'LineWidth', 0.8);
+                end
+                if ~isBox
+                    plot(ax, 1:k, [r.desc.mean], '-', 'Color', dark, 'LineWidth', 1.2);
+                end
             end
             for i = 1:k
                 v = r.values{i};
@@ -1529,7 +1614,7 @@ classdef SignalCharacterizationApp < handle
             end
             % Significance brackets: the tested difference, or significant post-hoc pairs
             comps = r.comparisons;
-            if strcmp(r.design, 'anova'), comps = comps([comps.p] < 0.05); end
+            if any(strcmp(r.design, {'anova', 'rm'})), comps = comps([comps.p] < 0.05); end
             base = hi + 0.08 * span;
             gap = 0.11 * span;
             for m = 1:numel(comps)
@@ -1774,6 +1859,8 @@ classdef SignalCharacterizationApp < handle
                     s = 'Pairs by subject number: #1 of A with #1 of B, and so on (see the Files tab).';
                 case 'unpaired'
                     s = 'Independent animals; group sizes may differ. Welch test: unequal SDs allowed.';
+                case 'rm'
+                    s = 'Same animals in all groups, matched by # (Files tab); then every pair (paired t, Holm).';
                 otherwise
                     s = 'All groups at once (independent animals), then every pair (Tukey-Kramer).';
             end

@@ -69,6 +69,7 @@ classdef Main < handle
             app.UIFig = uifigure('Name', 'Neuronal Data Analyzer Lab', ...
                 'Position', UIKit.centeredPosition([1060 940]), 'Resize', 'on', ...
                 'Color', T.bgGray);
+            UIKit.setAppIcon(app.UIFig);
 
             % === MAIN GRID: Header | Project bar | Hint | Cards | Status | Footer ===
             mainGrid = uigridlayout(app.UIFig, [6, 1], ...
@@ -78,7 +79,7 @@ classdef Main < handle
 
             % === HEADER ===
             [app.HeaderPanel, app.HelpBtn] = UIKit.header(mainGrid, 'Neuronal Data Analyzer Lab', ...
-                'Analysis toolbox for LDF, electrophysiology, imaging and response features', 'Welcome');
+                'Analysis toolbox for LDF, electrophysiology, imaging and response features', 'Welcome', [], true);
             app.HelpBtn.Tooltip = 'Overview of the pipelines, project folders and where to get help';
 
             % === PROJECT BAR ===

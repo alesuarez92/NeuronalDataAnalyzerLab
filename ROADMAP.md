@@ -9,7 +9,7 @@ first so we can agree on the scope, then follow [CONTRIBUTING.md](CONTRIBUTING.m
 Every change needs tests (`run_tests`), and new analysis steps should come with
 synthetic demo data that has a known answer (see `core/DemoData.m` and `core/demo/`).
 
-**Status:** ✅ done (in the next release) · 🔨 in progress · 🟢 open for contributors
+**Status:** ✅ done · 🔨 in progress · 📅 planned · 🟢 open for contributors
 
 ## Found by the demo data
 
@@ -31,8 +31,38 @@ them exposed two limits, which are now fixed.
 | ✅ | Per-unit responses | MUA | Raster and PSTH per unit, auto- and cross-correlograms. |
 | ✅ | Motion correction and many ROIs | Imaging | Rigid registration, several ROIs at once, automatic cell detection from a local correlation image. |
 | ✅ | More acquisition systems | Data formats | Intan RHD2000, Open Ephys binary and NWB 2.x import; NWB export. |
-| 🔨 | Batch processing | Every pipeline | Run one pipeline over a folder of animals or sessions with the same settings and get one summary table plus a per-file log. |
-| 🔨 | Session files and reports | Reproducibility | Save settings, input-file provenance (with checksums) and results together; a one-page PDF report per analysis for the lab notebook. |
+| ✅ | Batch processing | Every pipeline | Run one pipeline over a folder of animals or sessions with the same settings and get one summary table plus a per-file log. |
+| ✅ | Session files and reports | Reproducibility | Save settings, input-file provenance (with checksums) and results together; a one-page PDF report per analysis for the lab notebook. |
+| ✅ | CSD methods | LFP | Inverse CSD (delta, step, spline) and kernel CSD next to the standard CSD, tested against laminar data with a known CSD. |
+| ✅ | Repeated-measures statistics | Response features | Repeated-measures ANOVA with sphericity checks and corrections, and the Friedman test, for the same animals in several conditions. |
+
+## Direction: understand, check and teach
+
+NeuroAnalyzer aims to be the analysis tool that is easiest to use
+correctly and that teaches while it is used:
+
+- **Own methods, end to end.** Every analysis runs inside NeuroAnalyzer
+  with no other software to install. Its own methods keep improving and
+  are measured against public ground-truth data; "better" is claimed only
+  where that validation shows it.
+- **Works alongside the established tools.** Results from specialised
+  tools (for example Kilosort / Phy for spike sorting, Suite2p for
+  calcium imaging) can be imported, checked, explained and compared with
+  NeuroAnalyzer's own methods on the same data. Each importer is one small,
+  separate, tested file, and NWB is preferred as the common format.
+- **Explains itself.** Warnings in plain language, live previews of what a
+  parameter does, and methods text generated from the analysis.
+- **Teaches.** Lessons on synthetic data with known answers can check a
+  student's result automatically.
+
+| | Item | Notes |
+|---|---|---|
+| 📅 | Methods-section writer | From a saved session: a ready-to-edit methods paragraph with every step, parameter, software version and citation. |
+| 📅 | Quality checks | A plain-language check per step (too few trials, refractory violations, CSD sink at an edge contact, sphericity, motion larger than a cell), each saying why it matters and what to try. |
+| 📅 | Live parameter previews | Thresholds, filters, CSD smoothing: a small preview updates as the value changes. |
+| 📅 | Import and compare | Kilosort / Phy units and Suite2p ROIs: quality checks, and side-by-side comparison with NeuroAnalyzer's own sorting and cell detection. |
+| 📅 | Lessons | Guided exercises on demo data with known answers, checked automatically; instructors can write their own lesson files. |
+| 📅 | Ground-truth playground | Change noise, electrode spacing, sink depth, spike overlap or motion in the demo data and see where each method holds up or fails. |
 
 ## Open for contributors
 
@@ -54,7 +84,6 @@ Scoped items that are known to be missing. Each is self-contained.
 
 | | Item | Area | Notes |
 |---|---|---|---|
-| 🟢 | Repeated-measures ANOVA | Response features | The same animals in three or more conditions are compared today with paired tests; a within-subject ANOVA (or a mixed model) is missing. |
 | 🟢 | One stimulus-onset rule | LFP / MUA | `ERPAnalysis.detectOnsets` (mean-subtracted stimulus) and `SpikeTrains.stimulusOnsets` (absolute threshold) differ slightly. Unify them and describe one rule in Help. |
 | 🟢 | Time–frequency in the ERP export | LFP | *Export ERP / CSD…* does not include spectra, ERSP / ITPC or band power. |
 | 🟢 | Non-rigid motion correction | Imaging | Motion correction handles translation only; add piecewise-rigid registration for tissue deformation. |

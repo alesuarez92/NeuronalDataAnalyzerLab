@@ -7,6 +7,33 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-25
+
+### Added
+
+- **CSD methods** in LFP Analysis: inverse CSD (iCSD delta / step /
+  spline; Pettersen et al. 2006) and kernel CSD (kCSD with R and λ chosen
+  by cross-validation; Potworowski et al. 2012) next to the unchanged
+  standard CSD (`core/CSDMethods.m`). Step 4 has a Method dropdown with
+  the parameters of the chosen method; exports and sessions store the
+  method and its parameters; `core/demo/demoCSD.m` gives laminar data with
+  a known CSD.
+- **Repeated-measures statistics** in Signal Characterization → Groups &
+  statistics: design *Repeated measures (same animals, 3+ conditions)*
+  with repeated-measures ANOVA (partial and generalized η², Mauchly's
+  test, Greenhouse–Geisser / Huynh–Feldt corrections, Holm-corrected
+  paired t-tests with d_z and CI) and the Friedman test (Kendall's W,
+  Holm-corrected Wilcoxon tests).
+- **Logo and icon**: the NeuroAnalyzer logo in the launcher and Help
+  headers, and as the window icon of every window.
+- **Help → Learn more ↗** opens the matching page of the website.
+
+### Fixed
+
+- **Website**: the menu marks the current page on hosts that serve pages
+  without `.html` (Cloudflare); fonts are hosted with the site (no
+  requests to third-party servers).
+
 ## [0.2.0] - 2026-09-25
 
 ### Changed
@@ -139,6 +166,7 @@ formats, but the public surface is not yet stable. Expect tightening
 of error handling, more validation around input formats, and additional
 analyses in 0.2.x.
 
-[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.1.0

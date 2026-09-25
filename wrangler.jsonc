@@ -1,0 +1,12 @@
+// Cloudflare Workers static site: serves website/ as-is (no build step).
+// Used by Cloudflare's Git integration for production deploys and
+// pull-request previews.
+{
+  "name": "neuronalanalyzerlab",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./website",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

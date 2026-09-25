@@ -46,6 +46,7 @@ classdef HelpApp < handle
 
     properties(Constant)
         IssuesURL = 'https://github.com/alesuarez92/NeuronalDataAnalyzerLab/issues'
+        WebsiteURL = 'https://neuronalanalyzerlab.alesr713.workers.dev'
     end
 
     methods
@@ -101,7 +102,7 @@ classdef HelpApp < handle
         function buildUI(app)
             T = UITheme;
             app.W = UIKit.window('NeuroAnalyzer Help', ...
-                'Quick starts, file formats and troubleshooting for every window', '', [1120 780]);
+                'Quick starts, file formats and troubleshooting for every window', '', [1120 780], true);
             app.UIFig = app.W.Fig;
             app.UIFig.Tag = 'NeuroAnalyzerHelp';
             app.UIFig.UserData = app;
@@ -139,9 +140,13 @@ classdef HelpApp < handle
             app.NextBtn = UIKit.button(ng, ['Next ' char(8250)], @(~,~)app.step(1), ...
                 'secondary', 'Next topic');
             app.NextBtn.Layout.Row = 5; app.NextBtn.Layout.Column = 2;
+            more = UIKit.button(ng, ['Learn more ' char(8599)], @(~,~)app.openWebsite(), ...
+                'secondary', ['Open the matching page of the NeuroAnalyzer website in your browser ' ...
+                '(methods, references, walkthroughs): ' HelpApp.WebsiteURL]);
+            more.Layout.Row = 6; more.Layout.Column = 1;
             issues = UIKit.button(ng, 'Report a problem', @(~,~)web(HelpApp.IssuesURL, '-browser'), ...
                 'secondary', ['Open GitHub issues in your browser: ' HelpApp.IssuesURL]);
-            issues.Layout.Row = 6; issues.Layout.Column = [1 2];
+            issues.Layout.Row = 6; issues.Layout.Column = 2;
 
             % --- Right: topic page ---
             page = UIKit.card(body);
@@ -157,6 +162,17 @@ classdef HelpApp < handle
         end
 
         %% selectTopic - Show a topic by title (case-insensitive); Welcome if unknown
+        function url = openWebsite(app, topic)
+            %% openWebsite - Website page for a topic (default: the current one) in the browser
+            if nargin < 2 || isempty(topic), topic = app.TopicList.Value; end
+            url = HelpApp.websitePage(topic);
+            try
+                web(url, '-browser');
+            catch
+                UIKit.setStatus(app.W.Status, ['Could not open a browser: ' url], 'warning');
+            end
+        end
+
         function selectTopic(app, topic)
             idx = [];
             if ~isempty(topic)
@@ -425,6 +441,22 @@ classdef HelpApp < handle
         end
 
         %% demoWindow - Class of the window a topic's "Try it" opens ('' = Welcome)
+        function url = websitePage(topic)
+            %% websitePage - URL of the website page that matches a Help topic
+            map = {'Welcome', 'index'; 'LDF Extract', 'ldf'; 'LDF Process', 'ldf'; ...
+                'Filtering', 'ldf'; 'LDF Average', 'ldf'; 'Ephys Extract', 'ephys'; ...
+                'LFP Analysis', 'ephys'; 'MUA Analysis', 'ephys'; 'ROI Analysis', 'imaging'; ...
+                'Signal Characterization', 'features'; 'Batch processing', 'batch'; ...
+                'Sessions and reports', 'sessions'};
+            k = find(strcmpi(map(:, 1), strtrim(char(topic))), 1);
+            if isempty(k), page = 'guide'; else, page = map{k, 2}; end
+            if strcmp(page, 'index')
+                url = [HelpApp.WebsiteURL '/'];
+            else
+                url = [HelpApp.WebsiteURL '/' page];
+            end
+        end
+
         function cls = demoWindow(topic)
             map = {'LDF Extract', 'ExtractLDFApp'; 'LDF Process', 'ProcessingLDFApp'; ...
                 'Filtering', 'ProcessingLDFApp'; 'LDF Average', 'LDFGrandAverageApp'; ...
@@ -702,7 +734,7 @@ classdef HelpApp < handle
                 '**1 Load LFP file**: click **Load LFP file…** and choose the LFP file saved by Extract Ephys.'
                 '**2 Channels**: select the channels to analyse (**All** / **None**).'
                 '**3 ERP analysis**: click **Run ERP…**, set pre- and post-stimulus time (s), stimulus threshold and minimum ISI (s), click OK. The number of averaged epochs is reported.'
-                '**4 CSD**: enter **Spacing (µm)** and the **Channel order** from top to bottom (at least 3 channels of the last ERP), then click **Compute CSD**.'
+                '**4 CSD**: choose the **Method** (Standard, iCSD delta, iCSD step, iCSD spline or kCSD), enter **Spacing (µm)** and the **Channel order** from top to bottom (at least 3 channels of the last ERP), then click **Compute CSD**. iCSD and kCSD also ask for the conductivity **σ (S/m)** (0.3 for cortex) and the **Diameter (µm)** of the active tissue (500 by default). iCSD has an optional **Smoothing (µm)** (0 = off). kCSD has **R (µm)** and **λ**, where 0 = chosen automatically by cross-validation. Only the fields of the chosen method are shown.'
                 '**5 Export**: click **Export ERP / CSD…** to save a .mat that Signal Characterization can read.'
                 '**6 Time–frequency**: choose the **Channel**, **Frequencies (Hz)** (lowest – highest), **Wavelet cycles**, **Epoch (s)** and **Baseline (s)**. The band table (delta 1–4, theta 4–8, alpha 8–13, beta 13–30, gamma 30–80 Hz) holds common conventions: edit the limits for your preparation and tick **Plot** for the bands to show. **Try oscillation demo** loads a demo with known theta and gamma oscillations and selects channel 4.'
                 '**7 Time–frequency plots**: click **Spectrum** (power spectrum of the whole recording), **Spectrogram** (power over time with the stimuli marked), **ERSP / ITPC** (power change in dB and phase locking around each stimulus) and **Band power** (% change of each ticked band around the stimulus, mean ± SEM). Each opens its tab. ERSP and Band power use the stimulus onsets found with the ERP threshold (0.5 until you run the ERP).'
@@ -711,6 +743,8 @@ classdef HelpApp < handle
                 '* **Data**: `demo_lfp.mat`, 8 channels at 1017.25 Hz, 30 s, 100 µm spacing; 15 stimuli every 2 s from 1 s.'
                 '* **ERP** (e.g. pre 0.05 s, post 0.2 s): 15 epochs; **N1 (negative) at ~15 ms** (about −120 µV at channel 4) and **P2 (positive) at ~40 ms**; both are **largest at channel 4** and fall off over ~150 µm (channels 2–6).'
                 '* **CSD** (spacing 100 µm, order 1–8): a **current sink at channel 4** at ~15 ms, flanked by sources above and below (channels 2–3 and 5–6).'
+                '* **CSD methods** (demo LFP, ERP pre 0.05 s / post 0.2 s, spacing 100 µm, order 1–8): every method puts the **sink at channel 4 at ~15 ms**, flanked by sources above and below. Standard is in V/m² (no conductivity); iCSD and kCSD are in A/m³ (they scale with σ and the Diameter). The title of the CSD plot names the method; for kCSD it also shows the chosen R and λ.'
+                '* **CSD ground truth** (`core/demo/demoCSD`, for scripts and tests): a Gaussian sink with balancing sources in 500 µm-wide discs, 16 or 8 contacts 100 µm apart. Without noise, the relative error against the true CSD is about 0.34 for Standard, 0.10 for iCSD delta, 0.04 for iCSD step, 0.004 for iCSD spline and 0.03 for kCSD. With 1 % noise it is 0.42 for Standard and 0.11 for kCSD; iCSD step / spline then need Smoothing (≈ 75 µm).'
                 '* **Oscillation demo** (**Try oscillation demo**): the same LFP plus **6 Hz theta** (40 µV, on every channel, not phase-locked to the stimuli) and a **40 Hz gamma burst** (10 µV, **50–250 ms after each stimulus**, **channels 3–5**, phase-locked). Channel 4 is chosen.'
                 '* **Spectrum**: 1/f background with a clear **peak at ~6 Hz** (theta) and a small bump near **40 Hz**.'
                 '* **Spectrogram** (2–80 Hz): a steady band at 6 Hz, and short 40 Hz patches just after each dashed stimulus line.'
@@ -728,6 +762,11 @@ classdef HelpApp < handle
                 '## CSD'
                 '* CSD is the negative second spatial derivative of the ERP across the ordered channels divided by spacing²; the first and last rows are copied from their neighbours.'
                 '* Sinks (current flowing into cells) and sources appear as opposite colours across depth; use it with a linear probe and the true channel order.'
+                '* **Standard** (unchanged): −d²V/dz² by second differences divided by spacing², end rows copied from their neighbours. The conductivity is left out, so the unit is V/m²; multiply by σ for A/m³. It assumes the activity extends infinitely far sideways (Nicholson & Freeman 1975).'
+                '* **iCSD** (Pettersen et al. 2006, J Neurosci Methods 154:116–133): models the CSD as discs of the given **Diameter** in tissue of conductivity **σ** and inverts the exact potential of those discs. **delta**: thin discs at each contact. **step**: CSD constant within ± half a spacing of each contact. **spline**: a smooth cubic spline between the contacts, held constant for half a spacing beyond the end contacts. Result in A/m³. Inverse methods amplify noise; **Smoothing (µm)** applies a Gaussian filter across depth afterwards.'
+                '* **kCSD** (Potworowski et al. 2012, Neural Comput 24:541–575): many Gaussian basis sources of width **R** (SD, µm) with the same disc model, fitted with ridge regularisation **λ** (relative to the kernel size). When R or λ is 0, both are chosen by leave-one-out cross-validation: each contact is predicted from the others and the combination with the smallest error is kept. It also gives the CSD on a 4× finer depth grid.'
+                '* **Which method?** Standard is fine for a quick look with wide, uniform activity. iCSD is more accurate when the active region is small compared with the probe, and better at the top and bottom contacts. kCSD is the most robust to noise and to activity beyond the ends of the probe. With many contacts and little noise, iCSD step / spline are the most accurate.'
+                '* **Export** also saves `csd_method`, `csd_unit`, `csd_params`, `csd_grid` / `csd_grid_depth_um` and, for kCSD, `csd_kcsd` (chosen R and λ, cross-validation errors). Sessions store the method and its parameters.'
                 '## Time–frequency'
                 '* **Spectrum**: Welch''s method, 2 s Hann segments with 50% overlap, each segment''s mean removed; density in units²/Hz, so the area under the spectrum equals the signal variance.'
                 '* **Spectrogram**: short-time Fourier transform, 0.5 s Hann windows, 90% overlap; power in dB.'
@@ -739,6 +778,10 @@ classdef HelpApp < handle
                 '"No stimulus onsets detected. Check the threshold."', 'Look at the stimulus tab and set the threshold between baseline and stimulus amplitude (the stimulus is mean-subtracted first).'
                 '"No complete epochs"', 'All onsets are too close to the recording start / end for the pre/post window. Shorten pre/post.'
                 '"CSD needs at least 3 channels" / order error', 'Run the ERP with ≥ 3 channels and list only those channels in the CSD order.'
+                'iCSD map is noisy or striped', 'Inverse CSD amplifies noise between contacts. Set **Smoothing (µm)** to about 0.5–1 × the spacing (e.g. 50–100 µm), or use **kCSD**, which chooses its regularisation from the data.'
+                'CSD values look very different between methods', 'Standard is in V/m² without the conductivity; iCSD and kCSD are in A/m³ and scale with **σ**. Compare the depth and timing of sinks and sources, or multiply Standard by σ.'
+                'Strong sink or source at the top or bottom contact', 'Activity beyond the ends of the probe is folded into the end contacts (all methods; Standard just copies the neighbouring row). Trust the inner contacts more; kCSD handles this best.'
+                '"CSD (…) failed: … must be a positive number"', 'σ and Diameter must be above 0; Smoothing, R and λ must be 0 or more (0 = off / automatic).'
                 '"No stimulus onsets detected" in ERSP / ITPC or Band power', 'These use the ERP stimulus threshold and minimum ISI (0.5 and 0.5 s until the ERP has been run). Run the ERP (step 3) with a threshold that suits the Stimulus tab, then try again.'
                 '"The highest frequency must be below the Nyquist frequency"', 'Enter a highest frequency below half the LFP sampling rate (e.g. < 508 Hz for 1017 Hz data).'
                 '"The baseline window … lies outside the epoch window"', 'Keep Baseline (s) inside Epoch (s), e.g. epoch −0.5 to 1 s and baseline −0.4 to −0.1 s.'
@@ -869,7 +912,7 @@ classdef HelpApp < handle
                 '**3 Features**: select the features (Ctrl/Cmd-click for several) and click **Extract features**.'
                 '**4 Export**: check the table (click a row to plot that series) and click **Export to CSV / MAT**. **Export figure…** above the plot saves the selected trace as a publication figure.'
                 '**5 Groups & statistics** tab (or **Try group demo**): in **1 Files and groups** type a **Group** name and click **Add files…** (one .mat per animal); repeat for each group. The **#** column is the subject number: paired designs match #1 with #1, #2 with #2 (fix with **▲ Move up** / **▼ Move down**).'
-                '**6 Feature and test**: choose the **Feature**, **Value per** (File (mean trace) recommended: one animal = one file), **Onset t0 (s)**, **Baseline (s)** and **Direction**; then the **Design** (Paired, Unpaired or ANOVA for 2+ groups), the **Method** (Parametric or Nonparametric) and, for two groups, **Compare** A vs B (difference = B − A). Click **Run test**: the **Plot** tab shows every animal, pair lines, mean ± SEM (or **Box plot**) and the significance bracket; the **Results** tab lists test, statistic, df, p, effect size, 95% CI, n, a robustness check with the other test family, assumptions and a copy-ready report.'
+                '**6 Feature and test**: choose the **Feature**, **Value per** (File (mean trace) recommended: one animal = one file), **Onset t0 (s)**, **Baseline (s)** and **Direction**; then the **Design** (Paired, Unpaired, ANOVA for 2+ independent groups, or **Repeated measures** when the same animals appear in 3+ conditions), the **Method** (Parametric or Nonparametric) and, for two groups, **Compare** A vs B (difference = B − A). Click **Run test**: the **Plot** tab shows every animal (with repeated measures, each animal''s line across the conditions), mean ± SEM (or **Box plot**) and the significance brackets; the **Results** tab lists test, statistic, df, p, effect size, 95% CI, n, sphericity and its corrections (repeated measures), a robustness check with the other test family, assumptions and a copy-ready report.'
                 '**7 Export**: choose a format and click **Export figure…** (PDF / SVG / EPS vector, or PNG / TIFF at 300 or 600 dpi; 8.5 cm wide, 8 pt Helvetica, the window is not changed). **Export values & report…** saves the per-animal values (.csv plus a _report.txt) or the full result (.mat).'
                 '**Session / report (optional)**: in step 4 of either tab, **Save session…** stores the single file and every group file (with checksums), all settings and results; **Open session…** re-extracts the features and re-runs the test; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
@@ -878,7 +921,8 @@ classdef HelpApp < handle
                 '* Trials differ by a few PU / tenths of a second because of vasomotion and noise, which is why the mean over trials is the number to report.'
                 '* **Group demo** (**Try group demo**): 24 files, `control_animal01.mat` … `drug_animal08.mat`: the same 8 animals in Control, Stimulated and Drug, each with 8 LDF trials (−5 to 20 s at 10 Hz). True peak hyperemia 18, 30 and 24 PU; animals differ by ~3 PU, plus ~2.5 PU per animal and condition.'
                 '* **Paired t-test, Peak amplitude, Control vs Stimulated**: Stimulated − Control ≈ **+12 PU** (95% CI roughly +9 to +15), **p < 0.001**, d_z ≈ 3 (simulated 3.3). Wilcoxon signed-rank: p ≈ 0.008 (all 8 animals increase; the smallest exact p possible with 8 pairs). Unpaired (Welch): also significant, with a smaller t.'
-                '* **ANOVA**: F(2, 21) large, p < 0.001; Tukey–Kramer Stimulated − Control ≈ +12 PU (p < 0.001); Drug lies ~6 PU from each of the others (usually, not always, significant). **Peak latency** ≈ 4 s in every group: no difference expected.'};
+                '* **ANOVA**: F(2, 21) large, p < 0.001; Tukey–Kramer Stimulated − Control ≈ +12 PU (p < 0.001); Drug lies ~6 PU from each of the others (usually, not always, significant). **Peak latency** ≈ 4 s in every group: no difference expected.'
+                '* **Repeated measures, Peak amplitude, all three conditions** (the same 8 animals, matched by **#**): repeated-measures ANOVA F(2, 14) large, **p < 0.001**, partial η² large. Mauchly''s test is usually not significant (the demo is simulated with sphericity), so the uncorrected p is reported; Greenhouse–Geisser and Huynh–Feldt p are also < 0.001. Holm-corrected paired t-tests: Stimulated − Control ≈ **+12 PU** (p < 0.01, d_z ≈ 3), Drug − Control ≈ +6 PU, Drug − Stimulated ≈ −6 PU (usually, not always, significant). **Friedman**: significant (χ²(2) = 16, p = 0.0003 when every animal ranks the conditions the same way; Kendall''s W near 1).'};
             t.inputs = {
                 'LDF trials from LDF Process: `segmentedLDF`, `segmentedTime` (one series per trial)'
                 'LFP from Extract Ephys: `lfp_data`, `t_lfp` (mean over channels = one series)'
@@ -899,7 +943,14 @@ classdef HelpApp < handle
                 '* **Decay time**: from the peak until the signal returns past 50%.'
                 '* **Peak amplitude**: peak minus baseline.'
                 '* **Stim–response integral**: integral of the signal from t0 to the end.'
-                'A feature that cannot be measured (e.g. the signal never returns to 50%) is NaN.'};
+                'A feature that cannot be measured (e.g. the signal never returns to 50%) is NaN.'
+                '## Repeated measures (same animals in 3+ conditions)'
+                '* **Matching**: subject #1 of every group is the same animal, and so on (the **#** column of the Files tab). Every group needs the same number of files; an animal whose feature is NaN in any condition is left out of every condition (the assumptions say how many).'
+                '* **Repeated-measures ANOVA**: F for conditions against the condition × animal residual, df (k − 1, (n − 1)(k − 1)). Effect sizes: partial η² (conditions vs residual) and generalized η² (also counting the between-animal variance; comparable with between-subject designs).'
+                '* **Sphericity**: the ANOVA assumes all pairwise differences have the same variance. **Mauchly''s test** (3+ conditions) checks it; the **Greenhouse–Geisser** and **Huynh–Feldt** ε shrink the df to correct for it (ε = 1: no violation). The reported p is the Greenhouse–Geisser corrected one when Mauchly''s p < 0.05 (or when there are fewer animals than conditions), otherwise the uncorrected one; all three are listed. With few animals Mauchly''s test has little power: if the corrected p leads to another conclusion, report the corrected one.'
+                '* **Post hoc**: paired t-tests on every pair, Holm-corrected p, 95% CI of the difference (not corrected) and d_z with its exact 95% CI.'
+                '* **Friedman test** (Nonparametric): ranks the conditions within each animal (no normality or sphericity assumption); effect Kendall''s W (0 = no consistent order, 1 = every animal ranks the conditions the same way); pairwise Wilcoxon signed-rank tests, Holm-corrected.'
+                '* With only 2 conditions the repeated-measures ANOVA equals the paired t-test (F = t²).'};
             t.trouble = {
                 '"… does not contain a supported format"', 'The file needs segmentedLDF + segmentedTime, lfp_data + t_lfp, or t + y (or t + LDF). The alert lists the variables it found.'
                 'Series skipped (t and y lengths differ)', 'Each y must have one value per time point; check the saved variables.'
@@ -910,7 +961,9 @@ classdef HelpApp < handle
                 '**Run test** is disabled', 'Add files to at least two groups. For a two-group design, choose two different groups in **Compare**.'
                 '"… value(s) excluded because the feature could not be computed"', 'The feature was NaN for those files (peak not found or never crossing 50%). Check **Onset t0**, **Baseline** and **Direction**, or choose another feature.'
                 '"The parametric and rank-based tests disagree"', 'Usually few animals or an outlier. Look at the Plot tab, and report the rank-based result or add animals.'
-                'Same animals in 3 or more conditions', 'The one-way ANOVA assumes independent groups; repeated-measures ANOVA is not available. Compare the conditions of interest with paired tests (corrected for multiple comparisons), or use a statistics package.'
+                'Same animals in 3 or more conditions', 'Choose **Design: Repeated measures (same animals, 3+ conditions)**. The one-way ANOVA assumes independent groups and is less powerful here.'
+                '"Repeated measures need one file per animal in every group"', 'Every animal needs one file in each condition. The alert lists the files per group; add the missing files or remove the extra ones, and check the **#** order in the Files tab.'
+                '"Sphericity: violated"', 'The variances of the differences between conditions are not equal, so the Greenhouse–Geisser corrected p (non-integer df, e.g. F(1.3, 9.1)) is reported. You can also report the Friedman test (Method: Nonparametric).'
                 '**Export figure…** is disabled', 'Run a test first (Groups & statistics), or load a file (Single file).'
                 'The journal wants Arial or another size', 'Export as PDF or SVG (vector) and change the font or size in Illustrator or Inkscape; the text stays editable.'};
             t.images = {'SignalCharacterizationWorkflow.png', 'SignalCharacterizationPrinciple.png'};

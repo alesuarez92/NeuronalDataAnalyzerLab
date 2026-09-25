@@ -30,6 +30,8 @@
 %       defined) are copied from their neighbours. Sinks are negative.
 %       Constant conductivity is assumed (it is left out, so the units are
 %       those of the potential's second derivative, not A/m^3).
+%       This is the 'standard' method of core/CSDMethods, which adds
+%       inverse CSD (delta / step / spline) and kernel CSD in A/m^3.
 %
 % Method reference (CSD):
 %   Mitzdorf U (1985). Current source-density method and application in

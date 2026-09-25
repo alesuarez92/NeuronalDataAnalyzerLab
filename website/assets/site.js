@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "0.2.0";
+  var VERSION = "0.3.0";
   var REPO = "https://github.com/alesuarez92/NeuronalDataAnalyzerLab";
 
   var NAV = [
@@ -251,7 +251,7 @@
         l: "Available once the analysis has run." },
       { f: "ExtractLDFApp_s02_session_reopened", w: "Extract LDF", t: "Session reopened",
         x: "Open session… in a new window reloads and checks the input file, applies the settings and redoes the crop.",
-        l: "Status bar: “Session … opened (saved … with NeuroAnalyzer v0.2.0)” and the notes." },
+        l: "Status bar: “Session … opened (saved … with NeuroAnalyzer v0.3.0)” and the notes." },
       { f: "LFPAnalysisApp_s02_session_reopened", w: "LFP Analysis", t: "LFP session reopened",
         x: "The ERP and CSD are re-computed from the checked input with the saved settings.", l: "The same CSD as before saving." },
       { f: "MUAAnalysisApp_s02_session_reopened", w: "MUA Analysis", t: "MUA session reopened",
@@ -291,8 +291,12 @@
     return null;
   }
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var page = (location.pathname.split("/").pop() || "index.html").replace(/#.*$/, "");
-  if (page.indexOf(".") < 0) page = "index.html";
+  // Hosts such as Cloudflare Pages serve "pretty" URLs without .html
+  // (/ldf, /ldf/): map them back to the file name used in the nav.
+  var path = location.pathname.replace(/\/+$/, "");
+  var page = decodeURIComponent(path.split("/").pop() || "");
+  if (page === "" || page === "index") page = "index.html";
+  else if (page.indexOf(".") < 0) page = page + ".html";
 
   /* ------------------------------ theme ------------------------------- */
   var themes = ["auto", "light", "dark"];

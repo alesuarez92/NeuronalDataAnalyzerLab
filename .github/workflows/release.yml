@@ -40,6 +40,14 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$app" >> "$GITHUB_OUTPUT"
 
+      - name: Check the website shows this version
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          grep -q "var VERSION = \"$v\"" website/assets/site.js || { echo "website/assets/site.js VERSION is not $v"; exit 1; }
+          grep -q "v$v" website/index.html || { echo "website/index.html does not show v$v"; exit 1; }
+          grep -q "version $v" website/about.html || { echo "website/about.html citation is not version $v"; exit 1; }
+          grep -q "version: \"$v\"" CITATION.cff || { echo "CITATION.cff is not version $v"; exit 1; }
+
       - name: Release notes from CHANGELOG.md
         run: |
           v="${{ steps.v.outputs.version }}"
