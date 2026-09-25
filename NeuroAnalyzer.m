@@ -1,5 +1,5 @@
 function NeuroAnalyzer
-% NeuroAnalyzer - Launch the Neuronal Data Analyzer toolbox (NMD Lab).
+% NeuroAnalyzer - Launch the Neuronal Data Analyzer toolbox.
 %
 % Usage:
 %   NeuroAnalyzer

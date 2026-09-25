@@ -8,8 +8,9 @@
 %
 %   [onsetTimes, onsetIdx] = ERPAnalysis.detectOnsets(stim, fs, threshold, minISI)
 %       Stimulus onsets: upward crossings of threshold by the
-%       mean-subtracted stimulus. An onset closer than minISI (s) to the
-%       previously detected crossing is dropped. Sample k is at time
+%       mean-subtracted stimulus. A crossing within minISI (s) of the last
+%       kept onset is dropped (a pulse train gives one onset; same rule as
+%       LDFPipeline.detectOnsets and SpikeTrains.stimulusOnsets). Sample k is at time
 %       (k-1)/fs, so onsetTimes = (onsetIdx - 1) / fs (s).
 %   [erpAvg, erpStd, t, nValid, epochs, valid] = ...
 %           ERPAnalysis.average(lfp, fs, onsetTimes, pre, post)
@@ -45,7 +46,7 @@ classdef ERPAnalysis
         %% detectOnsets - Upward threshold crossings of the mean-subtracted stimulus
         % stim: vector (row or column). fs: stimulus sampling rate (Hz).
         % threshold: in stimulus units, applied after subtracting the mean.
-        % minISI: minimum interval (s) to the previous crossing.
+        % minISI: minimum interval (s) after the last kept onset.
         % OUTPUT: onsetTimes (s, row), onsetIdx (sample indices, row).
         function [onsetTimes, onsetIdx] = detectOnsets(stim, fs, threshold, minISI)
             if ~isvector(stim)
@@ -60,9 +61,17 @@ classdef ERPAnalysis
                 onsetTimes = zeros(1, 0);
                 return;
             end
-            isi = diff(onsetIdx) / fs;
-            validIdx = [true, isi > minISI];
-            onsetIdx = onsetIdx(validIdx);
+            % Keep a crossing only if it comes more than minISI after the last
+            % KEPT onset (as LDF): a pulse train gives one onset per train
+            keep = false(size(onsetIdx));
+            last = -Inf;
+            for i = 1:numel(onsetIdx)
+                if (onsetIdx(i) - last) / fs > minISI
+                    keep(i) = true;
+                    last = onsetIdx(i);
+                end
+            end
+            onsetIdx = onsetIdx(keep);
             onsetTimes = (onsetIdx - 1) / fs;   % sample k is at (k-1)/Fs
         end
 

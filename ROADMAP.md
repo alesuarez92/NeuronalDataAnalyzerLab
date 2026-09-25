@@ -57,11 +57,11 @@ correctly and that teaches while it is used:
 
 | | Item | Notes |
 |---|---|---|
-| 📅 | Methods-section writer | From a saved session: a ready-to-edit methods paragraph with every step, parameter, software version and citation. |
+| ✅ | Methods-section writer | *Methods text…* in every window drafts the methods from one or several saved sessions: every step, parameter, software version and citation, with placeholders for what only you know. |
 | 📅 | Quality checks | A plain-language check per step (too few trials, refractory violations, CSD sink at an edge contact, sphericity, motion larger than a cell), each saying why it matters and what to try. |
 | 📅 | Live parameter previews | Thresholds, filters, CSD smoothing: a small preview updates as the value changes. |
 | 📅 | Import and compare | Kilosort / Phy units and Suite2p ROIs: quality checks, and side-by-side comparison with NeuroAnalyzer's own sorting and cell detection. |
-| 📅 | Lessons | Guided exercises on demo data with known answers, checked automatically; instructors can write their own lesson files. |
+| 🔨 | Virtual lab and lessons | First virtual experiment done: plan and record a simulated LDF experiment, analyse it in the normal windows and get feedback on the plan, processing and results; instructors grade a folder of submissions. Next: electrophysiology and imaging experiments, a course built on them. |
 | 📅 | Ground-truth playground | Change noise, electrode spacing, sink depth, spike overlap or motion in the demo data and see where each method holds up or fails. |
 
 ## Open for contributors
@@ -84,11 +84,11 @@ Scoped items that are known to be missing. Each is self-contained.
 
 | | Item | Area | Notes |
 |---|---|---|---|
-| 🟢 | One stimulus-onset rule | LFP / MUA | `ERPAnalysis.detectOnsets` (mean-subtracted stimulus) and `SpikeTrains.stimulusOnsets` (absolute threshold) differ slightly. Unify them and describe one rule in Help. |
+| ✅ | One stimulus-onset rule | LDF / LFP / MUA | All three keep a crossing only if it comes after the minimum interval from the last kept onset (a pulse train gives one onset). LFP still thresholds the mean-subtracted stimulus. |
 | 🟢 | Time–frequency in the ERP export | LFP | *Export ERP / CSD…* does not include spectra, ERSP / ITPC or band power. |
 | 🟢 | Non-rigid motion correction | Imaging | Motion correction handles translation only; add piecewise-rigid registration for tissue deformation. |
 | 🟢 | Neuropil correction | Imaging | Subtract a scaled surround signal from each cell's trace before ΔF/F. |
-| 🟢 | Reproducible sorting | MUA | K-means uses MATLAB's global random stream; expose a seed in *Configure...* so a sorting can be repeated exactly. |
+| ✅ | Reproducible sorting | MUA | *Configure...* has a Random seed (default 0); the window sets it before every run, so the same data and settings give the same clusters. |
 
 ### Documentation
 

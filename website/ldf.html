@@ -42,7 +42,7 @@
 Butterworth filters have a maximally flat pass-band<sup class="cite">[<a href="references.html#ref-butterworth1930" aria-label="Reference 19">19</a>]</sup>; Chebyshev I filters are steeper with pass-band ripple; FIR filters are always stable but need a high order for a sharp cutoff.
 Cutoffs must lie below half the sampling rate after downsampling (1000 Hz / 10 → cutoffs below 50 Hz). Processing always starts from the loaded data, so new settings never filter an already filtered signal.</p>
 <h4>Trials</h4>
-<p>Onsets are the samples where the stimulus rises above the threshold; an onset closer than the minimum interval to the previous one is ignored. Each trial runs from onset − pre to onset + post; trials that would run past the start or end of the recording are skipped.
+<p>Onsets are the samples where the stimulus rises above the threshold; a crossing closer than the minimum interval to the last accepted onset is ignored, so a train of pulses gives one onset. Each trial runs from onset − pre to onset + post; trials that would run past the start or end of the recording are skipped.
 Files are pooled in the Average LDF Viewer only when their time axes are identical. <b>Relative to baseline</b> subtracts the mean of each trial's samples before t = 0.</p>
 </div>
 <div class="shot-grid">

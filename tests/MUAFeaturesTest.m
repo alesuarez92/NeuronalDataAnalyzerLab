@@ -146,8 +146,9 @@ function testStimulusOnsets(tests)
     t = (0:10)' * 0.1;
     stim = [0 0 1 1 0 1 0 0 1 1 0]';
     verifyEqual(tests, SpikeTrains.stimulusOnsets(stim, t, 0.5, 0.25), [0.2; 0.5; 0.8], 'AbsTol', 1e-12);
-    % Each crossing is compared with the previous crossing: 0.3 s apart < 0.4 s
-    verifyEqual(tests, SpikeTrains.stimulusOnsets(stim, t, 0.5, 0.4), 0.2, 'AbsTol', 1e-12);
+    % Each crossing is compared with the last KEPT onset: 0.5 s is 0.3 s after
+    % 0.2 s (dropped), 0.8 s is 0.6 s after it (kept)
+    verifyEqual(tests, SpikeTrains.stimulusOnsets(stim, t, 0.5, 0.4), [0.2; 0.8], 'AbsTol', 1e-12);
     verifyEmpty(tests, SpikeTrains.stimulusOnsets(stim, t, 2, 0));
 end
 
@@ -248,4 +249,91 @@ function testDemo_autoMergeAndPSTH(tests)
     verifyGreaterThanOrEqual(tests, psth.centers(iPk), 0.005);
     verifyLessThanOrEqual(tests, psth.centers(iPk), 0.055);
     verifyGreaterThan(tests, max(psth.rate), 3 * mean(psth.rate(psth.centers < 0)));
+end
+
+%% testQualityResultsStored - Rejected units and ISI violation rates are stored in the results
+% (they were shown on screen but results.rejectedClusters stayed false and
+% results.isiViolationRate empty)
+function testQualityResultsStored(tests)
+    fs = 30000;
+    rs = RandStream('mt19937ar', 'Seed', 11);
+    nw = 36;                                   % 1.2 ms waveforms
+    shape = -100 * exp(-((1:nw) - 24).^2 / 8);   % flat first 0.5 ms (noise estimate)
+    % Cluster 1: clean unit (spikes >= 5 ms apart); cluster 2: same shape but
+    % every other spike 0.5 ms after the previous one (refractory violations)
+    s1 = (1:40) * 0.01;
+    s2 = sort([(1:20) * 0.02 + 0.5, (1:20) * 0.02 + 0.5 + 0.0005]);
+    t = (0:round(1.5 * fs)) / fs;
+    locs = round([s1, s2] * fs)' + 1;
+    labels = [ones(40, 1); 2 * ones(40, 1)];
+    waves = repmat(shape, 80, 1) + 5 * randn(rs, 80, nw);
+    p = MUAPipeline.completeParams(struct('refractoryMs', 1.5));
+    [results, qc] = MUAPipeline.qualityMetrics(struct(), labels, waves, locs, t, fs, p);
+    verifyEqual(tests, [qc.rejected], [false true]);
+    verifyEqual(tests, results.rejectedClusters, [false true]);
+    verifyEqual(tests, results.isiViolationRate(1), 0);
+    verifyGreaterThan(tests, results.isiViolationRate(2), 2);
+    verifyEqual(tests, results.isiViolationRate(2), qc(2).isiPct);
+end
+
+%% Drift correction ---------------------------------------------------------
+
+%% testRelativeDistanceIsUnitFree - Merge distances do not depend on V vs uV
+function testRelativeDistanceIsUnitFree(tests)
+    [A, B] = unitShapes();
+    verifyEqual(tests, MUAPipeline.relativeDistance(A, A), 0);
+    verifyEqual(tests, MUAPipeline.relativeDistance(A, 0.5 * A), 0.5, 'AbsTol', 1e-12);
+    verifyEqual(tests, MUAPipeline.relativeDistance(1e-6 * A, 1e-6 * B), ...
+        MUAPipeline.relativeDistance(A, B), 'AbsTol', 1e-12);
+    verifyEqual(tests, MUAPipeline.relativeDistance(0 * A, 0 * A), 0);
+end
+
+%% testMergeAcrossBins_sameInVoltsAndMicrovolts - One unit in two time bins
+% keeps one label whatever the units of the recording (before: a fixed
+% distance of 0.5 merged everything in V and nothing in uV)
+function testMergeAcrossBins_sameInVoltsAndMicrovolts(tests)
+    [A, B] = unitShapes();
+    [W, labels] = noisySpikes({A, B, A, B}, [1 2 2 1], 60, 0, 3);   % bin 2 swaps the local labels
+    bins = [ones(120, 1); 2 * ones(120, 1)];
+    for scale = [1 1e-6]
+        g = MUAPipeline.mergeClustersAcrossBins([], scale * W, labels, bins, 0.85, 0.5);
+        verifyEqual(tests, numel(unique(g)), 2, sprintf('scale %g', scale));
+        verifyEqual(tests, g(121:180), repmat(g(1), 60, 1), sprintf('scale %g: unit A', scale));
+        verifyEqual(tests, g(181:240), repmat(g(61), 60, 1), sprintf('scale %g: unit B', scale));
+    end
+end
+
+%% testDriftBinningKeepsEverySpike - Spikes of small time bins become noise, not lost
+function testDriftBinningKeepsEverySpike(tests)
+    tests.assumeTrue(license('test', 'Statistics_Toolbox') && license('test', 'Signal_Toolbox') && ...
+        exist('kmeans', 'file') == 2 && exist('findpeaks', 'file') == 2, ...
+        'Spike sorting needs the Signal Processing and Statistics and Machine Learning Toolboxes');
+    s = load(DemoData.file('mua'));
+    x = s.mua_data(s.mua_channels == 4, :);
+    base = struct('detectMethod', 'MAD', 'threshold', 4, 'polarity', 'negative');
+    prevRng = rng; restore = onCleanup(@() rng(prevRng));
+    rng(0, 'twister');
+    plain = MUAPipeline.sort(x, s.t_mua, s.mua_fs, base);
+    drift = base;
+    % 14.9 s bins over 30 s: the last bin covers only 29.8-30 s (a few spikes,
+    % below 50 / 3 = 17 per bin), so it is not clustered; its spikes must stay
+    % (as noise). The first two bins (~300 spikes each) are clustered.
+    drift.enableDriftCorrection = true; drift.driftMethod = 'Time Binning'; drift.driftBinWidth = 14.9;
+    drift.minSpikesPerCluster = 50;
+    rng(0, 'twister');
+    res = MUAPipeline.sort(x, s.t_mua, s.mua_fs, drift);
+    verifyEqual(tests, numel(res.spikeTimes), numel(plain.spikeTimes));
+    verifyEqual(tests, sort(res.spikeTimes(:)), sort(plain.spikeTimes(:)), 'AbsTol', 1e-12);
+    verifyEqual(tests, res.clusterIdx(res.spikeTimes > 29.8), zeros(nnz(res.spikeTimes > 29.8), 1));
+end
+
+%% testMergeSimilarClusters_keepsDifferentSizes - Similar shape, different size: not merged
+function testMergeSimilarClusters_keepsDifferentSizes(tests)
+    [A, B] = unitShapes();
+    [W, labels] = noisySpikes({A, B, A}, [1 2 3], 80, 0, 5);
+    for scale = [1 1e-6]
+        merged = MUAPipeline.mergeSimilarClusters(scale * W, labels, 0.85, 0.2);
+        verifyEqual(tests, merged(labels == 3), merged(find(labels == 1, 1)) * ones(80, 1), sprintf('scale %g', scale));
+        verifyNotEqual(tests, merged(find(labels == 2, 1)), merged(find(labels == 1, 1)), sprintf('scale %g', scale));
+    end
 end

@@ -2,12 +2,13 @@
 % =========================================================================
 % NEURONAL DATA ANALYZER - MAIN LAUNCHER
 % =========================================================================
-% Entry point for the NeuroAnalyzer application (NMD Lab). On first run (or
+% Entry point for the NeuroAnalyzer application. On first run (or
 % when no project dirs are set), prompts for Import/Export directories.
 %
 % Layout (top to bottom): header (title, subtitle, Help) | project bar
 % (Import/Export folders, Set folders) | "Getting started" hint (with a
-% "Try with demo data" button that opens Help on Welcome) | one
+% "Try with demo data" button that opens Help on Welcome, and a "Virtual
+% lab" button that opens VirtualLabApp) | one
 % workflow card per pipeline | status bar (toolbox availability) | footer.
 % Each workflow card holds a one-line description, the pipeline's steps as
 % numbered buttons in order (tooltips say which file goes in and out) and
@@ -30,6 +31,7 @@ classdef Main < handle
         ContentPanel
         StatusLabel        % Status bar (toolbox availability, last action)
         DemoBtn            % "Try with demo data" (opens HelpApp('Welcome'))
+        VirtualLabBtn      % "Virtual lab" (opens VirtualLabApp)
         % Workflow cards
         LDFPanel
         EphysPanel
@@ -103,7 +105,7 @@ classdef Main < handle
 
             % === GETTING STARTED HINT ===
             hintPanel = uipanel(mainGrid, 'BorderType', 'none', 'BackgroundColor', T.bgGray);
-            hintGrid = uigridlayout(hintPanel, [1 2], 'ColumnWidth', {'1x', 190}, ...
+            hintGrid = uigridlayout(hintPanel, [1 3], 'ColumnWidth', {'1x', 190, 150}, ...
                 'RowHeight', {'1x'}, 'Padding', [16 10 16 0], 'ColumnSpacing', 10, ...
                 'BackgroundColor', T.bgGray);
             UIKit.hint(hintGrid, ['Getting started: pick the card for your data and click its steps ' ...
@@ -116,6 +118,13 @@ classdef Main < handle
                 ['New here? Open Help: every topic has a "Try it with demo data" button that opens ' ...
                  'the window with synthetic data whose answers are known']);
             app.DemoBtn.Layout.Row = 2;
+            labGrid = uigridlayout(hintGrid, [3 1], 'RowHeight', {'1x', T.buttonHeight, '1x'}, ...
+                'Padding', [0 0 0 0], 'RowSpacing', 0, 'BackgroundColor', T.bgGray);
+            app.VirtualLabBtn = UIKit.button(labGrid, 'Virtual lab', ...
+                @(~,~)app.launch(@()VirtualLabApp(), 'Virtual lab'), 'secondary', ...
+                ['Learn by doing: plan and record a simulated experiment (LDF, whisker stimulation), ' ...
+                 'analyse it yourself in the normal windows, and get feedback on every step']);
+            app.VirtualLabBtn.Layout.Row = 2;
 
             % === WORKFLOW CARDS ===
             app.ContentPanel = uipanel(mainGrid, 'BackgroundColor', T.bgGray, 'BorderType', 'none');
@@ -178,9 +187,9 @@ classdef Main < handle
                 'ROI Analysis');
             app.ROIBtn = chainButton(chain, 1, 'ROI analysis', @()ROIAnalysisApp(), ...
                 ['Input: .mat with stack or frames (H x W x N or H x W x 3 x N; optional timeVec or t ' ...
-                 'and roiMask) or a multi-frame TIFF. Output: brightness, movement, ΔF/F, flow speed, ' ...
+                 'and roiMask) or a multi-frame TIFF. Output: brightness, movement, ΔF/F, ' ...
                  'kymograph or vessel diameter as .csv or .mat.'], app);
-            chainNote(chain, 'Motion correction · Cell detection · ΔF/F · Flow speed · Kymograph · Vessel diameter');
+            chainNote(chain, 'Motion correction · Cell detection · ΔF/F · Kymograph · Vessel diameter');
 
             % --- Response features ---
             [app.CharPanel, chain] = app.workflowCard(contentGrid, ...

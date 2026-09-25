@@ -7,6 +7,82 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- **Methods text**: a *Methods text…* button next to the session
+  buttons of every analysis window drafts a methods section from the
+  analysis: every step in the past tense with the values actually used
+  (filters, trial and epoch windows, thresholds, CSD method and
+  parameters, spike-sorting settings, statistical tests and corrections),
+  the NeuroAnalyzer and MATLAB versions, and a reference list (e.g.
+  Pettersen et al. 2006, Potworowski et al. 2012, Mauchly 1940,
+  Greenhouse & Geisser 1959, Holm 1979, Friedman 1937). What the session
+  does not know (animals, surgery, hardware) is left as a bracketed
+  placeholder; nothing is invented. The text can be edited, copied or
+  saved as UTF-8 .txt, and *Add saved sessions…* combines several
+  sessions of a pipeline in pipeline order (`core/MethodsWriter.m`;
+  scriptable with `MethodsWriter.fromSession` / `fromSessions`).
+- **Virtual lab** (launcher → *Virtual lab*, `apps/VirtualLabApp.m`,
+  `core/VirtualLab.m`): a simulated experiment to learn by doing. The
+  student reads how laser Doppler flowmetry works, plans a whisker
+  stimulation experiment (probe position, stimulus, number of stimuli,
+  time between them, baseline, sampling rate; the protocol is previewed
+  as the values change), records it (a LabChart-style file with a known
+  answer, different for every student), analyses it from scratch in
+  Extract / Process / Average LDF, reports the numbers and gets feedback
+  on the plan, the processing (from the saved sessions) and the numbers.
+  The reference values stay hidden until *Show solution*; submissions
+  (`.navlab.mat`) record the attempts, and instructors grade a folder of
+  submissions into one CSV table. Help → *Virtual lab* explains the
+  simulation and the grading.
+- **Average LDF** shows the results under *Plot grand average*: baseline,
+  peak increase (and % of baseline) and time to peak, with the peak
+  marked on the plot; sessions and reports include them.
+
+### Changed
+
+- "NMD Lab" removed from the launcher, Help, README and website.
+- **ROI Analysis: "Speed (flow)" removed.** It was not a speed: it
+  computed the mean absolute frame-to-frame difference in the ROI,
+  exactly the same as *Movement* (now shown by a test). Sessions and
+  scripts that ask for it get Movement, with a message. Help, the website
+  and the README no longer claim a blood-flow speed.
+
+### Fixed
+
+- **LDF Process / Batch: short stimulus pulses were lost when
+  downsampling.** The trigger kept every r-th sample, so pulses shorter
+  than the downsampling factor could vanish (and their trials with them).
+  The trigger now keeps the maximum of each block of samples: long pulses
+  give exactly the same onsets as before, short ones are no longer missed.
+- **MUA: quality results were not stored.** Units rejected by the quality
+  check (low SNR, refractory violations) were shown as rejected, but
+  `results.rejectedClusters` stayed false and `results.isiViolationRate`
+  empty; both now hold the real outcome.
+- **MUA drift correction depended on the units of the recording.** Clusters
+  were matched and merged when their mean waveforms were within a distance
+  of 0.5 in raw units: everything merged for data in volts, nothing for data
+  in microvolts. Distances are now relative to the waveform size (the same
+  in V and µV); across time bins up to 0.5 (the amplitude may drift), within
+  a bin up to 0.2, so two units of similar shape but different size stay
+  apart. Spikes in time bins too small to cluster (or where clustering
+  failed) were dropped from the results; they are now kept as unsorted
+  (noise).
+- **LFP / ERP and MUA: pulse trains gave a single onset for the whole
+  recording.** A crossing was dropped when it came within the minimum
+  interval of the previous *crossing*, so in a train of pulses every pulse
+  after the first was dropped. Both now use the LDF rule (within the
+  minimum interval of the last *kept* onset): one onset per train. Single
+  pulses give the same onsets as before.
+- **MUA Analysis: sorting could differ between runs.** K-means / GMM /
+  t-SNE used MATLAB's random generator in whatever state it was. The
+  settings now have a **Random seed** (default 0) that is set before every
+  run (and the previous state restored), so the same data and settings
+  always give the same clusters.
+- **Help / website: MUA detection methods described correctly.** *Rolling
+  MAD* uses the same threshold as MAD over the whole recording (it was
+  described as a moving window); *Percentile* does not use the multiplier.
+
 ## [0.3.0] - 2026-09-25
 
 ### Added

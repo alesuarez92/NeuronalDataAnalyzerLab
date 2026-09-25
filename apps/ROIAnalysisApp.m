@@ -5,7 +5,7 @@
 % Load an image stack (time series of frames), optionally correct rigid
 % motion, define one or more ROIs (drawn, detected automatically from the
 % local correlation image, or from the file) or a line, then compute per
-% ROI brightness, movement, ΔF/F or flow speed, or along the line a
+% ROI brightness, movement or ΔF/F, or along the line a
 % kymograph or the vessel diameter (optionally robust to red blood cells
 % crossing the line). Plot and export.
 %
@@ -41,7 +41,7 @@ classdef ROIAnalysisApp < handle
         DrawROIBtn           % Add ROI (drag a rectangle)
         DetectBtn            % Detect cells (local correlation image)
         ComputeBtn
-        MethodDropdown       % Brightness, Movement, Both, ΔF/F, Speed, Kymograph, Vessel diameter
+        MethodDropdown       % Brightness, Movement, Both, ΔF/F, Kymograph, Vessel diameter
         SmoothCb
         NormalizeCb
         DrawLineBtn
@@ -118,7 +118,7 @@ classdef ROIAnalysisApp < handle
         function buildUI(app)
             T = UITheme;
             app.W = UIKit.window('ROI / Image Analysis', ...
-                'Motion correction, multiple ROIs and cell detection; ΔF/F, flow speed, kymograph and vessel diameter', ...
+                'Motion correction, multiple ROIs and cell detection; ΔF/F, kymograph and vessel diameter', ...
                 'ROI Analysis', [1200 900]);
             app.UIFig = app.W.Fig;
             body = app.W.Body;
@@ -188,7 +188,7 @@ classdef ROIAnalysisApp < handle
             s.Layout.Row = 1; s.Layout.Column = [1 2];
             app.DrawROIBtn = UIKit.button(g3, 'Add ROI', @(~,~)app.drawROI(), 'secondary', ...
                 ['Drag a rectangle on the image to add a ROI (you can add several). Used by Brightness, ' ...
-                 'Movement, ΔF/F and Speed: one trace per ROI.']);
+                 'Movement and ΔF/F: one trace per ROI.']);
             app.DrawROIBtn.Layout.Row = 2; app.DrawROIBtn.Layout.Column = 1;
             app.DetectBtn = UIKit.button(g3, 'Detect cells', @(~,~)app.detectCells(), 'secondary', ...
                 ['Find active cells automatically: pixels whose time series correlate with their ' ...
@@ -214,9 +214,9 @@ classdef ROIAnalysisApp < handle
             f4a = uigridlayout(g4, [1 2], 'ColumnWidth', {70, '1x'}, 'Padding', [0 0 0 0], ...
                 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
             app.MethodDropdown = UIKit.field(f4a, 'Method', 'dropdown', ...
-                {{'Brightness', 'Movement', 'Both', 'ΔF/F (gCaMP)', 'Speed (flow)', 'Kymograph', 'Vessel diameter'}, 'Both'}, ...
+                {{'Brightness', 'Movement', 'Both', 'ΔF/F (gCaMP)', 'Kymograph', 'Vessel diameter'}, 'Both'}, ...
                 ['ROI methods (one trace per ROI): Brightness (mean intensity), Movement (mean |frame ' ...
-                 'difference|), Both, ΔF/F, Speed (flow proxy). Line methods: Kymograph, Vessel diameter (FWHM)']);
+                 'difference|), Both, ΔF/F. Line methods: Kymograph, Vessel diameter (FWHM)']);
             app.MethodDropdown.ValueChangedFcn = @(~,~)app.onSettingsChanged();
             f4b = uigridlayout(g4, [1 2], 'ColumnWidth', {'1x', 80}, 'Padding', [0 0 0 0], ...
                 'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
@@ -769,14 +769,22 @@ classdef ROIAnalysisApp < handle
 
         %% runAnalysis - Run a method with the current ROIs / line (scripts / CI)
         % methodName: a Method item ('Brightness', 'Movement', 'Both',
-        % 'ΔF/F (gCaMP)', 'Speed (flow)', 'Kymograph', 'Vessel diameter'),
-        % a case-insensitive prefix of one, or 'dF/F' / 'dff'. Omitted =
-        % the selected method. Returns true when results were computed.
+        % 'ΔF/F (gCaMP)', 'Kymograph', 'Vessel diameter'), a case-insensitive
+        % prefix of one, or 'dF/F' / 'dff'. 'Speed (flow)' (removed in 0.4:
+        % it was the same measure as Movement) runs Movement. Omitted = the
+        % selected method. Returns true when results were computed.
         function ok = runAnalysis(app, methodName)
             if nargin >= 2 && ~isempty(methodName)
                 items = app.MethodDropdown.Items;
                 name = char(methodName);
                 if any(strcmpi(name, {'dff', 'df/f', 'deltaf/f'})), name = 'ΔF/F'; end
+                if strncmpi(name, 'speed', 5)
+                    % Old sessions / scripts: 'Speed (flow)' was mean |frame difference|,
+                    % the same measure as Movement (not a blood-flow speed)
+                    name = 'Movement';
+                    UIKit.setStatus(app.W.Status, ['"Speed (flow)" was removed: it measured the change ' ...
+                        'between frames, the same as Movement, not a speed. Movement is used instead.'], 'warning');
+                end
                 k = find(strcmpi(items, name), 1);
                 if isempty(k), k = find(strncmpi(items, name, numel(name)), 1); end
                 if isempty(k)
@@ -1454,7 +1462,11 @@ classdef ROIAnalysisApp < handle
             app.ConvertBWCb.Value = pp.bw256;
             app.SmoothCb.Value = pp.smooth;
             app.NormalizeCb.Value = pp.normalize;
-            app.MethodDropdown.Value = cfg.method;
+            method = cfg.method;
+            if strncmpi(method, 'speed', 5)
+                method = 'Movement';   % 'Speed (flow)' (removed in 0.4) was the same measure
+            end
+            app.MethodDropdown.Value = method;
             app.BaselineFramesEdit.Value = cfg.dffBaselineFrames;
             app.RobustCb.Value = cfg.robustDiameter;
             app.DetectThresholdEdit.Value = cfg.detectThresholdField;
