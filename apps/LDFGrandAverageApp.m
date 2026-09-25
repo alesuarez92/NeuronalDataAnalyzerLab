@@ -33,6 +33,8 @@ classdef LDFGrandAverageApp < handle
         InfoLabel      % Step 1: total trials, time window
         RelativeCheck  % Step 2: subtract pre-stimulus baseline
         PlotBtn        % Step 3: plot grand average
+        ResultLabel    % Step 3: baseline, peak increase (and %), time to peak
+        PeakMarker     % Peak marker + label on the grand average
         Ax             % uiaxes: all trials
         GrandAxes      % uiaxes: grand average
         GrandPlot      % handle to the average line
@@ -100,13 +102,19 @@ classdef LDFGrandAverageApp < handle
             note.Layout.Row = 3; note.Layout.Column = [1 2];
 
             % --- 3 Grand average ---
-            [p, g, heights{3}] = stepCard(left, 3, 'Grand average', {T.buttonHeight, UIKit.sessionButtonsHeight()});
+            [p, g, heights{3}] = stepCard(left, 3, 'Grand average', {T.buttonHeight, 78, UIKit.sessionButtonsHeight()});
             p.Layout.Row = 3;
             app.PlotBtn = UIKit.button(g, 'Plot grand average', @(~,~)app.plotGrandAverage(), ...
                 'secondary', 'Plot the mean ± SD across all loaded trials');
             app.PlotBtn.Layout.Row = 2; app.PlotBtn.Layout.Column = [1 2];
+            app.ResultLabel = infoLabel(g, 'Results appear here after plotting.', ...
+                ['Baseline = mean of the trials before the stimulus (t < 0 s). Peak increase = highest point ' ...
+                 'of the mean trial after onset minus its baseline (same units as the LDF, e.g. PU), and as % ' ...
+                 'of the baseline. Time to peak = time of that point after onset. Measured the same way ' ...
+                 'whether or not "Relative to baseline" is ticked.']);
+            app.ResultLabel.Layout.Row = 3; app.ResultLabel.Layout.Column = [1 2];
             app.SessionBtns = UIKit.sessionButtons(g, app);
-            app.SessionBtns.Grid.Layout.Row = 3; app.SessionBtns.Grid.Layout.Column = [1 2];
+            app.SessionBtns.Grid.Layout.Row = 4; app.SessionBtns.Grid.Layout.Column = [1 2];
 
             heights{4} = '1x';
             left.RowHeight = heights;
@@ -131,6 +139,10 @@ classdef LDFGrandAverageApp < handle
             app.ClearBtn.Enable = onoff(hasData);
             app.RelativeCheck.Enable = onoff(hasData);
             app.PlotBtn.Enable = onoff(hasData);
+            if ~hasAvg && ~isempty(app.ResultLabel) && isvalid(app.ResultLabel)
+                app.ResultLabel.Text = 'Results appear here after plotting.';
+                app.ResultLabel.FontColor = UITheme.bodyColor;
+            end
             UIKit.setSessionEnable(app.SessionBtns, hasData);
             setButtonStyle(app.LoadBtn, ifelse(~hasData, 'primary', 'secondary'));
             setButtonStyle(app.PlotBtn, ifelse(hasData && ~hasAvg, 'primary', 'secondary'));
@@ -347,6 +359,22 @@ classdef LDFGrandAverageApp < handle
                 yl = 'LDF';
             end
             UIKit.styleAxes(ax, sprintf('Grand average (n = %d)', size(segments, 1)), 'Time from onset (s)', yl);
+            m = app.responseMeasures();
+            if ~isnan(m.peakChange)
+                % Mark the peak where it is drawn (absolute or relative)
+                yPk = avg(find(t == m.peakLatency, 1));
+                hold(ax, 'on');
+                app.PeakMarker = [plot(ax, m.peakLatency, yPk, 'v', 'Color', T.plotColors(2, :), ...
+                    'MarkerFaceColor', T.plotColors(2, :), 'MarkerSize', 8, 'HandleVisibility', 'off'), ...
+                    text(ax, m.peakLatency, yPk, sprintf('  peak +%.3g at %.3g s', m.peakChange, m.peakLatency), ...
+                    'Color', T.plotColors(2, :), 'VerticalAlignment', 'bottom', 'FontSize', T.fontSmall, ...
+                    'Interpreter', 'none')];
+                hold(ax, 'off');
+                app.ResultLabel.Text = sprintf(['Baseline (before 0 s): %.4g\nPeak increase: %+.4g (%.3g%% of baseline)\n' ...
+                    'Time to peak: %.3g s after onset  ·  %d trials'], m.baseline, m.peakChange, m.peakPercent, ...
+                    m.peakLatency, m.nTrials);
+                app.ResultLabel.FontColor = T.sectionTitleColor;
+            end
             app.updateControls();
             UIKit.setStatus(app.StatusLabel, sprintf('Grand average of %d trials plotted.', size(segments, 1)), 'success');
         end
@@ -409,7 +437,39 @@ classdef LDFGrandAverageApp < handle
                             ifelse(app.RelativeCheck.Value, ' (relative to baseline)', ''));
                     end
                 end
+                m = app.responseMeasures();
+                if ~isnan(m.peakChange)
+                    st.results.baseline = m.baseline;
+                    st.results.peakChange = m.peakChange;
+                    st.results.peakPercent = m.peakPercent;
+                    st.results.peakChangeLatency = m.peakLatency;
+                    st.summary{end+1} = sprintf('Baseline %.4g; peak increase %+.4g (%.3g%% of baseline) at %.3g s after onset', ...
+                        m.baseline, m.peakChange, m.peakPercent, m.peakLatency);
+                end
             end
+        end
+
+        %% responseMeasures - Baseline, peak increase (and %), time to peak
+        % baseline: mean over trials of each trial's pre-stimulus (t < 0)
+        % mean. The mean trial minus its baseline peaks at peakChange,
+        % peakLatency s after onset (t >= 0); peakPercent = 100 * peakChange
+        % / baseline. Independent of "Relative to baseline". NaN when there
+        % is no pre-stimulus or post-stimulus part.
+        function m = responseMeasures(app)
+            m = struct('baseline', NaN, 'peakChange', NaN, 'peakPercent', NaN, 'peakLatency', NaN, ...
+                'nTrials', size(app.SegmentedData, 1));
+            if isempty(app.SegmentedData), return; end
+            t = app.SegmentedTime(:)';
+            pre = t < 0; post = t >= 0;
+            if ~any(pre) || ~any(post), return; end
+            b = mean(app.SegmentedData(:, pre), 2);
+            rel = mean(app.SegmentedData - b, 1);
+            [pk, i] = max(rel(post));
+            tp = t(post);
+            m.baseline = mean(b);
+            m.peakChange = pk;
+            m.peakPercent = 100 * pk / m.baseline;
+            m.peakLatency = tp(i);
         end
 
         %% restoreSession - Reload the trial files, set the option, redraw the average

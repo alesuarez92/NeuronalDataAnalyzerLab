@@ -7,6 +7,29 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- **Virtual lab** (launcher → *Virtual lab*, `apps/VirtualLabApp.m`,
+  `core/VirtualLab.m`): a simulated experiment to learn by doing. The
+  student reads how laser Doppler flowmetry works, plans a whisker
+  stimulation experiment (probe position, stimulus, number of stimuli,
+  time between them, baseline, sampling rate; the protocol is previewed
+  as the values change), records it (a LabChart-style file with a known
+  answer, different for every student), analyses it from scratch in
+  Extract / Process / Average LDF, reports the numbers and gets feedback
+  on the plan, the processing (from the saved sessions) and the numbers.
+  The reference values stay hidden until *Show solution*; submissions
+  (`.navlab.mat`) record the attempts, and instructors grade a folder of
+  submissions into one CSV table. Help → *Virtual lab* explains the
+  simulation and the grading.
+- **Average LDF** shows the results under *Plot grand average*: baseline,
+  peak increase (and % of baseline) and time to peak, with the peak
+  marked on the plot; sessions and reports include them.
+
+### Changed
+
+- "NMD Lab" removed from the launcher, Help, README and website.
+
 ## [0.3.0] - 2026-09-25
 
 ### Added

@@ -462,7 +462,8 @@ classdef HelpApp < handle
                 'Filtering', 'ProcessingLDFApp'; 'LDF Average', 'LDFGrandAverageApp'; ...
                 'Ephys Extract', 'ExtractEphysApp'; 'LFP Analysis', 'LFPAnalysisApp'; ...
                 'MUA Analysis', 'MUAAnalysisApp'; 'ROI Analysis', 'ROIAnalysisApp'; ...
-                'Signal Characterization', 'SignalCharacterizationApp'; 'Batch processing', 'BatchApp'};
+                'Signal Characterization', 'SignalCharacterizationApp'; 'Batch processing', 'BatchApp'; ...
+                'Virtual lab', 'VirtualLabApp'};
             k = find(strcmpi(map(:, 1), strtrim(char(topic))), 1);
             if isempty(k), cls = ''; else, cls = map{k, 2}; end
         end
@@ -476,13 +477,14 @@ classdef HelpApp < handle
                 HelpApp.topicWelcome(), HelpApp.topicLDFExtract(), HelpApp.topicLDFProcess(), ...
                 HelpApp.topicFiltering(), HelpApp.topicLDFAverage(), HelpApp.topicEphysExtract(), ...
                 HelpApp.topicLFPAnalysis(), HelpApp.topicMUAAnalysis(), HelpApp.topicROIAnalysis(), ...
-                HelpApp.topicSignalCharacterization(), HelpApp.topicBatch(), HelpApp.topicSessions()];
+                HelpApp.topicSignalCharacterization(), HelpApp.topicBatch(), HelpApp.topicSessions(), ...
+                HelpApp.topicVirtualLab()];
         end
 
         %% topicWelcome - Overview of the four pipelines, project folders, help
         function t = topicWelcome()
             t = mkTopic('Welcome', 'Getting started', ...
-                'NeuroAnalyzer (NMD Lab): analysis toolbox for LDF, electrophysiology, imaging and response features.');
+                'NeuroAnalyzer: analysis toolbox for LDF, electrophysiology, imaging and response features.');
             t.quick = {
                 'In the launcher, click **Set folders** and choose your **Import** folder (raw data) and **Export** folder (results). You can use one folder for both.'
                 'Find the card for your data (LDF, Electrophysiology, Imaging, Response features) and click its numbered steps **in order**.'
@@ -652,17 +654,19 @@ classdef HelpApp < handle
             t.quick = {
                 '**1 Load trial files**: click **Add files...** and select one or more files saved by LDF Process (multi-select). You can add more files later; **Clear all** starts over.'
                 '**2 Options**: tick **Relative to baseline** to subtract each trial''s pre-stimulus mean.'
-                '**3 Grand average**: click **Plot grand average** to see the mean ± SD across all trials.'
+                '**3 Grand average**: click **Plot grand average** to see the mean ± SD across all trials. Below the button: the **baseline** (mean before 0 s), the **peak increase** (and as % of the baseline) and the **time to peak**; the peak is marked on the plot.'
                 '**Session / report (optional)**: in step 3, **Save session…** stores every trial file (with checksum) and the option; **Open session…** reloads them and redraws the average; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: `demo_ldf_trials.mat`, 8 trials from −5 to 20 s at 10 Hz (0 = stimulus onset).'
                 '* **What you should get**: the grand average is flat before 0 s (~120 PU), rises after onset and **peaks ~4 s after onset at ~+30 PU**, then returns to baseline by ~12–15 s. The SD band shows the trial-to-trial vasomotion (a few PU).'
-                '* With **Relative to baseline** the curve starts at ~0 PU and peaks at ~+30 PU.'};
+                '* With **Relative to baseline** the curve starts at ~0 PU and peaks at ~+30 PU.'
+                '* **Results under the button**: baseline ~120, peak increase ~+30 (~25% of baseline), time to peak ~4 s, 8 trials.'};
             t.inputs = {'One or more `.mat` files with `segmentedLDF` and `segmentedTime` (from LDF Process)'};
             t.outputs = {'Plots of all trials and of the grand average (mean ± SD); the file list shows how many trials came from each file'};
             t.details = {
                 'Files are pooled only when their `segmentedTime` is identical (same pre/post window and sampling rate). Files with a different time axis are skipped and reported.'
-                '**Relative to baseline** subtracts from each trial the mean of its samples with t < 0 (before the stimulus). It needs a pre-stimulus window (pre > 0 in LDF Process).'};
+                '**Relative to baseline** subtracts from each trial the mean of its samples with t < 0 (before the stimulus). It needs a pre-stimulus window (pre > 0 in LDF Process).'
+                '**Results**: baseline = the mean over trials of each trial''s pre-stimulus mean; peak increase = the highest point after onset (t ≥ 0) of the mean trial minus its baseline, also as % of the baseline; time to peak = when that point occurs. They are measured the same way with or without **Relative to baseline** (the option changes only the plot) and are stored in sessions and reports.'};
             t.trouble = {
                 'A file was skipped: time axes do not match', 'Re-segment it in LDF Process with the same pre/post times and downsampling as the other files.'
                 'A file adds no trials', 'It does not contain segmentedLDF / segmentedTime; load the file saved by **Save trials**.'
@@ -1057,6 +1061,49 @@ classdef HelpApp < handle
                 '"… has CHANGED since the session was saved (MD5 differs)"', 'The input file is not the one used when the session was saved (edited, re-exported or overwritten). The results may differ; use the original file if you still have it.'
                 'Report not written', 'Check that the folder is writable and that the PDF is not open in another program. The analysis itself is not affected.'
                 'The window picture in the PDF shows only one plot', '`exportapp` is not available (MATLAB older than R2020b or no display); the largest plot was used instead.'};
+        end
+
+        %% topicVirtualLab - Plan, record and analyse a simulated experiment
+        function t = topicVirtualLab()
+            t = mkTopic('Virtual lab', 'Learn by doing · simulated experiments', ...
+                'Plan and record a simulated experiment, analyse it yourself in the normal windows, and get feedback on the plan, the processing and your numbers.');
+            t.quick = {
+                '**1 Learn**: read **How LDF works** (Learn tab): the question, how laser Doppler flowmetry measures blood flow, what the raw signal looks like and what you will do.'
+                '**2 Plan**: type **your name or ID** (your data are made from it: use the same one every time), then choose the probe position, stimulus duration, number of stimuli, time between them, baseline before the first stimulus and sampling rate. The **Plan** tab shows the protocol and the line below says how long and how large the recording will be.'
+                '**3 Record**: click **Record…** and choose where to save. The file is a LabChart-style export (stimulus = channel 6, LDF = channel 8), exactly what the lab''s acquisition software writes. The **Recording** tab shows the raw signals.'
+                '**Analyse it yourself**: click **Open in Extract LDF**, crop and save; open **Process LDF** from the launcher, cut trials around each stimulus and save them (and **Save session…**); open **Average LDF**, add the trial file, tick **Relative to baseline**, plot the grand average (and **Save session…**). The numbers you need are under **Plot grand average**.'
+                '**4 Report your results**: type the baseline, peak increase (PU and %), time to peak and the number of trials; optionally **Attach sessions…** (Process LDF and Average LDF). **Check my results** gives feedback; fix what is orange or red and check again. **Show solution** reveals the reference values (noted in your submission). **Save submission…** writes a `.navlab.mat` for your instructor.'
+                '**5 Instructor**: **Grade a folder…** grades every `.navlab.mat` in a folder and writes `virtual_lab_grades.csv` (one row per student: score, attempts, whether the solution was shown, their numbers and the reference values).'};
+            t.demo = {
+                '* **Try it** opens the window as student **Demo student** with a good plan (probe over the barrel, 5 s stimuli, 15 stimuli every 25 s after 30 s of baseline, 40 Hz) and records it to the demo folder.'
+                '* **True answer for Demo student** (noise-free, known only to the simulator): baseline **114.7 PU**, peak increase **+38.6 PU (33.6%)** at **5.8 s** after onset; flow is back below 10% of the peak **~10.7 s** after onset. Your analysis of the recording will differ by the noise (about ±3–4 PU with 15 trials).'
+                '* **What you should get** in the feedback with a careful analysis (post window ≥ 11 s, no high-pass filter, Relative to baseline): every **Plan** item OK and every **Your results** item OK.'};
+            t.inputs = {
+                'Nothing to load: the recording is simulated from your name / ID and your plan'
+                'Optional: the `.nasession.mat` files you saved in Process LDF and Average LDF (step 4)'
+                'Instructor: a folder of `.navlab.mat` submissions (step 5)'};
+            t.outputs = {
+                'The recording: a LabChart-style export `.mat` (`data`, `datastart`, `dataend`, `samplerate`, `titles`; channel 6 = stimulus in V, channel 8 = LDF in PU; other channels empty) plus `virtualLab` (student, plan, version; no answers)'
+                '`<name>.navlab.mat` (submission): variable `submission` with the student, plan, your numbers, the attached sessions, the number of checks and whether the solution was shown'
+                '`virtual_lab_grades.csv` (instructor): one row per submission'};
+            t.detailsTitle = 'How the simulation and the feedback work';
+            t.details = {
+                '## The simulated animal'
+                '* Each name / ID gives a different animal: baseline 90–150 PU, a response of 20–40 PU to a 5 s stimulus, vasomotion at 0.08–0.14 Hz, a heartbeat at 5–7 Hz, slow drift and noise. The same name always gives the same animal; the same plan always gives the same recording.'
+                '* The response to each stimulus is a smooth rise and fall (a gamma-shaped response to a short stimulus, added up over the stimulus duration), 15% different from trial to trial. It is about half as large at the edge of the barrel and almost absent far from it. The heartbeat is sampled as it is, so at 10 Hz it aliases into a slower false ripple.'
+                '* The model is simplified (responses add up linearly, no movement artefacts, no anaesthesia effects): it teaches the method and its pitfalls, not the physiology of a particular animal.'
+                '## The feedback'
+                '* **Plan**: probe position, time between stimuli (flow must be back to baseline: the simulator knows when), number of stimuli (with the precision you can expect), sampling rate (aliasing, file size) and baseline before the first stimulus.'
+                '* **Processing** (when sessions are attached): the window after the stimulus (long enough for the peak and the return), the baseline window, the filter (a high-pass removes the slow response itself) and **Relative to baseline**.'
+                '* **Your results**: each number is compared with a careful analysis of **your** recording (10 Hz averages, one trial per stimulus, 5 s baseline, each trial minus its own baseline), so noise is not held against you. Tolerances: baseline ±5% (at least 3 PU), peak increase and % ±15% (at least 2), time to peak ±0.75 s, trials exact. Within twice the tolerance counts as **Check**.'
+                '* **What was true** (after Show solution): the noise-free answer, and how far any analysis of your recording can be expected to be from it.'
+                '* **Score**: OK = 1 point, Check = ½, Fix = 0, Info items do not count.'};
+            t.trouble = {
+                '**Record…** is greyed out', 'Type your name or ID in step 2, and check the line under the plan: it says why a plan is not possible (e.g. too many samples at 1000 Hz).'
+                'Extract LDF shows empty channels 1–5 and 7', 'Normal: the virtual rig records only the stimulus (channel 6) and the LDF (channel 8).'
+                '"Trials averaged" is marked Fix', 'Some stimuli were missed (threshold in Process LDF: 2.5 for the 5 V stimulus) or trials did not fit the pre / post window, or the crop in Extract LDF cut stimuli off.'
+                'Time to peak equals the end of my window', 'The post window in Process LDF is shorter than the response: use at least 15–20 s.'};
+            t.images = {};
         end
     end
 end

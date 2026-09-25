@@ -61,7 +61,7 @@ correctly and that teaches while it is used:
 | 📅 | Quality checks | A plain-language check per step (too few trials, refractory violations, CSD sink at an edge contact, sphericity, motion larger than a cell), each saying why it matters and what to try. |
 | 📅 | Live parameter previews | Thresholds, filters, CSD smoothing: a small preview updates as the value changes. |
 | 📅 | Import and compare | Kilosort / Phy units and Suite2p ROIs: quality checks, and side-by-side comparison with NeuroAnalyzer's own sorting and cell detection. |
-| 📅 | Lessons | Guided exercises on demo data with known answers, checked automatically; instructors can write their own lesson files. |
+| 🔨 | Virtual lab and lessons | First virtual experiment done: plan and record a simulated LDF experiment, analyse it in the normal windows and get feedback on the plan, processing and results; instructors grade a folder of submissions. Next: electrophysiology and imaging experiments, a course built on them. |
 | 📅 | Ground-truth playground | Change noise, electrode spacing, sink depth, spike overlap or motion in the demo data and see where each method holds up or fails. |
 
 ## Open for contributors

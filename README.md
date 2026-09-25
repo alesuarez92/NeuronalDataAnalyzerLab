@@ -26,6 +26,11 @@ and reopened as a **session** with input-file checksums, and produce a
 one-page **PDF report**. Every window has **synthetic demo data with known
 answers**, so results can be checked before using real recordings.
 
+To learn by doing, the **Virtual lab** lets a student plan and record a
+simulated experiment (LDF with whisker stimulation), analyse it from
+scratch in the normal windows and get feedback on the plan, the processing
+and the results; instructors can grade a folder of submissions.
+
 > **Status: early release (v0.3.0).** The UI works end-to-end on the lab's
 > data formats, but the public surface is not yet stable. See
 > [CHANGELOG.md](CHANGELOG.md) for what's in this release and what's next.
@@ -80,7 +85,8 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | `core/io/` | Readers for Intan RHD, Open Ephys binary and NWB; NWB export. |
 | `core/demo/`, `core/DemoData.m` | Synthetic demo recordings with ground truth. |
 | `core/Batch.m`, `core/Session.m`, `core/Report.m` | Batch processing, session files, PDF reports. |
-| `apps/` | Sub-app windows: Extract / Process / Average LDF, Extract Ephys, LFP & MUA processing and analysis, ROI Analysis, Signal Characterization, Batch Processing, Help. |
+| `core/VirtualLab.m` | Virtual lab: simulated experiments with known answers, reference analysis and feedback. |
+| `apps/` | Sub-app windows: Extract / Process / Average LDF, Extract Ephys, LFP & MUA processing and analysis, ROI Analysis, Signal Characterization, Batch Processing, Virtual Lab, Help. |
 | `docs/` | Workflow and principle figures shown in the Help window. |
 | `tests/` | Unit tests. Run via `run_tests`. |
 | `Utilities/` | Third-party utilities (e.g. TDT MATLAB SDK). |
