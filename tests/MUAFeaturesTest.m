@@ -315,16 +315,16 @@ function testDriftBinningKeepsEverySpike(tests)
     rng(0, 'twister');
     plain = MUAPipeline.sort(x, s.t_mua, s.mua_fs, base);
     drift = base;
-    % 14 s bins over 30 s: the last bin (28-30 s, ~40 of 601 spikes) is below
-    % 300 / 3 = 100 spikes per bin, so it is not clustered; its spikes must stay
-    % (as noise). (Sorting needs at least 2 x minSpikesPerCluster spikes.)
-    drift.enableDriftCorrection = true; drift.driftMethod = 'Time Binning'; drift.driftBinWidth = 14;
-    drift.minSpikesPerCluster = 300;
+    % 14.9 s bins over 30 s: the last bin covers only 29.8-30 s (a few spikes,
+    % below 50 / 3 = 17 per bin), so it is not clustered; its spikes must stay
+    % (as noise). The first two bins (~300 spikes each) are clustered.
+    drift.enableDriftCorrection = true; drift.driftMethod = 'Time Binning'; drift.driftBinWidth = 14.9;
+    drift.minSpikesPerCluster = 50;
     rng(0, 'twister');
     res = MUAPipeline.sort(x, s.t_mua, s.mua_fs, drift);
     verifyEqual(tests, numel(res.spikeTimes), numel(plain.spikeTimes));
     verifyEqual(tests, sort(res.spikeTimes(:)), sort(plain.spikeTimes(:)), 'AbsTol', 1e-12);
-    verifyEqual(tests, res.clusterIdx(res.spikeTimes > 28), zeros(nnz(res.spikeTimes > 28), 1));
+    verifyEqual(tests, res.clusterIdx(res.spikeTimes > 29.8), zeros(nnz(res.spikeTimes > 29.8), 1));
 end
 
 %% testMergeSimilarClusters_keepsDifferentSizes - Similar shape, different size: not merged
