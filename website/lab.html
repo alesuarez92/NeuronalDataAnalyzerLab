@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Virtual lab · NeuroAnalyzer</title>
+<meta name="description" content="The NeuroAnalyzer virtual lab: plan and record a simulated laser Doppler flowmetry experiment, analyse it yourself without code, and get feedback on the plan, the processing and the results.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
+</head>
+<body>
+<main id="main">
+
+<section class="page-head"><p class="eyebrow">Learn by doing</p><h1>Virtual lab</h1><p class="lede">Plan and record a simulated experiment, analyse it yourself in the normal windows, without code, and get feedback on the plan, the processing and the numbers you report.</p></section>
+<nav class="toc" aria-label="On this page"><a href="#what">What it is</a><a href="#walkthrough">Walkthrough</a><a href="#feedback">The feedback</a><a href="#simulation">The simulation</a><a href="#instructors">For instructors</a></nav>
+
+<section class="section" id="what"><h2>What it is</h2>
+<p>The first virtual experiment asks a lab-bench question: <b>how much does blood flow in barrel cortex increase after a whisker stimulus, and when does it peak?</b> The student reads how laser Doppler flowmetry (LDF) works, then plans the recording: probe position, stimulus length, number of stimuli, time between them, baseline before the first stimulus and sampling rate. The simulator records it and writes the same kind of file the lab's acquisition software writes. The student then processes that file from scratch in <a href="ldf.html">Extract, Process and Average LDF</a>, reports the numbers, and gets feedback.</p>
+<ol class="steps">
+<li><span><b>Learn</b>: plain-language introduction to the question, the technique, what the raw signal looks like and how the experiment is recorded.</span></li>
+<li><span><b>Plan</b>: the protocol is drawn as the values change, with the length and size of the recording, or the reason a plan is not possible.</span></li>
+<li><span><b>Record</b>: a LabChart-style file (stimulus on channel 6, LDF on channel 8), different for every student name, with no answer inside.</span></li>
+<li><span><b>Analyse</b>: in the normal windows, exactly as with lab data.</span></li>
+<li><span><b>Report and check</b>: type the numbers, optionally attach the session files saved in Process LDF and Average LDF, and click <b>Check my results</b>.</span></li>
+</ol>
+<p>Open it with the <b>Virtual lab</b> button in the launcher, or from Help → Virtual lab → Try it with demo data.</p></section>
+
+<section class="section" id="walkthrough"><h2>Walkthrough: the demo student</h2><div data-tour="lab" data-label="Virtual lab walkthrough"><noscript><p class="note">The walkthrough needs JavaScript. The frames are in <code>assets/frames/</code>.</p></noscript></div></section>
+
+<section class="section" id="feedback"><h2>The feedback</h2>
+<div class="prose"><ul>
+<li><b>Plan</b>: probe position; time between stimuli (blood flow must be back to baseline before the next stimulus: the simulator knows when); number of stimuli, with the precision to expect; sampling rate (at 10 Hz the heartbeat aliases into a false ripple; 1000 Hz works but makes files much larger); baseline before the first stimulus.</li>
+<li><b>Processing</b> (when sessions are attached): the window after the stimulus, the baseline window, the filter (a high-pass filter removes the slow blood-flow response itself) and <b>Relative to baseline</b>.</li>
+<li><b>Your results</b>: baseline, peak increase (PU and %), time to peak and number of trials, each compared with a careful analysis of the student's <b>own</b> recording, so noise is not held against them. The reference values stay hidden until <b>Show solution</b>, and the submission records that the solution was shown.</li>
+<li><b>What was true</b> (after Show solution): the noise-free answer, and how far any analysis of that recording can be expected to be from it.</li>
+</ul></div>
+<p>Every item comes with a plain-language reason, for example “flow needs about 11 s to return to baseline, so responses overlap” or “a window that ends too early puts the peak at the window's end”. Score: OK = 1 point, Check = ½, Fix = 0.</p></section>
+
+<section class="section" id="simulation"><h2>The simulation</h2>
+<p>Each student name or ID gives a different simulated animal: a baseline of 90–150 PU, a response of 20–40 PU to a 5 s stimulus over the activated barrel (about half at the edge of the barrel, almost none far from it), vasomotion at 0.08–0.14 Hz, a heartbeat at 5–7 Hz, slow drift and noise, and 15% variation from trial to trial. The same name always gives the same animal, and the same plan always gives the same recording.</p>
+<p class="note">The model is simplified: responses add up linearly, and there are no movement artefacts or anaesthesia effects. It teaches the method and its pitfalls, not the physiology of a particular animal.</p>
+<p>For the demo student the true answer is a peak increase of <b>+38.6 PU (33.6%)</b> at <b>5.8 s</b> after onset on a 114.7 PU baseline. The walkthrough's analysis of the recording finds +38.7 PU at 5.9 s.</p></section>
+
+<section class="section" id="instructors"><h2>For instructors</h2>
+<p><b>Save submission…</b> writes a <code>.navlab.mat</code> file with the student's name, plan, numbers, attached sessions, the number of checks and whether the solution was shown. <b>Grade a folder…</b> grades every submission in a folder and writes <code>virtual_lab_grades.csv</code>: one row per student with the score, their numbers and the reference values. No answer key needs to be distributed: every recording is re-created from the student's name and plan.</p>
+<p>The same functions run from scripts: <code>VirtualLab.record</code>, <code>VirtualLab.grade</code> and <code>VirtualLab.gradeFolder</code> in <code>core/VirtualLab.m</code>.</p>
+<p>More virtual experiments (electrophysiology, imaging) are on the <a href="https://github.com/alesuarez92/NeuronalDataAnalyzerLab/blob/main/ROADMAP.md">roadmap</a>.</p></section>
+
+</main>
+</body>
+</html>

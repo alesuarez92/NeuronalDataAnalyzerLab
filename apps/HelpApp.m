@@ -871,7 +871,7 @@ classdef HelpApp < handle
                 'Optional in the .mat: `timeVec` or `t` (one time per frame), `roiMask` (logical H × W) or `roiMasks` (H × W × K, optional `roiNames`), used as the first ROIs'
                 'Multi-frame TIFF: RGB frames are converted to grayscale (mean of the colour channels); time = frame index'};
             t.outputs = {
-                '.csv: `Time` plus one column per measure (Intensity, Movement, DFF, Speed; with several ROIs `<measure>_<ROI name>`), or `Diameter_px` (+ `Diameter_standard_px`, `Replaced` when robust); for a kymograph, a matrix (first row = time)'
+                '.csv: `Time` plus one column per measure (Intensity, Movement, DFF; with several ROIs `<measure>_<ROI name>`), or `Diameter_px` (+ `Diameter_standard_px`, `Replaced` when robust); for a kymograph, a matrix (first row = time)'
                 '.mat: struct `results` with the series (one row per ROI), `roiMasks` / `roiNames`, `roiMask` (ROI 1), `lineStart` / `lineEnd`, `motionCorrection` and `shifts`, and the preprocessing and diameter settings'};
             t.details = {
                 '## Methods using the ROI'
@@ -894,7 +894,7 @@ classdef HelpApp < handle
                 '* **Robust diameter**: background from the line ends and vessel core from a low percentile (both as running medians over 7 frames), outermost half-level crossings, then a Hampel filter (7 frames, 3 robust SD) replaces remaining spikes. Walls are located to sub-pixel precision in all modes.'};
             t.trouble = {
                 '"Could not draw a rectangle / line"', 'drawrectangle / drawline need the Image Processing Toolbox. Without it, save a logical `roiMask` in the .mat for ROI methods.'
-                'Run is disabled', 'The chosen method needs a ROI (Brightness, Movement, Both, ΔF/F, Speed) or a line (Kymograph, Vessel diameter); the step 3 card says which is missing.'
+                'Run is disabled', 'The chosen method needs a ROI (Brightness, Movement, Both, ΔF/F) or a line (Kymograph, Vessel diameter); the step 3 card says which is missing.'
                 '"roiMask size does not match"', 'The mask must be H × W, the same size as one frame.'
                 'Time axis shows frames, not seconds', 'Add a `timeVec` (or `t`) with one value per frame to the .mat.'
                 'Load is slow / out of memory', 'Large TIFFs are read frame by frame into memory as double; crop or bin the stack first.'
