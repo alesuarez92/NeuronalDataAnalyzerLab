@@ -1,0 +1,103 @@
+name: Update screenshots
+
+# Run by hand (Actions → Update screenshots → Run workflow). Runs the app in
+# MATLAB on demo data (the same tests as CI), then commits to a branch:
+# - every website frame (website/assets/frames/*.png) that has a fresh
+#   screenshot with the same name, and the README launcher image
+#   (docs/main-launcher.png);
+# - optionally all screenshots under review-screens/ for review (remove
+#   that folder before merging).
+# Images are optimised losslessly only (optipng). Nothing is pushed to main:
+# the branch goes through a normal pull request.
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch that receives the commit (created from main if missing)'
+        required: true
+        default: 'claude/admiring-cori-52ekpa'
+      include_all:
+        description: 'Also commit every screenshot under review-screens/ (for review only)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # push the screenshot commit to the chosen branch
+
+concurrency:
+  group: screenshots
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: matlab-actions/setup-matlab@v2
+        with:
+          release: latest
+          products: >
+            Signal_Processing_Toolbox
+            Statistics_and_Machine_Learning_Toolbox
+            Image_Processing_Toolbox
+
+      - name: Start virtual display
+        run: |
+          sudo apt-get install -y -qq xvfb optipng > /dev/null
+          Xvfb :99 -screen 0 1600x1000x24 &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+
+      - name: Run the windows on demo data (screenshots)
+        continue-on-error: true   # a failing test must not block the screenshots of the others
+        uses: matlab-actions/run-command@v2
+        with:
+          command: run_tests
+
+      - name: Commit the screenshots to the branch
+        env:
+          BRANCH: ${{ inputs.branch }}
+          INCLUDE_ALL: ${{ inputs.include_all }}
+        run: |
+          set -e
+          test "$BRANCH" != "main" || { echo "Refusing to push to main"; exit 1; }
+          test -d test-artifacts/screens || { echo "No screenshots were produced"; exit 1; }
+          git config user.name "Alejandro Suarez"
+          git config user.email "107207149+alesuarez92@users.noreply.github.com"
+          src_sha=$(git rev-parse --short HEAD)
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            git fetch -q origin "$BRANCH"
+            git checkout -q -B "$BRANCH" "origin/$BRANCH"
+          else
+            git checkout -q -B "$BRANCH"
+          fi
+          n=0
+          for f in website/assets/frames/*.png; do
+            b=$(basename "$f")
+            src=$(find test-artifacts/screens -name "$b" -print -quit)
+            if [ -n "$src" ]; then cp "$src" "$f"; n=$((n+1)); fi
+          done
+          if [ -f test-artifacts/screens/Main.png ]; then cp test-artifacts/screens/Main.png docs/main-launcher.png; fi
+          if [ "$INCLUDE_ALL" = "true" ]; then
+            rm -rf review-screens && mkdir -p review-screens
+            cp -r test-artifacts/screens/. review-screens/
+            git add -f review-screens
+          fi
+          git add website/assets/frames docs/main-launcher.png
+          changed=$(git diff --cached --name-only -- '*.png')
+          if [ -n "$changed" ]; then
+            echo "$changed" | xargs optipng -quiet -o2
+            git add website/assets/frames docs/main-launcher.png
+            if [ "$INCLUDE_ALL" = "true" ]; then git add -f review-screens; fi
+          fi
+          if git diff --cached --quiet; then
+            echo "No screenshot changed."
+          else
+            git commit -q -m "Screenshots from CI (main @ $src_sha): $n website frames and the README launcher image"
+            git push -q origin "$BRANCH"
+          fi
+          echo "Matched $n website frames."
