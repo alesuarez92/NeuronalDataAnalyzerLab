@@ -62,7 +62,7 @@ Sinks (current flowing into cells) and sources appear with opposite signs across
 <li><b>Standard</b>: mean + <i>k</i>·SD.</li>
 <li><b>MAD</b>: median + <i>k</i>·MAD, a noise estimate that large spikes barely move<sup class="cite">[<a href="references.html#ref-quiroga2004" aria-label="Reference 5">5</a>]</sup>.</li>
 <li><b>NEO</b>: nonlinear energy operator ψ[n] = x[n]² − x[n−1]·x[n+1]<sup class="cite">[<a href="references.html#ref-kaiser1990" aria-label="Reference 3">3</a>, <a href="references.html#ref-mukhopadhyay1998" aria-label="Reference 4">4</a>]</sup>, thresholded on that scale; picks up either polarity.</li>
-<li><b>Rolling MAD</b> (MAD in a moving window, for drifting noise) and <b>Percentile</b> (99.9th percentile).</li>
+<li><b>Rolling MAD</b> (the same threshold as MAD over the whole recording, with each crossing moved to the largest nearby peak; despite the name, the threshold does not follow slow changes in the noise) and <b>Percentile</b> (99.9th percentile of the absolute signal; the multiplier is not used).</li>
 </ul>
 <p>A short dead time (about 0.3 ms) avoids counting a spike twice.</p>
 </div>

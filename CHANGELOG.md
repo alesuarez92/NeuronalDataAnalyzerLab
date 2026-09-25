@@ -55,6 +55,22 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   than the downsampling factor could vanish (and their trials with them).
   The trigger now keeps the maximum of each block of samples: long pulses
   give exactly the same onsets as before, short ones are no longer missed.
+- **MUA: quality results were not stored.** Units rejected by the quality
+  check (low SNR, refractory violations) were shown as rejected, but
+  `results.rejectedClusters` stayed false and `results.isiViolationRate`
+  empty; both now hold the real outcome.
+- **MUA drift correction depended on the units of the recording.** Clusters
+  were matched and merged when their mean waveforms were within a distance
+  of 0.5 in raw units: everything merged for data in volts, nothing for data
+  in microvolts. Distances are now relative to the waveform size (the same
+  in V and µV); across time bins up to 0.5 (the amplitude may drift), within
+  a bin up to 0.2, so two units of similar shape but different size stay
+  apart. Spikes in time bins too small to cluster (or where clustering
+  failed) were dropped from the results; they are now kept as unsorted
+  (noise).
+- **Help / website: MUA detection methods described correctly.** *Rolling
+  MAD* uses the same threshold as MAD over the whole recording (it was
+  described as a moving window); *Percentile* does not use the multiplier.
 
 ## [0.3.0] - 2026-09-25
 

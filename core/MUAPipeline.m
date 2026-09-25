@@ -346,6 +346,7 @@ classdef MUAPipeline
                 binEdges = linspace(fullStart, fullStart + nBins * params.driftBinWidth, nBins + 1);
                 % Use right-edge inclusion for final bin coverage
                 binIDs = discretize(spikeTimes, binEdges, 'IncludedEdge', 'right');
+                binIDs(isnan(binIDs)) = 1;   % a spike exactly at the first edge belongs to bin 1
                 uniqueBins = unique(binIDs(~isnan(binIDs)));
                 numBins = numel(uniqueBins);
                 minSpikesPerBin = max(2, ceil(params.minSpikesPerCluster / numBins));  % minimum 2 to allow 1 cluster
@@ -360,13 +361,16 @@ classdef MUAPipeline
                 for b = uniqueBins(:)'  % loop over bins
                     binIdx = (binIDs == b);
                     fprintf('[DEBUG] Bin %d: %d spikes\n', b, sum(binIdx));
-                    if sum(binIdx) < minSpikesPerBin
-                        continue;  % skip small bins
-                    end
-
                     binFeatures = features(binIdx, :);
                     binWaveforms = alignedWaves(binIdx, :);
                     binTimes = spikeTimes(binIdx);
+                    if sum(binIdx) < minSpikesPerBin
+                        % Too few spikes to cluster: keep them as noise (0), not dropped
+                        waveformBins{end+1} = binWaveforms; %#ok<AGROW>
+                        labelBins{end+1} = zeros(sum(binIdx), 1); %#ok<AGROW>
+                        timeBins{end+1} = binTimes; %#ok<AGROW>
+                        continue;
+                    end
 
                     switch lower(params.clusterMethod)
                         case 'k-means', [labels, valid] = MUAPipeline.tryKMeans(binFeatures, minSpikesPerBin);
@@ -374,16 +378,17 @@ classdef MUAPipeline
                         case 'dbscan', [labels, valid] = MUAPipeline.tryDBSCAN(binFeatures, minSpikesPerBin, params.dbscanEpsilon);
                     end
 
-                    if valid
-                        waveformBins{end+1} = binWaveforms; %#ok<AGROW>
-                        labelBins{end+1} = labels; %#ok<AGROW>
-                        timeBins{end+1} = binTimes; %#ok<AGROW>
+                    if ~valid
+                        labels = zeros(sum(binIdx), 1);   % clustering failed: noise, not dropped
                     end
+                    waveformBins{end+1} = binWaveforms; %#ok<AGROW>
+                    labelBins{end+1} = labels; %#ok<AGROW>
+                    timeBins{end+1} = binTimes; %#ok<AGROW>
                     fprintf('[DEBUG] Bin %d → valid: %d | #clusters: %d\n', ...
                         b, valid, numel(unique(labels)));
                 end
 
-                if isempty(waveformBins)
+                if all(cellfun(@(L) all(L == 0), labelBins))
                     MUAPipeline.fail('driftBins', 'Time-binning drift correction: no time bin produced a valid clustering.');
                 end
 
@@ -435,7 +440,7 @@ classdef MUAPipeline
                     MUAPipeline.fail('clustering', ['Dynamic clustering failed: no clustering had enough spikes in every ' ...
                         'cluster. Lower the minimum spikes per cluster or try another method.']);
                 end
-                clusterLabels = MUAPipeline.mergeWithinClusters(alignedWaves, clusterLabels, 0.8, 0.5);  % adjust as needed
+                clusterLabels = MUAPipeline.mergeWithinClusters(alignedWaves, clusterLabels, 0.8, 0.2);  % relative distance: similar size only
             % NO drift correction
             else
                 switch lower(params.clusterMethod)
@@ -584,12 +589,20 @@ classdef MUAPipeline
             end
         end
 
-        %% Cluster merging for drift correction (moved unchanged from MUAAnalysisApp)
+        %% Cluster merging for drift correction
+        % Across time bins, a cluster joins the previous bin's cluster with
+        % the best shape correlation >= 0.85 and relative distance <= 0.5
+        % (the amplitude may drift); within the result, clusters merge when
+        % correlation > 0.85 and relative distance < 0.2 (similar size:
+        % two units of similar shape but different size stay apart), or
+        % the grid-searched thresholds (0.8-0.95, 0.1-0.3) with the best
+        % mean silhouette. Distances are relative (relativeDistance), so
+        % results do not depend on V vs uV.
         function bestLabels = optimizeClusterMerging(spikeTimes, alignedWaves, clusterLabels, binIDs, params)
             fixedLabels = MUAPipeline.mergeClustersAcrossBins(spikeTimes, alignedWaves, clusterLabels, binIDs, 0.85, 0.5);
             if params.enableGridSearchCheck
                 corrVals = 0.8:0.05:0.95;
-                distVals = 0.4:0.05:0.6;
+                distVals = 0.1:0.05:0.3;   % relative distance (relativeDistance)
                 bestScore = -Inf;
                 bestLabels = zeros(size(clusterLabels));
                 bestCorr = NaN;
@@ -624,15 +637,25 @@ classdef MUAPipeline
                 end
                 fprintf('Best thresholds → Corr: %.2f, Dist: %.2f | Mean silhouette: %.3f\n', bestCorr, bestDist, bestScore);
             else
-                bestLabels = MUAPipeline.mergeSimilarClusters(alignedWaves, fixedLabels, 0.85, 0.5);
+                bestLabels = MUAPipeline.mergeSimilarClusters(alignedWaves, fixedLabels, 0.85, 0.2);
             end
+        end
+
+        %% relativeDistance - Distance between two mean waveforms, relative to their size
+        % norm(a - b) / max(norm(a), norm(b)): 0 = identical, 1 = as different
+        % as the larger waveform is large. The same in V or uV, so merge
+        % thresholds do not depend on the units of the recording.
+        function d = relativeDistance(a, b)
+            scale = max(norm(a), norm(b));
+            if scale == 0, d = 0; else, d = norm(a - b) / scale; end
         end
 
         %% mergeClustersAcrossBins - Match clusters across time bins by centroid
         % Inputs: spikeTimes [nSpikes x 1]; waveforms [nSpikes x nSamples];
         % labels [nSpikes x 1] initial cluster labels (0 = noise stays 0);
         % binIDs [nSpikes x 1] time bin of each spike; corrThresh / distThresh
-        % thresholds for centroid correlation / distance. Output: global labels.
+        % thresholds for centroid correlation / relative distance
+        % (relativeDistance). Output: global labels.
         function finalLabels = mergeClustersAcrossBins(spikeTimes, waveforms, labels, binIDs, corrThresh, distThresh) %#ok<INUSL>
             uniqueBins = unique(binIDs);
             labelOffset = 0;
@@ -668,7 +691,7 @@ classdef MUAPipeline
 
                     for p = 1:size(prevCentroids,1)
                         corrVal = MUAPipeline.pearsonR(thisCentroid, prevCentroids(p,:));
-                        distVal = norm(thisCentroid - prevCentroids(p,:));
+                        distVal = MUAPipeline.relativeDistance(thisCentroid, prevCentroids(p,:));
 
                         if corrVal >= corrThresh && distVal <= distThresh
                             score = corrVal - 0.01 * distVal;
@@ -713,7 +736,7 @@ classdef MUAPipeline
                     c1 = centroids(uniqueClusts(i),:);
                     c2 = centroids(uniqueClusts(j),:);
                     r = MUAPipeline.pearsonR(c1, c2);
-                    d = norm(c1 - c2);
+                    d = MUAPipeline.relativeDistance(c1, c2);
                     if r > corrThresh && d < distThresh
                         mergedLabels(mergedLabels == uniqueClusts(j)) = uniqueClusts(i);
                     end
@@ -747,7 +770,7 @@ classdef MUAPipeline
             for i = 1:K
                 for j = i+1:K
                     r = MUAPipeline.pearsonR(centroids(i,:), centroids(j,:));
-                    d = norm(centroids(i,:) - centroids(j,:));
+                    d = MUAPipeline.relativeDistance(centroids(i,:), centroids(j,:));
                     if r > corrThresh && d < distThresh
                         % Merge cluster j into i
                         map(uClust(j)) = map(uClust(i));

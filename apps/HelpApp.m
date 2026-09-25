@@ -824,8 +824,8 @@ classdef HelpApp < handle
                 '* **Standard**: mean + k·SD.'
                 '* **MAD**: median + k·MAD (robust to large spikes).'
                 '* **NEO**: nonlinear energy operator ψ[n] = x[n]² − x[n−1]·x[n+1], thresholded on that scale; picks up either polarity.'
-                '* **Rolling MAD**: MAD in a moving window (for drifting noise).'
-                '* **Percentile**: the 99.9th percentile.'
+                '* **Rolling MAD**: the same threshold as MAD (median + k·MAD over the whole recording); each crossing is then moved to the largest peak within a short window. Despite the name, the threshold does not follow slow changes in the noise.'
+                '* **Percentile**: the 99.9th percentile of the absolute signal; the multiplier k is not used.'
                 'A short dead time (~0.3 ms) avoids counting a spike twice; the refractory period (ms) is used for the per-cluster ISI quality check.'
                 '## Sorting'
                 'For each spike a waveform snippet is aligned and features are computed (PCA, ICA*, waveform, wavelet* or t-SNE; *only offered when FastICA / the Wavelet Toolbox is available). K-means and GMM try 2–10 clusters and keep the number with the best mean silhouette; DBSCAN is density based (epsilon auto-tuned if left empty) and labels unclustered spikes 0 = noise. Optional drift correction matches clusters across time bins.'};
