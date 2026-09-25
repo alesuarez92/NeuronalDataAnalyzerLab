@@ -782,7 +782,7 @@ classdef ROIAnalysisApp < handle
                     % Old sessions / scripts: 'Speed (flow)' was mean |frame difference|,
                     % the same measure as Movement (not a blood-flow speed)
                     name = 'Movement';
-                    UIKit.setStatus(app.StatusLabel, ['"Speed (flow)" was removed: it measured the change ' ...
+                    UIKit.setStatus(app.W.Status, ['"Speed (flow)" was removed: it measured the change ' ...
                         'between frames, the same as Movement, not a speed. Movement is used instead.'], 'warning');
                 end
                 k = find(strcmpi(items, name), 1);
