@@ -291,8 +291,12 @@
     return null;
   }
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var page = (location.pathname.split("/").pop() || "index.html").replace(/#.*$/, "");
-  if (page.indexOf(".") < 0) page = "index.html";
+  // Hosts such as Cloudflare Pages serve "pretty" URLs without .html
+  // (/ldf, /ldf/): map them back to the file name used in the nav.
+  var path = location.pathname.replace(/\/+$/, "");
+  var page = decodeURIComponent(path.split("/").pop() || "");
+  if (page === "" || page === "index") page = "index.html";
+  else if (page.indexOf(".") < 0) page = page + ".html";
 
   /* ------------------------------ theme ------------------------------- */
   var themes = ["auto", "light", "dark"];

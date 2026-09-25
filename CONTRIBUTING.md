@@ -76,8 +76,19 @@ source of truth — every app's footer reads from it.
 - `MAJOR` — incompatible change to the data formats consumed/produced
   by an app, or removal of a public-facing feature.
 
-Releases are git tags (`v0.1.0`, ...) with a corresponding entry in
-[CHANGELOG.md](CHANGELOG.md).
+Releases are git tags (`v0.2.0`, ...) with a corresponding entry in
+[CHANGELOG.md](CHANGELOG.md). Release checklist:
+
+1. Set the new version in `core/UITheme.m` and `CITATION.cff` (with the
+   release date), the README badge and install link, and the website
+   (`website/assets/site.js` VERSION, `index.html`, `about.html`).
+2. Move the CHANGELOG's Unreleased entries under the new version.
+3. Update the website and Help for anything new: text, expected demo
+   results, and screenshots from the CI artifact `window-screenshots`
+   (optimised losslessly only).
+4. Run **Actions → Release → Run workflow** on `main` (or push the tag).
+   It refuses to publish if the website or CITATION.cff show another
+   version.
 
 ## Questions
 
