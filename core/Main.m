@@ -15,7 +15,8 @@
 % a '?' button that opens the matching HelpApp topic:
 %   LDF:               1 Extract -> 2 Process -> 3 Average
 %   Electrophysiology: 1 Extract -> 2 LFP analysis or 2 MUA analysis
-%   Imaging:           ROI analysis
+%   Imaging:           ROI analysis (stacks over time) or Histology / culture
+%                      (still images: count cells, markers, regions)
 %   Response features: Signal Characterization
 %   Batch:             Batch processing (one pipeline on many files)
 % =========================================================================
@@ -46,6 +47,7 @@ classdef Main < handle
         LFPAnalysisBtn
         ProcessMUABtn
         ROIBtn             % Open ROI / image analysis
+        HistologyBtn       % Open Histology / culture (HistologyApp)
         CharBtn            % Open Signal Characterization
         BatchBtn           % Open Batch processing
         % Environment checks (set by checkSignalToolbox / checkTDTSDK)
@@ -181,15 +183,24 @@ classdef Main < handle
 
             % --- Imaging ---
             [app.ImagingPanel, chain] = app.workflowCard(contentGrid, ...
-                'Imaging  ·  ROI and line analysis', ...
-                'Image stacks (2-photon, gCaMP, blood-flow imaging): measure a ROI or a line over time.', ...
-                'In: .mat stack or multi-frame TIFF  ·  Out: time series .csv / .mat', ...
+                'Imaging  ·  Stacks, sections and cultures', ...
+                'Stacks over time (2-photon, gCaMP, blood flow), or still images of sections and cultures (cell counts).', ...
+                'In: .mat stack, TIFF, PNG / JPG  ·  Out: time series or cell counts .csv / .mat', ...
                 'ROI Analysis');
             app.ROIBtn = chainButton(chain, 1, 'ROI analysis', @()ROIAnalysisApp(), ...
                 ['Input: .mat with stack or frames (H x W x N or H x W x 3 x N; optional timeVec or t ' ...
                  'and roiMask) or a multi-frame TIFF. Output: brightness, movement, ΔF/F, ' ...
-                 'kymograph or vessel diameter as .csv or .mat.'], app);
-            chainNote(chain, 'Motion correction · Cell detection · ΔF/F · Kymograph · Vessel diameter');
+                 'kymograph or vessel diameter as .csv or .mat. Motion correction, cell detection, ' ...
+                 'kymograph, vessel diameter.'], app);
+            orLbl = uilabel(chain, 'Text', 'or', 'FontSize', T.fontSmall, ...
+                'FontColor', T.mutedColor, 'HorizontalAlignment', 'center');
+            orLbl.Layout.Row = 2; orLbl.Layout.Column = 2;
+            app.HistologyBtn = chainButton(chain, 3, 'Histology / culture', @()HistologyApp(), ...
+                ['Input: still images of sections or cultures: TIFF (every page a channel), PNG / JPG or ' ...
+                 '.mat (images, H x W x channels x images), one or several (sections, time points, wells). ' ...
+                 'Align them, count cells, find marker-positive cells, count per region and per mm2. ' ...
+                 'Output: cells and counts as .csv or .mat.'], app);
+            chainNote(chain, 'Count cells · Markers · Regions · Align', 5);
 
             % --- Response features ---
             [app.CharPanel, chain] = app.workflowCard(contentGrid, ...
@@ -350,12 +361,13 @@ function chainArrow(chain, col)
     a.Layout.Row = 2; a.Layout.Column = col;
 end
 
-%% chainNote - Muted note next to a single-step card's button (columns 3-5)
-function chainNote(chain, text)
+%% chainNote - Muted note next to a card's buttons (columns 3-5, or cols)
+function chainNote(chain, text, cols)
+    if nargin < 3, cols = [3 5]; end
     T = UITheme;
     n = uilabel(chain, 'Text', text, 'FontSize', T.fontSmall, 'FontColor', T.mutedColor, ...
         'WordWrap', 'on');
-    n.Layout.Row = 2; n.Layout.Column = [3 5];
+    n.Layout.Row = 2; n.Layout.Column = cols;
 end
 
 function s = pathShorten(p, maxLen)

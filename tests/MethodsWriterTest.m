@@ -16,6 +16,9 @@
 %   - every text names NeuroAnalyzer v<version> and the MATLAB release,
 %     and never contains NaN, Inf, [], unresolved {{citations}}, &entities;
 %     or sprintf specifiers (%d, %s, %g ...), or an empty placeholder;
+%   - histology (demo-like session): images, pixel size, alignment, the
+%     counting settings in um, Otsu (1979) cited only for the automatic
+%     threshold, markers and regions;
 %   - several sessions given in any order come out in pipeline order,
 %     with one placeholder, one software paragraph and one reference list;
 %   - write() saves UTF-8 with a byte-order mark; a saved session file
@@ -141,6 +144,38 @@ function testCombinedPipelineOrder(tests)
     f1 = Session.save(fullfile(tests.TestData.dir, 'e'), e);
     f2 = Session.save(fullfile(tests.TestData.dir, 'p'), p);
     tests.verifyEqual(MethodsWriter.fromSessions({f2, f1}), MethodsWriter.fromSessions({e, p}));
+end
+
+function testHistology(tests)
+    s = histologySession();
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['2 images (400 ' char(215) ' 400 pixels, 2 channels: Nuclei (DAPI) and Marker (GFP))']);
+    verifyHas(tests, txt, [' at 1 ' char(181) 'm per pixel (read from the image files)']);
+    verifyHas(tests, txt, 'shifted onto the first by the peak of their FFT cross-correlation');
+    verifyHas(tests, txt, 'Nuclei (DAPI) channel (largest shift 11.2 pixels)');
+    verifyHas(tests, txt, 'Cells were counted in the Nuclei (DAPI) channel');
+    verifyHas(tests, txt, ['square of side twice 15 ' char(181) 'm']);
+    verifyHas(tests, txt, 'with Otsu''s method (Otsu, 1979)');
+    verifyHas(tests, txt, ['smaller than 20 ' char(181) 'm' char(178) ', larger than 2000 ']);
+    verifyHas(tests, txt, 'ratio above 2.5');
+    verifyHas(tests, txt, 'at least 50% of its pixels');
+    verifyHas(tests, txt, '2 regions drawn by hand on the first image (Region A and Region B)');
+    tests.verifyTrue(any(contains(refs, 'Otsu N (1979)')), 'Otsu reference');
+    % Landmark alignment, typed threshold, no regions, not counted yet
+    s.settings.alignedMethod = 'landmarks'; s.settings.channelsAligned = false;
+    s.results.landmarkRms = [NaN 1.23];
+    s.settings.count.threshold = 0.2; s.settings.regions = struct('name', {}, 'xy', {});
+    [txt2, refs2] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt2, refs2);
+    verifyHas(tests, txt2, 'affine transform fitted by least squares');
+    verifyHas(tests, txt2, 'at most 1.2 pixels');
+    verifyHas(tests, txt2, 'thresholded at 0.2 (intensity above background)');
+    verifyHas(tests, txt2, ['cells per mm' char(178) ' of image area']);
+    tests.verifyFalse(any(contains(refs2, 'Otsu')), 'No Otsu reference for a typed threshold');
+    s.results = rmfield(s.results, 'counts');
+    txt3 = MethodsWriter.fromSession(s);
+    tests.verifyFalse(contains(txt3, 'Cells were counted'), 'No counting text before counting');
 end
 
 %% ---------------------------------------------------------- core / files
@@ -296,6 +331,22 @@ function [s, res] = rmStatsSession()
     s.settings = struct('mode', 'Groups & statistics', 'single', sg, 'groups', gs);
     s.results.groupTest = res;
     s.summary = {sprintf('Group test: %s', res.summary)};
+end
+
+%% histologySession - Session like HistologyApp.sessionState on the histology demo
+function s = histologySession()
+    s = Session.new('HistologyApp');
+    s.inputs = Session.fileInfo('', 'Histology demo (demoHistology)');
+    o = struct('channel', 1, 'backgroundRadiusUm', 15, 'threshold', 0, 'split', true, 'minAreaUm2', 20, ...
+        'maxAreaUm2', 2000, 'maxElongation', 2.5, 'minFractionPct', 50, 'markerThreshold', 0, 'pixelSizeUm', 1);
+    regions = struct('name', {'Region A', 'Region B'}, 'xy', {[0 0; 200 0; 200 400; 0 400], [200 0; 400 0; 400 400; 200 400]});
+    s.settings = struct('generator', 'demoHistology', 'pixelSizeUm', 1, 'pixelSizeFromFile', true, ...
+        'channelNames', {{'Nuclei (DAPI)', 'Marker (GFP)'}}, 'imageNames', {{'Culture, day 1', 'Culture, day 3'}}, ...
+        'alignChannels', true, 'alignMethod', 'shift', 'alignChannel', 1, 'alignedMethod', 'shift', ...
+        'channelsAligned', true, 'landmarks', {{[], []}}, 'count', o, 'regions', regions);
+    s.results = struct('shifts', [0 0; 6.4 -9.2], 'landmarkRms', [NaN NaN], ...
+        'counts', {{'Culture, day 1', 'Region A', 30, 0.08, 375}});
+    s.summary = {'2 image(s), 400 x 400 px, 2 channel(s) (Nuclei (DAPI), Marker (GFP)); pixel size 1 um (from the file)'};
 end
 
 %% checkClean - Version, release, no NaN / Inf / [] / leftovers / empty placeholders

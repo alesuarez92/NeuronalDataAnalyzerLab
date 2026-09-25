@@ -102,6 +102,10 @@ function testExtraDemoKinds(tests)
     verifyEqual(tests, s.truth.theta.freqHz, 6);
     s = load(DemoData.file('imagingAdvanced'));
     verifyEqual(tests, size(s.stack, 3), numel(s.timeVec));
+    [img, info] = Histology.readImage(DemoData.file('histology'));
+    verifyEqual(tests, size(img), [400 400 2 2]);
+    verifyEqual(tests, info.pixelSizeUm, 1);
+    verifyEqual(tests, info.truth.nCells, 60);
     verifyEqual(tests, numel(dir(fullfile(DemoData.file('groups'), '*.mat'))), 24);
     verifyEqual(tests, exist(DemoData.file('intan'), 'file'), 2);
     verifyEqual(tests, exist(DemoData.file('openephys'), 'dir'), 7);

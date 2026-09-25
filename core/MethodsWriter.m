@@ -17,7 +17,7 @@
 %       Several sessions of a pipeline (cellstr of paths, struct array or
 %       cell of structs) in pipeline order (Extract LDF -> Process LDF ->
 %       LDF Average -> Extract Ephys -> LFP Analysis -> MUA Analysis ->
-%       ROI Analysis -> Signal Characterization), one placeholder paragraph
+%       ROI Analysis -> Histology / culture -> Signal Characterization), one placeholder paragraph
 %       at the start, one software paragraph at the end and one reference
 %       list. Identical paragraphs (the same session twice) appear once.
 %   full = MethodsWriter.compose(txt, refs)
@@ -51,7 +51,7 @@ classdef MethodsWriter
         % Window classes in pipeline order (unknown windows go before the last)
         PipelineOrder = {'ExtractLDFApp', 'ProcessingLDFApp', 'LDFGrandAverageApp', ...
             'ExtractEphysApp', 'LFPAnalysisApp', 'MUAAnalysisApp', 'ROIAnalysisApp', ...
-            'SignalCharacterizationApp'}
+            'HistologyApp', 'SignalCharacterizationApp'}
         Placeholder = ['[Describe the animals (species, strain, sex, age and number), anaesthesia ' ...
             'and surgery, and the recording or imaging hardware (probe or electrode type, amplifier, ' ...
             'microscope, acquisition system) here.]']
@@ -158,6 +158,8 @@ classdef MethodsWriter
                 'ester1996', 'Ester et al., 1996', ['Ester M, Kriegel HP, Sander J, Xu X (1996). A density-based ' ...
                     'algorithm for discovering clusters in large spatial databases with noise. In: Proceedings of ' ...
                     'the Second International Conference on Knowledge Discovery and Data Mining (KDD-96), pp. 226-231.']
+                'otsu1979', 'Otsu, 1979', ['Otsu N (1979). A threshold selection method from gray-level ' ...
+                    'histograms. IEEE Trans Syst Man Cybern 9(1):62-66.']
                 'student1908', 'Student, 1908', 'Student (1908). The probable error of a mean. Biometrika 6(1):1-25.'
                 'welch1947', 'Welch, 1947', ['Welch BL (1947). The generalization of ''Student''s'' problem when ' ...
                     'several different population variances are involved. Biometrika 34(1-2):28-35.']
@@ -272,6 +274,7 @@ classdef MethodsWriter
                 case 'LFPAnalysisApp',            paras = MethodsWriter.lfpAnalysis(s);
                 case 'MUAAnalysisApp',            [paras, tbx] = MethodsWriter.muaAnalysis(s);
                 case 'ROIAnalysisApp',            paras = MethodsWriter.roiAnalysis(s);
+                case 'HistologyApp',              paras = MethodsWriter.histology(s);
                 case 'SignalCharacterizationApp', paras = MethodsWriter.signalCharacterization(s);
                 otherwise
                     ttl = MethodsWriter.getf(s, 'appTitle', '');
@@ -1013,6 +1016,117 @@ classdef MethodsWriter
             end
             if isLine
                 parts{end+1} = '[please add: pixel size to convert pixels to micrometres.]';
+            end
+            paras = {strjoin(parts, ' ')};
+        end
+
+        %% histology - Images, pixel size, alignment, cell counting, markers, regions
+        function paras = histology(s)
+            tok = MethodsWriter.summaryTokens(s, '(\d+) image\(s\), (\d+) x (\d+) px, (\d+) channel');
+            names = cellstr(MethodsWriter.getf(s, 'settings.channelNames', {}));
+            names = names(~cellfun(@isempty, names));
+            px = MethodsWriter.getf(s, 'settings.pixelSizeUm', NaN);
+            parts = {};
+            if numel(tok) == 4
+                t = sprintf('%s (%s &times; %s pixels, %s', MethodsWriter.capital(MethodsWriter.plural( ...
+                    str2double(tok{1}), 'image')), tok{2}, tok{3}, MethodsWriter.plural(str2double(tok{4}), 'channel'));
+                if ~isempty(names), t = sprintf('%s: %s', t, MethodsWriter.listText(names)); end
+                t = [t ')'];
+            else
+                t = 'Images';
+            end
+            t = [t ' of [please add: sections or cultures, staining and microscope]'];
+            if MethodsWriter.isNum(px)
+                if logical(MethodsWriter.getf(s, 'settings.pixelSizeFromFile', false))
+                    t = sprintf('%s were acquired at %s &mu;m per pixel (read from the image files)', t, MethodsWriter.num(px));
+                else
+                    t = sprintf('%s were acquired at %s &mu;m per pixel', t, MethodsWriter.num(px));
+                end
+            else
+                t = [t ' were acquired [please add: pixel size in &mu;m]'];
+            end
+            parts{end+1} = [t ' and analysed as follows.'];
+            % Alignment
+            al = {};
+            if logical(MethodsWriter.getf(s, 'settings.channelsAligned', false))
+                al{end+1} = ['every channel was shifted onto the first by the peak of their FFT cross-correlation ' ...
+                    '(chromatic shift, sub-pixel peak fit)'];
+            end
+            switch MethodsWriter.getf(s, 'settings.alignedMethod', 'none')
+                case 'shift'
+                    t = ['images 2 onwards were aligned to the first by translation, estimated by FFT phase ' ...
+                        'correlation of the background-subtracted'];
+                    ch = MethodsWriter.getf(s, 'settings.alignChannel', NaN);
+                    if MethodsWriter.isNum(ch) && ch <= numel(names)
+                        t = sprintf('%s %s channel', t, names{ch});
+                    else
+                        t = [t ' reference channel'];
+                    end
+                    sh = MethodsWriter.getf(s, 'results.shifts', []);
+                    if isnumeric(sh) && ~isempty(sh) && all(isfinite(sh(:)))
+                        t = sprintf('%s (largest shift %s pixels)', t, MethodsWriter.num(round(max(hypot(sh(:, 1), sh(:, 2))) * 10) / 10));
+                    end
+                    al{end+1} = t;
+                case 'landmarks'
+                    t = ['images 2 onwards were aligned to the first by an affine transform fitted by least squares ' ...
+                        'to at least three pairs of matching landmarks placed by hand, with bilinear interpolation'];
+                    e = MethodsWriter.getf(s, 'results.landmarkRms', []);
+                    e = e(isfinite(e));
+                    if isnumeric(e) && ~isempty(e)
+                        t = sprintf('%s (root-mean-square landmark error at most %s pixels)', t, MethodsWriter.num(round(max(e) * 10) / 10));
+                    end
+                    al{end+1} = t;
+            end
+            if ~isempty(al), parts{end+1} = [MethodsWriter.capital(MethodsWriter.listText(al)) '.']; end
+            % Counting
+            o = MethodsWriter.getf(s, 'settings.count', struct());
+            if isempty(MethodsWriter.getf(s, 'results.counts', {}))
+                paras = {strjoin(parts, ' ')};
+                return;
+            end
+            ch = MethodsWriter.getf(o, 'channel', 1);
+            if MethodsWriter.isNum(ch) && ch <= numel(names), chName = sprintf('the %s channel', names{ch}); else, chName = 'the nuclear channel'; end
+            t = sprintf(['Cells were counted in %s. Uneven illumination was removed by subtracting a background ' ...
+                'estimated by a grey-level opening (minimum then maximum filter) with a square of side twice %s &mu;m; ' ...
+                'the image was smoothed with a Gaussian filter and thresholded'], chName, ...
+                MethodsWriter.num(MethodsWriter.getf(o, 'backgroundRadiusUm', NaN)));
+            thr = MethodsWriter.getf(o, 'threshold', 0);
+            if MethodsWriter.isNum(thr) && thr > 0
+                t = sprintf('%s at %s (intensity above background)', t, MethodsWriter.num(thr));
+            else
+                t = [t ' automatically with Otsu''s method ({{otsu1979}}), but never below three robust standard ' ...
+                    'deviations of the background noise'];
+            end
+            t = [t '. Holes were filled and 8-connected pixels formed objects.'];
+            if logical(MethodsWriter.getf(o, 'split', true))
+                t = [t ' Touching cells were separated at peaks of the distance-to-edge map: two peaks were kept as ' ...
+                    'separate cells when the object narrowed between them to less than 0.85 times the smaller peak, ' ...
+                    'and pixels were assigned to the nearest peak weighted by its radius.'];
+            end
+            t = sprintf(['%s Objects smaller than %s &mu;m&sup2;, larger than %s &mu;m&sup2; or with a length-to-width ' ...
+                'ratio above %s were not counted.'], t, MethodsWriter.num(MethodsWriter.getf(o, 'minAreaUm2', NaN)), ...
+                MethodsWriter.num(MethodsWriter.getf(o, 'maxAreaUm2', NaN)), MethodsWriter.num(MethodsWriter.getf(o, 'maxElongation', NaN)));
+            parts{end+1} = t;
+            % Markers
+            if numel(names) > 1
+                mt = MethodsWriter.getf(o, 'markerThreshold', 0);
+                if MethodsWriter.isNum(mt) && mt > 0
+                    thrText = sprintf('a threshold of %s above background', MethodsWriter.num(mt));
+                else
+                    thrText = 'the automatic threshold of that channel';
+                end
+                parts{end+1} = sprintf(['A cell was scored positive for a marker when at least %s%% of its pixels ' ...
+                    'exceeded %s after the same background subtraction.'], ...
+                    MethodsWriter.num(MethodsWriter.getf(o, 'minFractionPct', NaN)), thrText);
+            end
+            % Regions
+            rg = MethodsWriter.getf(s, 'settings.regions', struct([]));
+            if isstruct(rg) && ~isempty(rg)
+                parts{end+1} = sprintf(['Cells were assigned to %s drawn by hand on the first image (%s) by their ' ...
+                    'centroid; densities are cells per mm&sup2; of region area within the image.'], ...
+                    MethodsWriter.plural(numel(rg), 'region'), MethodsWriter.listText({rg.name}));
+            else
+                parts{end+1} = 'Densities are cells per mm&sup2; of image area.';
             end
             paras = {strjoin(parts, ' ')};
         end
