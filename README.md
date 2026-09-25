@@ -17,8 +17,8 @@ Neuroscience analysis toolbox for **Laser Doppler Flowmetry**,
 **electrophysiology** (LFP: ERP, CSD, time–frequency; MUA: spike detection,
 sorting with cluster merge/split, raster/PSTH, correlograms; TDT, Intan,
 Open Ephys and NWB recordings), **ROI / coregistered image analysis**
-(motion correction, multiple ROIs, cell detection, ΔF/F, blood-flow speed,
-kymograph, robust vessel diameter), and **signal characterization**
+(motion correction, multiple ROIs, cell detection, ΔF/F, kymograph,
+robust vessel diameter), and **signal characterization**
 (response features, group statistics, publication figures).
 
 Every analysis can run on a whole folder (**batch processing**), be saved
@@ -82,7 +82,7 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | --- | --- |
 | `NeuroAnalyzer.m` | Entry point; run this to open the launcher. |
 | `core/` | `Main.m` launcher, `UITheme`, project-path manager, data loader, validation, processing, signal-feature library. |
-| `core/imaging/` | ROI / line-based image analysis: ΔF/F, kymograph, flow speed, vessel diameter, intensity, movement, motion correction, cell detection. |
+| `core/imaging/` | ROI / line-based image analysis: ΔF/F, kymograph, vessel diameter, intensity, movement, motion correction, cell detection. |
 | `core/io/` | Readers for Intan RHD, Open Ephys binary and NWB; NWB export. |
 | `core/demo/`, `core/DemoData.m` | Synthetic demo recordings with ground truth. |
 | `core/Batch.m`, `core/Session.m`, `core/Report.m`, `core/MethodsWriter.m` | Batch processing, session files, PDF reports, methods text. |

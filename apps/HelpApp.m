@@ -878,7 +878,7 @@ classdef HelpApp < handle
                 '* **Movement**: mean absolute frame-to-frame difference in the ROI.'
                 '* **Both**: brightness (left axis) and movement (right axis).'
                 '* **ΔF/F (gCaMP)**: (F − F0) / F0 of the ROI intensity, F0 = mean of the first N frames (default 30).'
-                '* **Speed (flow)**: frame-to-frame motion magnitude in the ROI, a flow / speed proxy (first frame NaN).'
+                '* **Blood-flow speed** is not measured from a ROI. The former **Speed (flow)** method computed the mean absolute frame-to-frame difference, the same as Movement, and was removed. Red-blood-cell streaks can be seen in the **Kymograph** of a line along a vessel.'
                 '## Methods using the line'
                 '* **Kymograph**: intensity sampled along the line in every frame → a space × time image; slanted streaks show propagation or flow direction.'
                 '* **Vessel diameter**: width (FWHM, pixels) of the intensity profile along the line in every frame. Draw the line across the vessel.'

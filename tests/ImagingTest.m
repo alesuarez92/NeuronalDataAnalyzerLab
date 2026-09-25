@@ -86,3 +86,12 @@ function testImageStackNormalize_percentileRange(tests)
     verifyEqual(tests, min(out(:)), 0, 'AbsTol', 1e-9);
     verifyEqual(tests, max(out(:)), 1, 'AbsTol', 1e-9);
 end
+
+%% testFlowSpeedIsFrameDifference - roiFlowSpeed is not a speed: it equals Movement 'diff'
+% (the reason "Speed (flow)" was removed from ROI Analysis)
+function testFlowSpeedIsFrameDifference(tests)
+    rs = RandStream('mt19937ar', 'Seed', 7);
+    stack = rand(rs, 12, 12, 6);
+    mask = false(12); mask(3:9, 4:10) = true;
+    verifyEqual(tests, roiFlowSpeed(stack, mask), roiMovement(stack, mask, [], 'diff'), 'AbsTol', 1e-12);
+end

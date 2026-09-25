@@ -1,16 +1,19 @@
 function [speed, t] = roiFlowSpeed(stack, mask, timeVec)
-% roiFlowSpeed - Mean magnitude of frame-to-frame motion in ROI (flow/speed proxy).
+% roiFlowSpeed - Mean absolute frame-to-frame difference in the ROI.
 %
-% Uses optical flow (if vision.OpticalFlow available) or mean absolute
-% gradient magnitude between frames. Useful for blood flow, particle
-% movement, or activity propagation in 2P/multiphoton.
+% NOT a speed: it measures how much the ROI intensity changes between
+% consecutive frames, the same as roiMovement(stack, mask, t, 'diff')
+% (for RGB stacks the colour channels are averaged first). Kept so old
+% scripts still run; ROI Analysis no longer offers it. For red-blood-cell
+% speed, use a kymograph of a line along the vessel
+% (kymograph + propagationSpeedFromKymograph).
 %
 % INPUT:
 %   stack  - H x W x N grayscale (or RGB; converted to gray).
 %   mask   - H x W logical.
 %   timeVec - (optional) 1 x N.
 % OUTPUT:
-%   speed - 1 x N (first frame NaN); mean flow magnitude in ROI per frame.
+%   speed - 1 x N (first frame NaN); mean |frame difference| in the ROI.
 %   t     - 1 x N.
 %
 if ndims(stack) == 4

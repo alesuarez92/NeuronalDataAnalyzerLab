@@ -42,6 +42,19 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 ### Changed
 
 - "NMD Lab" removed from the launcher, Help, README and website.
+- **ROI Analysis: "Speed (flow)" removed.** It was not a speed: it
+  computed the mean absolute frame-to-frame difference in the ROI,
+  exactly the same as *Movement* (now shown by a test). Sessions and
+  scripts that ask for it get Movement, with a message. Help, the website
+  and the README no longer claim a blood-flow speed.
+
+### Fixed
+
+- **LDF Process / Batch: short stimulus pulses were lost when
+  downsampling.** The trigger kept every r-th sample, so pulses shorter
+  than the downsampling factor could vanish (and their trials with them).
+  The trigger now keeps the maximum of each block of samples: long pulses
+  give exactly the same onsets as before, short ones are no longer missed.
 
 ## [0.3.0] - 2026-09-25
 

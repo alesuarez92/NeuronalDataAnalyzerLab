@@ -14,7 +14,7 @@ Used by **ROI / Coregistered Image Analysis** for 2P/multiphoton, fluorescence, 
 
 ## Speed, flow, propagation
 
-- **roiFlowSpeed** – Mean magnitude of frame-to-frame change in ROI (flow/speed proxy for blood flow, 2P).
+- **roiFlowSpeed** – Mean absolute frame-to-frame difference in the ROI (same as `roiMovement(..., 'diff')`; not a speed). Kept for old scripts; the app no longer offers it.
 - **kymograph** – Extract space-time image along a line (for propagation, flow direction).
 - **propagationSpeedFromKymograph** – Estimate propagation speed from kymograph (slope of ridge).
 
