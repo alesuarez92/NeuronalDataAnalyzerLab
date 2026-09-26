@@ -32,6 +32,7 @@ runtests('tests/ImagingTest')
 - **ProcessorTest** – `Processor.crop` (bounds, lengths, mismatched RawStim/RawLDF)
 - **DataLoaderTest** – `DataLoader.load(..., 'FromStruct', d)` (no file dialog)
 - **SignalFeaturesTest** – every `SignalFeatures` method checked against a Gaussian response with closed-form latency, FWHM, rise/decay time, onset and AUC; negative-going responses; NaN on empty/flat windows
+- **EEGFormatsTest** – `core/io` EEG readers: the `demoEEG` study read from EEGLAB (`.set`, `.set` + `.fdt`), FieldTrip and plain `.mat` gives the same numbers, conditions, events, positions and history sentences; hand-built EEGLAB / FieldTrip files; the demo's known N1, P300, alpha and VEP; clear errors (missing `.fdt`, truncated data, wrong sizes, unknown variables); history text is read, never run
 - **ImagingTest** – `core/imaging`: ROI intensity, ΔF/F, movement on RGB stacks, kymograph propagation speed (all three methods), vessel diameter, toolbox-free smoothing and percentile normalization
 
 ## Fixtures

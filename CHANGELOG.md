@@ -59,6 +59,24 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Average LDF** shows the results under *Plot grand average*: baseline,
   peak increase (and % of baseline) and time to peak, with the peak
   marked on the plot; sessions and reports include them.
+- **EEG, step 1: reading EEG already cleaned in MATLAB** (`core/io/EEGSource.m`,
+  `readEEGLAB`, `readFieldTrip`, `readEEGMatrix`; no window yet). EEGLAB
+  `.set` files (numbers inside or in a `.fdt` file, or an `EEG` variable in
+  a `.mat`), FieldTrip raw and averaged data, and plain `.mat` arrays (the
+  variables are recognised and a map is suggested) are read into one
+  shape: trials with a condition each (or a continuous recording with its
+  events), channel names and positions as stored, the reference, and
+  what was already done (filters, re-reference, removed ICA components,
+  rejected trials, interpolated channels) in plain sentences from the
+  EEGLAB history or FieldTrip `cfg.previous`. Nothing in a file is run;
+  EEGLAB and FieldTrip are not needed. Values stored in volts are
+  converted to µV, and the note says so.
+- **EEG demo data** (`core/demo/demoEEG.m`): a synthetic oddball study (8
+  participants, 32 channels, Standard / Target / Novel, known P1, N1,
+  P300 and alpha, 5 trials already rejected) and a rodent recording (4
+  skull screws with bregma coordinates, light flashes, a known visual
+  evoked potential), each written as EEGLAB (`.set` and `.set` + `.fdt`),
+  FieldTrip and plain `.mat`, so every reader is tested on the same data.
 
 ### Changed
 

@@ -57,9 +57,9 @@ their files.
 
 | | Source | Notes |
 |---|---|---|
-| 📅 | EEGLAB (`.set` / `.fdt`, or an `EEG` variable in a `.mat`) | Trials, events, channel positions, removed ICA components and history. |
-| 📅 | FieldTrip raw and averaged structures | `trial`, `time`, `label`, `trialinfo`, electrode positions; history from `cfg.previous`. |
-| 📅 | Plain matrix `.mat` | A form says which variable is the data, the sampling rate, the trial and channel dimensions and the conditions. No code needed. |
+| 🔨 | EEGLAB (`.set` / `.fdt`, or an `EEG` variable in a `.mat`) | Trials, events, channel positions, removed ICA components and history. |
+| 🔨 | FieldTrip raw and averaged structures | `trial`, `time`, `label`, `trialinfo`, electrode positions; history from `cfg.previous`. |
+| 🔨 | Plain matrix `.mat` | A form says which variable is the data, the sampling rate, the trial and channel dimensions and the conditions. No code needed. |
 | 📅 | EDF / EDF+ / BDF | BioSemi, most clinical systems, and exports from OpenBCI, Natus, Compumedics and others. |
 | 📅 | BrainVision (`.vhdr` / `.eeg` / `.vmrk`) | Brain Products; also a common export from MNE and EEGLAB. |
 | 📅 | EGI `.mff` | Magstim EGI geodesic nets. |
@@ -94,7 +94,7 @@ NWB recordings are already read by Extract Ephys.
 
 | | Step | Notes |
 |---|---|---|
-| 📅 | 1. Data model and MATLAB importers | EEGLAB, FieldTrip, plain `.mat`. Synthetic demo with known answers: 32 channels on 10-20 positions, three conditions, a known P1 / N1 / P300 and scalp distribution, known alpha, some trials already rejected; a rodent version with a few skull electrodes. The demo is written in every supported format, so each importer is tested against the same data. |
+| 🔨 | 1. Data model and MATLAB importers | Readers, demo and tests written (`core/io/EEGSource.m`, `core/demo/demoEEG.m`, `tests/EEGFormatsTest.m`); the form for plain `.mat` files comes with the window in step 2. EEGLAB, FieldTrip, plain `.mat`. Synthetic demo with known answers: 32 channels on 10-20 positions, three conditions, a known P1 / N1 / P300 and scalp distribution, known alpha, some trials already rejected; a rodent version with a few skull electrodes. The demo is written in every supported format, so each importer is tested against the same data. |
 | 📅 | 2. EEG Analysis window | Overview (channels, trials per condition, what was already done), ERP per condition (butterfly, chosen channels, difference waves), peak and mean amplitude in a window per participant, sent to Groups & statistics (conditions within participants use the repeated-measures tests). |
 | 📅 | 3. Electrode layouts | Templates, position files, bregma coordinates and the layout check. |
 | 📅 | 4. Scalp maps | Topography at a time or window: spherical spline on scalp layouts, flat interpolation on skull layouts; tested on the demo's known distribution. |
