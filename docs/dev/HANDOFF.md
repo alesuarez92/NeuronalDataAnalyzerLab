@@ -33,9 +33,13 @@ Owner decision: step 2 continues on the same branch (no PR for step 1 alone).
   `EEGAnalysisWalkthroughTest/testRodentContinuousAndPlainMat` — after the rodent file, the channel
   boxes still held `V1-L, V1-R`, so Show ERPs failed on the scalp .mat files. Fixed in the app
   (`setData` keeps only typed channels the new files have; test checks it). CI run 36213530376 on 8dbf4c0: green (all tests pass).
-- Screenshots (artifact `window-screenshots`) could not be reviewed: the session's network policy
-  blocks `productionresultssa14.blob.core.windows.net` (artifact downloads). The owner can allow that
-  host in the environment's Network access settings, or look at the artifact on GitHub.
+- Screenshot review: artifact downloads are blocked here (Azure blob hosts), so the screenshots workflow
+  got a `source` input (make the screenshots from a branch, not only main) and was run on this branch
+  with include_all (commit 7322e8b; review-screens/ removed again afterwards). EEG frames showed:
+  hidden butterfly lines / SEM shades left behind (`cla` keeps hidden handles), a y axis stuck at
+  [0 1] (ylim read before the first draw, then fixed), measures listed in each file's condition order.
+  All fixed in the app, with test checks. The same push has the two Histology fixes (session pixel
+  note; Help / website 2.6 px, listed as a row to check). CI on this push: pending.
 
 ## Next
 1. Check that CI run (GitHub MCP `actions_list` / `get_job_logs`). Likely places for failures:
@@ -43,8 +47,8 @@ Owner decision: step 2 continues on the same branch (no PR for step 1 alone).
    butterfly line count, edge-peak test with window [0.2 0.3], session reopen equality);
    `DemoDataTest.testWriteAll` (now writes eeg/); `MethodsWriterTest.testEEGAnalysis` string checks.
    Fix, re-run, keep CI runs few.
-2. Look at the walkthrough screenshots (artifact `window-screenshots`) for layout problems
-   (left cards 360 px; plot bar widths; the map form 560 x 560).
+2. After CI is green, re-run the screenshots workflow (source = this branch, include_all) only if
+   the EEG plots need another look; remove review-screens/ before merging.
 3. Then step 2 is done: ROADMAP step 2 -> ✅ when merged; open the PR for steps 1 + 2 only when the
    owner asks (delete this file first).
 4. Later: website pages for EEG (step 7), steps 3-6 of the EEG plan.
@@ -53,8 +57,6 @@ Owner decision: step 2 continues on the same branch (no PR for step 1 alone).
 - Statistics for EEG are inside the EEG window now (the recommended option). OK, or should values also
   go to Signal Characterization's Groups & statistics?
 - v0.4.0 release (still unanswered).
-- Two small Histology app fixes (session pixel-size note says "Typed by you." after reopening;
-  Help/website say 2.7 px and "nothing to warn about", the app shows 2.6 px and a "Check" row).
 - Which EEG cleaning tools / systems the lab uses (owner said: general first, specialise later).
 
 ## Working rules learned

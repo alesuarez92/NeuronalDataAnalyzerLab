@@ -868,6 +868,9 @@ classdef EEGAnalysisApp < handle
         %% plotERP - Conditions, butterfly or difference wave of the shown participant(s)
         function plotERP(app)
             ax = app.AxERP;
+            % cla keeps objects with hidden handles (butterfly lines, SEM shades): delete them all
+            delete(allchild(ax));
+            ax.YLimMode = 'auto';   % the measure window fixes the limits; each view starts free
             if isempty(app.ERPs)
                 if isempty(app.Loaded)
                     UIKit.emptyAxes(ax, 'Load EEG files (or Try demo data) to begin');
@@ -877,7 +880,6 @@ classdef EEGAnalysisApp < handle
                 return;
             end
             T = UITheme;
-            cla(ax);
             hold(ax, 'on');
             chans = app.ERPSettings.channels;
             where = ifelse(isempty(chans), 'all channels (average)', strjoin(chans, ', '));
@@ -935,7 +937,7 @@ classdef EEGAnalysisApp < handle
             end
             if ~isempty(app.MeasureSettings)
                 wm = app.MeasureSettings.Window * 1000;
-                yl = ylim(ax);
+                yl = dataRange(ax);   % not ylim(ax): before the first draw it can still be [0 1]
                 patch(ax, [wm(1) wm(2) wm(2) wm(1)], [yl(1) yl(1) yl(2) yl(2)], T.accent, 'FaceAlpha', 0.1, ...
                     'EdgeColor', 'none', 'HandleVisibility', 'off');
                 ylim(ax, yl);
@@ -1000,8 +1002,15 @@ classdef EEGAnalysisApp < handle
         % forTable: latency in ms and a text check; otherwise s and a flag.
         function rows = measureRows(app, forTable)
             rows = cell(0, 6);
+            order = {};
+            if ~isempty(app.ERPs), order = app.analysisERP(1).conditions; end
             for p = 1:numel(app.Measures)
                 r = app.Measures{p};
+                % Same condition order for every participant (that of the ERPs; others after)
+                [~, pos] = ismember({r.condition}, order);
+                pos(pos == 0) = numel(order) + find(pos == 0);
+                [~, k] = sort(pos);
+                r = r(k);
                 for c = 1:numel(r)
                     if forTable
                         lat = round(r(c).latency * 1000, 1);
@@ -1274,6 +1283,18 @@ function setButtonStyle(b, style)
     else
         b.BackgroundColor = T.secondaryBg; b.FontColor = T.secondaryFg; b.FontWeight = 'normal';
     end
+end
+
+%% dataRange - [low high] of the lines and shades drawn in ax, with a 5% margin
+function yl = dataRange(ax)
+    h = findall(ax, 'Type', 'line', '-or', 'Type', 'patch');
+    y = get(h, 'YData');
+    if iscell(y), y = cellfun(@(v) v(:)', y, 'UniformOutput', false); y = [y{:}]; else, y = y(:)'; end
+    y = y(isfinite(y));
+    if isempty(y), yl = [-1 1]; return; end
+    lo = min(y); hi = max(y);
+    pad = 0.05 * max(hi - lo, eps);
+    yl = [lo - pad, hi + pad];
 end
 
 %% lighten - Colour mixed with white (f = 0: unchanged, 1: white)

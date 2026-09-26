@@ -125,6 +125,9 @@ function testEEGDemo(tests)
     tests.verifyTrue(all(Y(:, 3) > Y(:, 1)), 'Novel > Standard in every participant');
     tests.verifyEqual(mean(Y), [1.5 7 4], 'AbsTol', 1.5, 'about 1.5, 7 and 4 uV (Help)');
     tests.verifySize(app.MeasuresTable.Data, [24 6]);
+    tests.verifyNumElements(findall(app.AxERP, 'Type', 'line'), 3, 'one line per condition, no butterfly left over');
+    tests.verifyEqual(app.MeasuresTable.Data(1:3, 2)', app.Grand.conditions, 'conditions in the order of the ERPs');
+    tests.verifyEqual(app.MeasuresTable.Data(4:6, 2)', app.Grand.conditions);
     tests.verifyEqual(app.MeasureInfo.Text, 'Mean amplitude from 300 to 400 ms, at Pz.');
     tests.verifyEqual(char(app.StatsBtn.Enable), 'on');
     tests.verifyEqual(char(app.ExportBtn.Enable), 'on');
@@ -221,6 +224,8 @@ function testRodentContinuousAndPlainMat(tests)
     tests.verifyLessThan(r.value, -25, 'VEP negative peak over V1');
     tests.verifyEqual(r.latency, 0.05, 'AbsTol', 0.006);
     tests.verifyEqual(r.n, 30);
+    yl = app.AxERP.YLim;
+    tests.verifyTrue(yl(1) < r.value && yl(2) > 10, 'the y axis shows the whole VEP');
     tests.verifyEqual(char(app.StatsBtn.Enable), 'off', 'statistics need two participants');
     shot(tests, app, 'EEGAnalysisApp_09_rodent_vep');
 
