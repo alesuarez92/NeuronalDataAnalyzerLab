@@ -770,6 +770,9 @@ classdef EEGAnalysisApp < handle
                 app.CutInfo.FontColor = UITheme.warning;
             end
             app.FileInfo.FontColor = UITheme.sectionTitleColor;
+            % Channels typed for earlier files: keep only those the new files have
+            app.ChannelsEdit.Value = channelText(keepChannels(app.ChannelsEdit.Value, e1.labels));
+            app.MeasureChannelsEdit.Value = channelText(keepChannels(app.MeasureChannelsEdit.Value, e1.labels));
             items = names;
             if numel(names) > 1, items = [{app.GrandLabel}, names]; end
             app.ParticipantDrop.Items = items;
@@ -1285,6 +1288,12 @@ function c = channelList(x)
     if isempty(x), c = {}; return; end
     c = strtrim(strsplit(x, {',', ';'}));
     c = c(~cellfun(@isempty, c));
+end
+
+%% keepChannels - The names in x (text or cell) that are among labels (any case)
+function c = keepChannels(x, labels)
+    c = channelList(x);
+    c = c(ismember(lower(c), lower(labels)));
 end
 
 %% channelText - {'Cz', 'FCz'} (or text) -> 'Cz, FCz'

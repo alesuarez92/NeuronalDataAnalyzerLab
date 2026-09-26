@@ -1,4 +1,4 @@
-# Handoff (2026-09-26, session 7, end: context budget reached)
+# Handoff (2026-09-26, session 8)
 
 Working branch: `claude/admiring-cori-52ekpa` (= main 4852898 + EEG roadmap + EEG step 1 + EEG step 2).
 Owner decision: `docs/dev/` stays out of `main`. **Delete this file before merging the next PR.**
@@ -29,8 +29,13 @@ Owner decision: step 2 continues on the same branch (no PR for step 1 alone).
   to change if the owner prefers the Signal Characterization route.
 
 ## In flight
-- The push of this handoff starts the MATLAB CI on the branch (first run with the window).
-  **Nothing of the window has run in MATLAB yet** (Octave has no uifigure). Expect fixes.
+- First MATLAB CI run with the window (run 92, 0a50d7f): 299 passed, 1 failed:
+  `EEGAnalysisWalkthroughTest/testRodentContinuousAndPlainMat` — after the rodent file, the channel
+  boxes still held `V1-L, V1-R`, so Show ERPs failed on the scalp .mat files. Fixed in the app
+  (`setData` keeps only typed channels the new files have; test checks it). CI run on that push pending.
+- Screenshots (artifact `window-screenshots`) could not be reviewed: the session's network policy
+  blocks `productionresultssa14.blob.core.windows.net` (artifact downloads). The owner can allow that
+  host in the environment's Network access settings, or look at the artifact on GitHub.
 
 ## Next
 1. Check that CI run (GitHub MCP `actions_list` / `get_job_logs`). Likely places for failures:

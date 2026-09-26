@@ -237,6 +237,8 @@ function testRodentContinuousAndPlainMat(tests)
     tests.verifyEqual(app.Maps{1}.data, 'eeg');
     tests.verifyEqual(app.Maps{1}.dims, {'trial', 'channel', 'time'});
     tests.verifyEqual(size(app.EEGs{2}.data), [32 250 65]);
+    tests.verifyEmpty(app.ChannelsEdit.Value, 'the rodent channels are not in the scalp files');
+    tests.verifyEmpty(app.MeasureChannelsEdit.Value);
     tests.verifyTrue(logical(app.showERPs()));
     tests.verifyNumElements(app.Grand.conditions, 3);
     shot(tests, app, 'EEGAnalysisApp_10_plain_mat', 'Overview');
