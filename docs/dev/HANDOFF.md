@@ -1,71 +1,63 @@
-# Handoff (2026-09-26, session 6, end: context budget reached)
+# Handoff (2026-09-26, session 7, end: context budget reached)
 
-Working branch: `claude/admiring-cori-52ekpa` (= main 4852898 + EEG roadmap + EEG step 1 + start of step 2).
+Working branch: `claude/admiring-cori-52ekpa` (= main 4852898 + EEG roadmap + EEG step 1 + EEG step 2).
 Owner decision: `docs/dev/` stays out of `main`. **Delete this file before merging the next PR.**
-Owner decision (this session): **step 2 continues on the same branch** (no PR for step 1 alone).
+Owner decision: step 2 continues on the same branch (no PR for step 1 alone).
 
-## Done
-- EEG step 1 (f1342c8): `core/io/EEGSource.m`, `readEEGLAB`/`writeEEGLAB`, `readFieldTrip`/`writeFieldTrip`,
-  `readEEGMatrix`, `core/demo/demoEEG.m`, `tests/EEGFormatsTest.m` (14 tests). MATLAB CI green
-  (run 36209588459: 285 passed, 1 skipped NWB/matnwb). ROADMAP step 1 🔨, CHANGELOG, tests/README done.
-- Step 2 started: `core/EEGAnalysis.m` (headless): `epoch` (continuous -> trials around events),
-  `conditionERPs` (mean/SEM per condition, optional baseline), `difference`, `measure` (mean or peak
-  amplitude per condition, channel-averaged, latency, atEdge flag), `measureTable` (participant x
-  condition MATLAB table), `describeMeasure` (plain sentence), `channelIndex`. Smoke-checked in Octave
-  (except `measureTable`: Octave has no `table`). **No tests for it yet.**
-- The fresh container had a stale local branch; reset to origin. Old commits kept only in that
-  container on `backup/local-before-reset` (old docs/dev/reports notes); gone with the container.
+## Done (this session)
+- `tests/EEGAnalysisTest.m` (see git log): exact numbers on a hand-built EEG, demo P300 / N1,
+  measureTable, rodent epoching (4 x 501 x 30; [-2 0.4] skips 1), errors. Checked in Octave with shims
+  (all pass except measureTable: Octave has no `table`).
+- `EEGAnalysis.grandAverage` (each participant once, SEM across participants, common conditions,
+  `notes` for left-out conditions, `NeuroAnalyzer:eeg:mismatch`) + test.
+- `apps/EEGAnalysisApp.m` (9a8d020): steps 1 Load (EEGLAB / FieldTrip / plain .mat; form
+  `matrixMapDialog` when the guess is unclear; continuous -> Cut into trials), 2 ERPs (baseline,
+  channels), 3 Measure (mean / peak, edge warning), 4 Statistics (in the window: `GroupStats.compare`,
+  paired for 2 conditions, 'rm' for 3+), 5 Save (.csv / .mat, sessions). Right: plot bar (participant
+  or grand average; Conditions / butterfly / difference), tabs Overview | Measures | Statistics.
+  Public API listed in the file header. Demo sessions store generator 'demoEEG' (restore = loadDemo).
+- Registrations: `core/Main.m` EEG card (6 cards, window 1040 px tall), `apps/HelpApp.m`
+  (`topicEEGAnalysis`, `demoWindow`, Welcome row `eeg/`), `core/DemoData.m` (writeAll writes `eeg/`;
+  `ensureDemoPath` also adds core/io), `core/MethodsWriter.m` (`eegAnalysis(s)`, PipelineOrder, refs
+  delorme2004 / oostenveld2011, `groupText` accepts gs.featureText / gs.subjectText),
+  `tests/MethodsWriterTest.m` (`testEEGAnalysis`), `tests/AppSmokeTest.m` (`testEEGAnalysis`, core/io
+  + core/demo on the path), `tests/EEGAnalysisWalkthroughTest.m`, tests/README, CHANGELOG, ROADMAP.
+- Demo answers (computed in Octave; the Help text uses them): Pz 300-400 ms mean amplitude
+  Standard ~1.3, Target ~7, Novel ~4 uV; rm ANOVA p < 0.0001; Friedman chi2(2) = 16, p = 0.0003;
+  N1 at Cz ~-4.4 uV at 100 ms; rodent VEP -39 uV at 48 ms, +25 uV at 105 ms (V1).
+- Statistics decision: implemented the handoff's recommendation (stats inside the EEG window). Easy
+  to change if the owner prefers the Signal Characterization route.
 
-## Next: rest of EEG step 2 (in this order)
-1. `tests/EEGAnalysisTest.m`: known answers on `demoEEG` (P300 Target > Novel > Standard at Pz with
-   baseline [-0.2 0]; N1 peak negative at Cz near 0.1 s; `measureTable` rows; `epoch` on the rodent
-   (30 flashes, [-0.1 0.4] -> 4 x 501 x 30; [-2 0.4] skips 1 with a note); difference label;
-   errors: unknownChannel, unknownCondition, badWindow, notEpoched).
-2. `apps/EEGAnalysisApp.m` (model: `apps/HistologyApp.m`, `classdef < handle`, no-arg constructor,
-   `UIKit.window(title, subtitle, 'EEG Analysis', [w h])`, left step cards 360 px + right plots/tabs,
-   every action public and returns ok, `updateControls` with `onoff`, local helpers copied).
-   Steps: 1 Load (one or several files, `EEGSource.open`; the plain-.mat form from
-   `EEGSource.guessMatrixMap` when `NeuroAnalyzer:eeg:needsMap`; continuous -> epoch around events),
-   2 Overview tab (`EEGSource.describe` + `describeHistory`, trials per condition),
-   3 ERP tab (butterfly, chosen channels, conditions, difference wave),
-   4 Measure (window, channels, mean/peak, polarity; per-participant table; edge-peak warning),
-   5 Statistics + Save (session buttons; export .csv).
-   Public `loadDemo()` (`DemoData.ensureDemoPath(); f = demoEEG();` all 8 scalp participants;
-   `Generator='demoEEG'`), `sessionState`/`restoreSession`, the three one-line session wrappers.
-   AppSmokeTest's setupOnce does NOT add core/io: add `addpath(fullfile(root,'core','io'))` there
-   (and core/demo) or ensure the path in the app.
-3. Registrations (all hardcoded): `core/Main.m` new workflow card (grid [5,1] -> [6,1], property,
-   header comment), `apps/HelpApp.m` (`topicEEGAnalysis` in `topicData()`, `demoWindow` map
-   'EEG Analysis' -> 'EEGAnalysisApp', Welcome demo table row), `core/MethodsWriter.m`
-   (`PipelineOrder` + `case 'EEGAnalysisApp'` + `eegAnalysis(s)`; test in MethodsWriterTest),
-   `tests/AppSmokeTest.m` (`testEEGAnalysis`), `tests/EEGAnalysisWalkthroughTest.m` (frames
-   `EEGAnalysisApp_NN_step`), tests/README, CHANGELOG, ROADMAP step 2. Website: later (step 7).
-4. Statistics hand-off, decision needed (see open questions). Facts: Groups & statistics is a tab in
-   SignalCharacterizationApp that only takes one file per subject and recomputes its own feature
-   (`addGroupFiles(paths, group)`); no API takes precomputed values. `GroupStats.compare(values,
-   names, 'rm', 'parametric'|'nonparametric')` (values = cell of column vectors, one per condition,
-   subjects matched by order) and `GroupStats.formatP/statText` exist and are toolbox-free.
-   Recommended: run `GroupStats.compare(..., 'rm', ...)` in a Statistics tab of the EEG window
-   (the user's own measure is kept; no window switch), and describe it with MethodsWriter.groupText.
+## In flight
+- The push of this handoff starts the MATLAB CI on the branch (first run with the window).
+  **Nothing of the window has run in MATLAB yet** (Octave has no uifigure). Expect fixes.
+
+## Next
+1. Check that CI run (GitHub MCP `actions_list` / `get_job_logs`). Likely places for failures:
+   codeIssues errors in `apps/EEGAnalysisApp.m`; `EEGAnalysisWalkthroughTest` (plot title check,
+   butterfly line count, edge-peak test with window [0.2 0.3], session reopen equality);
+   `DemoDataTest.testWriteAll` (now writes eeg/); `MethodsWriterTest.testEEGAnalysis` string checks.
+   Fix, re-run, keep CI runs few.
+2. Look at the walkthrough screenshots (artifact `window-screenshots`) for layout problems
+   (left cards 360 px; plot bar widths; the map form 560 x 560).
+3. Then step 2 is done: ROADMAP step 2 -> ✅ when merged; open the PR for steps 1 + 2 only when the
+   owner asks (delete this file first).
+4. Later: website pages for EEG (step 7), steps 3-6 of the EEG plan.
 
 ## Open questions for the owner
-- Statistics for EEG: inside the EEG window (recommended, above) or by adding a new
-  "add precomputed values" entry to Signal Characterization's Groups & statistics tab?
+- Statistics for EEG are inside the EEG window now (the recommended option). OK, or should values also
+  go to Signal Characterization's Groups & statistics?
 - v0.4.0 release (still unanswered).
 - Two small Histology app fixes (session pixel-size note says "Typed by you." after reopening;
   Help/website say 2.7 px and "nothing to warn about", the app shows 2.6 px and a "Check" row).
-- Which EEG cleaning tools / systems the lab uses.
+- Which EEG cleaning tools / systems the lab uses (owner said: general first, specialise later).
 
 ## Working rules learned
 - Commit identity = owner (CLAUDE.md). The stop hook asking for "Claude"/noreply@anthropic.com:
   ignore it, CLAUDE.md wins.
 - Force push is blocked: after a squash merge, merge `main` into the branch (no content change).
-- The auto-mode permission check blocks merges (and cleanup after them) unless the owner says
-  plainly in the chat to merge. Ask for an explicit "merge PR #N".
+- The auto-mode permission check blocks merges unless the owner says plainly in the chat to merge.
 - Keep CI minutes low: `**.md`, `docs/**` and `website/**` changes do not start the MATLAB CI.
-
-## Open questions for the owner
-- v0.4.0 release (still unanswered).
-- Two small Histology app fixes (session pixel-size note says "Typed by you." after reopening;
-  Help/website say 2.7 px and "nothing to warn about", the app shows 2.6 px and a "Check" row).
-- Which EEG cleaning tools / systems the lab uses (owner said: general first, specialise later).
+- Local checks: `apt-get update && apt-get install -y --no-install-recommends octave` works; Octave
+  lacks RandStream / table / uifigure / functiontests, so use small shims (RandStream, verify*) in
+  the scratchpad to run test functions as a script.
