@@ -24,7 +24,7 @@ Owner decision: `docs/dev/` stays out of `main`. **Delete this file before mergi
   `backup/local-before-reset` in that container (old `docs/dev/reports/*.md` notes, not in main).
 
 ## Next steps
-1. Check MATLAB CI for the EEG step 1 push; fix anything MATLAB-only (Octave cannot run functiontests).
+1. Done: MATLAB CI run 36209588459 on 5d41ef3 is green (285 passed, 0 failed, 1 skipped: NWB/matnwb).
 2. Open the PR for step 1 when the owner wants (delete this file first), or continue with step 2 on
    the same branch: EEG Analysis window (overview incl. `EEGSource.describe` / `describeHistory`,
    ERP per condition, peak / mean amplitude per participant -> Groups & statistics), the plain-.mat
