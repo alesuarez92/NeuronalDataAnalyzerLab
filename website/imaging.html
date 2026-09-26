@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Imaging · NeuroAnalyzer</title>
-<meta name="description" content="ROI Analysis in NeuroAnalyzer: motion correction, cell detection, ΔF/F, kymograph and robust vessel diameter, shown on synthetic stacks.">
+<meta name="description" content="Imaging in NeuroAnalyzer: ROI Analysis (motion correction, cell detection, ΔF/F, kymograph, robust vessel diameter) and Histology / culture (cell and marker counts per region), shown on synthetic data.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/fonts/fonts.css">
@@ -86,6 +86,8 @@
 <li><b>Regions</b>: add <b>Region A</b> = left half (x ≤ 200.5) and <b>Region B</b> = right half: <b>30 cells</b> each (<b>375 per mm²</b>, 0.08 mm² each). Marker-positive per region: <b>12 and 12 on day 1</b>, <b>18 and 21 on day 3</b> (after aligning). Without aligning, the Checks tab warns that the regions cover different tissue in the two images.</li>
 <li><b>Checks tab</b> (aligned, default settings): pixel size read from the file; image 2 moved by about 9.2 px right and 6.4 px up; the marker channel was about 2.7 px off (corrected); <b>20 small objects</b> and <b>1 elongated object</b> not counted; <b>6 extra cells</b> found by splitting the touching pairs.</li>
 </ul></div>
+<h4>Walkthrough on the demo culture</h4>
+<div data-tour="histology" data-label="Histology walkthrough"><noscript><p class="note">The walkthrough needs JavaScript. The frames are in <code>assets/frames/</code>.</p></noscript></div>
 <p>Step-by-step instructions and troubleshooting: <a href="guide.html#histology">Histology / culture in the guide</a>.</p></section>
 
 </main>
