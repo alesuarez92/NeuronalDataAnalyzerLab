@@ -26,10 +26,10 @@ Owner decision: `docs/dev/` stays out of `main`. **Delete this file before mergi
 - Checked locally in Octave (shims for verify* / RandStream / DemoData): all BrainVision tests pass.
   Fixed on the way: `strsplit` collapses ',,' by default (use 'CollapseDelimiters', false);
   Octave needs Latin-1 decoded with native2unicode and no char(956) literal.
-- MATLAB CI on this push: pending.
+- MATLAB CI run 36262255942 on b3d2eb2: green. Paused here at the owner's request.
 
 ## Next
-1. Check that CI run; fix if red.
+1. (done) CI green.
 2. Open the PR for BrainVision when the owner asks (delete this file first).
 3. Then, per ROADMAP: EDF / BDF reader, or step 3 (electrode layouts), as the owner prefers.
 
