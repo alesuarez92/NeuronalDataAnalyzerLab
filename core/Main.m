@@ -17,6 +17,8 @@
 %   Electrophysiology: 1 Extract -> 2 LFP analysis or 2 MUA analysis
 %   Imaging:           ROI analysis (stacks over time) or Histology / culture
 %                      (still images: count cells, markers, regions)
+%   EEG:               EEG analysis (cleaned EEG from EEGLAB, FieldTrip or
+%                      MATLAB: ERPs per condition, measures, statistics)
 %   Response features: Signal Characterization
 %   Batch:             Batch processing (one pipeline on many files)
 % =========================================================================
@@ -37,6 +39,7 @@ classdef Main < handle
         LDFPanel
         EphysPanel
         ImagingPanel
+        EEGPanel
         CharPanel
         BatchPanel
         % Step buttons
@@ -48,6 +51,7 @@ classdef Main < handle
         ProcessMUABtn
         ROIBtn             % Open ROI / image analysis
         HistologyBtn       % Open Histology / culture (HistologyApp)
+        EEGBtn             % Open EEG analysis (EEGAnalysisApp)
         CharBtn            % Open Signal Characterization
         BatchBtn           % Open Batch processing
         % Environment checks (set by checkSignalToolbox / checkTDTSDK)
@@ -71,7 +75,7 @@ classdef Main < handle
         function buildUI(app)
             T = UITheme;
             app.UIFig = uifigure('Name', 'Neuronal Data Analyzer Lab', ...
-                'Position', UIKit.centeredPosition([1060 940]), 'Resize', 'on', ...
+                'Position', UIKit.centeredPosition([1060 1040]), 'Resize', 'on', ...
                 'Color', T.bgGray);
             UIKit.setAppIcon(app.UIFig);
 
@@ -130,8 +134,8 @@ classdef Main < handle
 
             % === WORKFLOW CARDS ===
             app.ContentPanel = uipanel(mainGrid, 'BackgroundColor', T.bgGray, 'BorderType', 'none');
-            contentGrid = uigridlayout(app.ContentPanel, [5, 1], ...
-                'RowHeight', {'1x', '1x', '1x', '1x', '1x'}, 'Padding', [16 10 16 10], ...
+            contentGrid = uigridlayout(app.ContentPanel, [6, 1], ...
+                'RowHeight', {'1x', '1x', '1x', '1x', '1x', '1x'}, 'Padding', [16 10 16 10], ...
                 'RowSpacing', 10, 'BackgroundColor', T.bgGray, 'Scrollable', 'on');
 
             % --- LDF ---
@@ -201,6 +205,20 @@ classdef Main < handle
                  'Align them, count cells, find marker-positive cells, count per region and per mm2. ' ...
                  'Output: cells and counts as .csv or .mat.'], app);
             chainNote(chain, 'Count cells · Markers · Regions · Align', 5);
+
+            % --- EEG ---
+            [app.EEGPanel, chain] = app.workflowCard(contentGrid, ...
+                'EEG  ·  ERPs, measures and statistics', ...
+                'Cleaned EEG (scalp or rodent): average the trials of each condition, measure a component, compare conditions.', ...
+                'In: EEGLAB .set, FieldTrip .mat or plain .mat  ·  Out: measures .csv / .mat', ...
+                'EEG Analysis');
+            app.EEGBtn = chainButton(chain, 1, 'EEG analysis', @()EEGAnalysisApp(), ...
+                ['Input: one file per participant, already cleaned in EEGLAB (.set), FieldTrip (.mat) or ' ...
+                 'MATLAB (a plain .mat array; a short form asks what its variables are); trials or a ' ...
+                 'continuous recording with events. ERPs per condition, mean or peak amplitude in a time ' ...
+                 'window, statistics between conditions. Output: one row per participant and condition as ' ...
+                 '.csv, or everything as .mat.'], app);
+            chainNote(chain, 'ERPs · Difference waves · Mean / peak amplitude · Statistics');
 
             % --- Response features ---
             [app.CharPanel, chain] = app.workflowCard(contentGrid, ...

@@ -18,6 +18,8 @@ function setupOnce(tests)
     addpath(fullfile(root, 'apps'));
     addpath(fullfile(root, 'core'));
     addpath(fullfile(root, 'core', 'imaging'));
+    addpath(fullfile(root, 'core', 'io'));
+    addpath(fullfile(root, 'core', 'demo'));
     tests.TestData.outDir = fullfile(root, 'test-artifacts', 'screens');
     if ~exist(tests.TestData.outDir, 'dir'), mkdir(tests.TestData.outDir); end
     % Launcher prompts for project folders when none are set
@@ -76,6 +78,7 @@ function testLFPAnalysis(tests),            openAndCapture(tests, 'LFPAnalysisAp
 function testMUAAnalysis(tests),            openAndCapture(tests, 'MUAAnalysisApp', @() MUAAnalysisApp()); end
 function testROIAnalysis(tests),            openAndCapture(tests, 'ROIAnalysisApp', @() ROIAnalysisApp()); end
 function testHistology(tests),              openAndCapture(tests, 'HistologyApp', @() HistologyApp()); end
+function testEEGAnalysis(tests),            openAndCapture(tests, 'EEGAnalysisApp', @() EEGAnalysisApp()); end
 function testSignalCharacterization(tests), openAndCapture(tests, 'SignalCharacterizationApp', @() SignalCharacterizationApp()); end
 function testBatch(tests),                  openAndCapture(tests, 'BatchApp', @() BatchApp()); end
 function testVirtualLab(tests),             openAndCapture(tests, 'VirtualLabApp', @() VirtualLabApp()); end

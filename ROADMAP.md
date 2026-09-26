@@ -36,6 +36,71 @@ them exposed two limits, which are now fixed.
 | ✅ | Session files and reports | Reproducibility | Save settings, input-file provenance (with checksums) and results together; a one-page PDF report per analysis for the lab notebook. |
 | ✅ | CSD methods | LFP | Inverse CSD (delta, step, spline) and kernel CSD next to the standard CSD, tested against laminar data with a known CSD. |
 | ✅ | Repeated-measures statistics | Response features | Repeated-measures ANOVA with sphericity checks and corrections, and the Friedman test, for the same animals in several conditions. |
+| 🔨 | EEG | New pipeline | Scalp and rodent EEG, first from data already cleaned in MATLAB (done in v0.4.0: EEG Analysis window), then from raw recordings of the most used systems. Plan below. |
+
+## EEG
+
+EEG will get its own window, reusing the ERP, time–frequency and statistics
+code the LFP window already uses. It will stay general at first (any
+electrode layout, the most used file formats); formats and features for
+particular labs and systems will be added when they are needed.
+
+**Data already cleaned in MATLAB comes first.** Cleaned EEG is usually
+already cut into trials with a condition per trial, so the window accepts
+trials as well as continuous recordings. Nothing is cleaned a second time:
+what was already done (filters, rejected trials, removed ICA components,
+interpolated channels) is read from the file and shown in plain words, and
+the data are used as they are. EEGLAB and FieldTrip are not needed to read
+their files.
+
+### Formats
+
+| | Source | Notes |
+|---|---|---|
+| ✅ | EEGLAB (`.set` / `.fdt`, or an `EEG` variable in a `.mat`) | Trials, events, channel positions, removed ICA components and history. |
+| ✅ | FieldTrip raw and averaged structures | `trial`, `time`, `label`, `trialinfo`, electrode positions; history from `cfg.previous`. |
+| ✅ | Plain matrix `.mat` | A form says which variable is the data, the sampling rate, the trial and channel dimensions and the conditions. No code needed. |
+| 📅 | EDF / EDF+ / BDF | BioSemi, most clinical systems, and exports from OpenBCI, Natus, Compumedics and others. |
+| 📅 | BrainVision (`.vhdr` / `.eeg` / `.vmrk`) | Brain Products; also a common export from MNE and EEGLAB. |
+| 📅 | EGI `.mff` | Magstim EGI geodesic nets. |
+| 📅 | EEG-BIDS folders | Shared datasets (OpenNeuro): the readers above plus the channel, electrode and event tables. |
+| 🟢 | Neuroscan / ANT `.cnt`, g.tec, Brainstorm, ERPLAB | Later, when needed: one small, separately tested reader each. |
+
+NWB recordings are already read by Extract Ephys.
+
+### Electrode layouts (any convention)
+
+- Positions stored in the file are used first (EEGLAB `chanlocs`, FieldTrip
+  `elec`, BrainVision coordinates, EGI sensor layouts, BIDS `electrodes.tsv`,
+  NWB electrode tables).
+- Otherwise a template is matched to the channel names: 10-20, 10-10 and
+  10-5 (computed from the system's definition; old and new names such as
+  T3 / T7 both accepted, any case), BioSemi A1–D32 and EGI HydroCel
+  (manufacturers' published coordinates, after checking their licence),
+  EasyCap / actiCAP.
+- Your own layout: a positions file (`.elc`, `.sfp`, `.loc` / `.locs`,
+  `.ced`, `.xyz`, `.elp`, `.bvef`, or a CSV of name and x / y / z or angle
+  / radius), or a small editor.
+- Rodent and other skull montages: positions in mm from bregma
+  (anterior–posterior, medial–lateral), drawn on a skull outline.
+- Every format's coordinates are converted to one orientation; tests check
+  that the same electrode from different files lands in the same place.
+- A layout check draws every electrode on the head (or skull) and lists
+  the channels matched, renamed (for example "T3 treated as T7"), without
+  a position, duplicated or outside the head. It is confirmed before any
+  map is drawn. Without positions, everything except scalp maps still works.
+
+### Steps (one pull request each, with tests, demo data and Help)
+
+| | Step | Notes |
+|---|---|---|
+| ✅ | 1. Data model and MATLAB importers | `core/io/EEGSource.m`, `core/demo/demoEEG.m`, `tests/EEGFormatsTest.m`; the form for plain `.mat` files is in the window (step 2). EEGLAB, FieldTrip, plain `.mat`. Synthetic demo with known answers: 32 channels on 10-20 positions, three conditions, a known P1 / N1 / P300 and scalp distribution, known alpha, some trials already rejected; a rodent version with a few skull electrodes. The demo is written in every supported format, so each importer is tested against the same data. |
+| ✅ | 2. EEG Analysis window | In v0.4.0 (`apps/EEGAnalysisApp.m`, `core/EEGAnalysis.m`, tests, Help, launcher card, sessions and methods text): Overview (channels, trials per condition, what was already done), the form for plain `.mat` files, continuous recordings cut into trials, ERP per condition (butterfly, chosen channels, difference waves, grand average), peak and mean amplitude in a window per participant, and the repeated-measures statistics of Groups & statistics run in the window itself on those values (they stay in the EEG window; not sent to Signal Characterization). |
+| 📅 | 3. Electrode layouts | Templates, position files, bregma coordinates and the layout check. |
+| 📅 | 4. Scalp maps | Topography at a time or window: spherical spline on scalp layouts, flat interpolation on skull layouts; tested on the demo's known distribution. |
+| 📅 | 5. Time–frequency per condition | ERSP / ITPC and band power from the existing time–frequency code. |
+| 📅 | 6. Raw recordings | EDF / BDF, BrainVision, EGI `.mff`, EEG-BIDS, each with a tested writer. Basic steps only: filter, re-reference, cut trials at events, reject trials by amplitude, mark bad channels. ICA and advanced cleaning stay in EEGLAB / FieldTrip; Help explains how to bring their result back. |
+| 📅 | 7. Batch, sessions, methods text, website | Same as the other pipelines, plus a walkthrough and later an EEG lesson in the virtual lab. |
 
 ## Direction: understand, check and teach
 

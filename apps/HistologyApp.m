@@ -743,8 +743,8 @@ classdef HistologyApp < handle
             elseif ~app.openFiles({s.inputs.path})
                 return;
             end
-            app.setPixelSize(cfg.pixelSizeUm);
-            app.PixelSizeFromFile = cfg.pixelSizeFromFile;
+            % A pixel size from the file is read again; only a typed one is re-typed
+            if ~cfg.pixelSizeFromFile, app.setPixelSize(cfg.pixelSizeUm); end
             app.Landmarks = cfg.landmarks;
             % Re-apply the alignment that was applied (the controls may show a newer choice)
             if ~strcmp(cfg.alignedMethod, 'none') || cfg.channelsAligned

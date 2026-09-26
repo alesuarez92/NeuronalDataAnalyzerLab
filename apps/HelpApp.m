@@ -462,7 +462,7 @@ classdef HelpApp < handle
                 'Filtering', 'ProcessingLDFApp'; 'LDF Average', 'LDFGrandAverageApp'; ...
                 'Ephys Extract', 'ExtractEphysApp'; 'LFP Analysis', 'LFPAnalysisApp'; ...
                 'MUA Analysis', 'MUAAnalysisApp'; 'ROI Analysis', 'ROIAnalysisApp'; ...
-                'Histology', 'HistologyApp'; ...
+                'Histology', 'HistologyApp'; 'EEG Analysis', 'EEGAnalysisApp'; ...
                 'Signal Characterization', 'SignalCharacterizationApp'; 'Batch processing', 'BatchApp'; ...
                 'Virtual lab', 'VirtualLabApp'};
             k = find(strcmpi(map(:, 1), strtrim(char(topic))), 1);
@@ -478,7 +478,7 @@ classdef HelpApp < handle
                 HelpApp.topicWelcome(), HelpApp.topicLDFExtract(), HelpApp.topicLDFProcess(), ...
                 HelpApp.topicFiltering(), HelpApp.topicLDFAverage(), HelpApp.topicEphysExtract(), ...
                 HelpApp.topicLFPAnalysis(), HelpApp.topicMUAAnalysis(), HelpApp.topicROIAnalysis(), ...
-                HelpApp.topicHistology(), HelpApp.topicSignalCharacterization(), HelpApp.topicBatch(), HelpApp.topicSessions(), ...
+                HelpApp.topicHistology(), HelpApp.topicEEGAnalysis(), HelpApp.topicSignalCharacterization(), HelpApp.topicBatch(), HelpApp.topicSessions(), ...
                 HelpApp.topicVirtualLab()];
         end
 
@@ -488,7 +488,7 @@ classdef HelpApp < handle
                 'NeuroAnalyzer: analysis toolbox for LDF, electrophysiology, imaging and response features.');
             t.quick = {
                 'In the launcher, click **Set folders** and choose your **Import** folder (raw data) and **Export** folder (results). You can use one folder for both.'
-                'Find the card for your data (LDF, Electrophysiology, Imaging, Response features) and click its numbered steps **in order**.'
+                'Find the card for your data (LDF, Electrophysiology, Imaging, EEG, Response features) and click its numbered steps **in order**.'
                 'In every window, work down the numbered step cards on the left: **Load** → **Settings** → **Run** → **Save**. The teal button is the recommended next action; greyed-out buttons are not possible yet.'
                 'Read the **status bar** at the bottom of each window: it says what happened and what to do next.'
                 'Stuck? Click **? Help** in the window header for its quick start and troubleshooting.'
@@ -506,6 +506,7 @@ classdef HelpApp < handle
                 '| demo_lfp_oscillations.mat | LFP Analysis (step 6) | demo_lfp.mat plus 6 Hz theta (40 µV, all channels) and a phase-locked 40 Hz burst (10 µV, 50–250 ms after each stimulus, channels 3–5) |'
                 '| demo_imaging_advanced.mat | ROI Analysis | Jittered stack (±3 px), three cells with distinct event times, a pulsing vessel and a red blood cell crossing the diameter line |'
                 '| demo_histology.mat | Histology / culture | Two images of one culture (day 1, day 3), nuclei + marker channels, 400 × 400 px at 1 µm: 60 nuclei, 24 then 39 marker-positive, debris and a fibre, day 3 shifted on the stage |'
+                '| eeg/ | EEG Analysis | An oddball study: 8 participants, 32 channels at 250 Hz, trials from −0.2 to 0.8 s already cleaned (EEGLAB, FieldTrip and plain .mat): Standard, Target and Novel trials, P300 at Pz Target 10 > Novel 6 > Standard 2 µV, N1 −5 µV at Cz; plus a continuous rodent recording with 30 light flashes |'
                 '| groups/ | Signal Characterization (Groups & statistics) | 24 LDF trial files: the same 8 animals in Control, Stimulated and Drug (true peaks 18, 30 and 24 PU) |'
                 '| formats/ | Ephys Extract | The first 6 s of demo channels 3–6 as an Intan .rhd, an Open Ephys binary folder and an NWB file |'
                 'Each file also stores the ground truth in a `truth` variable. Use **Generate all demo files…** to write them to a folder (and optionally make it your Import folder), or the **Try it with demo data** button on any topic to open that window with its demo already loaded.'};
@@ -927,7 +928,7 @@ classdef HelpApp < handle
                 '* **Not counted**: **20 small specks** of debris (under 15 µm², removed by **Min size**) and **1 long fibre** (removed by **Max elongation**). Uneven illumination is removed by the background step.'
                 '* **Alignment**: day 3 was imaged after the dish went back on the stage, shifted by **6.4 px down and 9.2 px left** ([dy dx] = [6.4 −9.2]); **Shift (automatic)** recovers it to about 0.2 px. The marker channel is shifted by [1 2] px from the nuclei in both images (**Align channels** corrects it).'
                 '* **Regions**: add **Region A** = left half (x ≤ 200.5) and **Region B** = right half: **30 cells** each (**375 per mm²**, 0.08 mm² each). Marker-positive per region: **12 and 12 on day 1**, **18 and 21 on day 3** (after aligning). Without aligning, the Checks tab warns that the regions cover different tissue in the two images.'
-                '* **Checks tab** (aligned, default settings): pixel size read from the file; image 2 moved by about 9.2 px right and 6.4 px up; the marker channel was about 2.7 px off (corrected); **20 small objects** and **1 elongated object** not counted; **6 extra cells** found by splitting the touching pairs.'};
+                '* **Checks tab** (aligned, default settings): pixel size read from the file; image 2 moved by about 9.2 px right and 6.4 px up; the marker channel was about 2.6 px off (corrected; listed as a row to check, so look at the composite: markers should sit on their nuclei); **20 small objects** and **1 elongated object** not counted; **6 extra cells** found by splitting the touching pairs.'};
             t.inputs = {
                 'TIFF (.tif / .tiff): every page is a channel (one RGB page: its colours); the pixel size is read from ImageJ / resolution tags when present'
                 'PNG, JPG, BMP: the colour channels (a grey image is one channel); type the pixel size'
@@ -962,6 +963,55 @@ classdef HelpApp < handle
                 'Marker calls look wrong', 'Check that the marker sits on its nucleus in the Composite view; if it is offset, tick **Align channels** and click **Align**. Then adjust **Positive if (% of cell)** or **Marker threshold**.'
                 '"Load images with the same channels together"', 'All images of one analysis need the same number of channels (and the same size). Load images with different stainings separately.'
                 'Automatic shift unreliable (Checks tab)', 'The images may show different fields, or be rotated: use **Landmarks (click points)** instead.'};
+        end
+
+        %% topicEEGAnalysis - EEG Analysis (cleaned EEG: ERPs per condition, measures, statistics)
+        function t = topicEEGAnalysis()
+            t = mkTopic('EEG Analysis', 'EEG', ...
+                'Average the trials of each condition, look at the ERPs, measure a component (mean or peak amplitude in a time window) and compare conditions across participants, for EEG that was already cleaned in EEGLAB, FieldTrip or MATLAB.');
+            t.quick = {
+                '**1 Load EEG**: click **Load EEG files…** and choose **one file per participant** (select several at once for a group), or **Try demo data**. EEGLAB .set and FieldTrip .mat files are read as they are; for a plain .mat file a short form asks which variable holds the numbers, the sampling rate and the order of channels, samples and trials. A **continuous** recording (with events) is cut into trials: set **Trial from / to (ms)** around each event and click **Cut into trials**.'
+                '**Read the Overview tab** first: for every participant it says the channels, trials per condition, reference, electrode positions and **what was already done to the data** (filters, re-referencing, ICA, rejected trials, interpolated channels), read from the file. Nothing in the file is run.'
+                '**2 ERPs**: keep **Subtract a baseline** (−200 to 0 ms by default) unless the data were already baseline-corrected. Type the **Channels to plot** (e.g. `Pz`, or `Cz, FCz` to average them; empty = all channels) and click **Show ERPs**. In the bar above the plot choose the **Participant** (or the grand average) and **Show**: **Conditions** (one line per condition, shade = SEM), **All channels (butterfly)** for one condition, or **Difference wave** (A minus B).'
+                '**3 Measure**: choose **Mean amplitude** (recommended) or **Peak amplitude** (with its direction), the **time window** and the **Channels**, then click **Measure**. Choose the window from the grand average or from the literature, the same for every condition. The **Measures** tab has one row per participant and condition; the window is shaded on the plot. A peak on the edge of the window is flagged: it may not be a real peak.'
+                '**4 Statistics** (two or more participants): choose **Parametric** or **Nonparametric** and click **Compare conditions**. Participants are matched across conditions: 2 conditions = paired t-test (or Wilcoxon signed-rank), 3 or more = repeated-measures ANOVA with post hoc tests (or Friedman). The **Statistics** tab gives the result, the assumptions, a check with the other test family and every pair of conditions.'
+                '**5 Save**: **Export results…** writes a .csv with one row per participant and condition (for a spreadsheet or another statistics program) or a .mat with everything. **Save session…**, **Report (PDF)…** and **Methods text…** keep the analysis.'};
+            t.demo = {
+                '* **Data** (**Try demo data**): an oddball study, **8 participants**, 32 channels (actiCAP names) at 250 Hz, trials from −200 to 800 ms, **already cleaned** (band-pass 0.1–30 Hz, average reference, ICA components 1 and 3 removed, 5 trials rejected, T7 interpolated: the Overview tab lists these steps). Conditions **Standard** (40 trials), **Target** (15) and **Novel** (15) before rejection; 65 trials left per participant.'
+                '* **What was simulated**: P1 +2 µV at 60 ms (Oz), **N1 −5 µV at 100 ms (Cz)**, **P300 at 350 ms (Pz): Target 10 > Novel 6 > Standard 2 µV**, 10 Hz alpha over O1 / Oz / O2 in random phase (it averages out), noise. Participants differ by about ±10% in amplitude and ±10 ms in latency.'
+                '* **Show ERPs** at **Pz** (grand average): three lines that split after about 250 ms, Target highest, peaking near 350 ms (about 8 µV). **Difference wave** Target minus Standard: a positive wave peaking near 350 ms.'
+                '* **Measure** (the demo sets it): **Mean amplitude, 300 to 400 ms, at Pz**: about **7 µV for Target, 4 µV for Novel and 1.5 µV for Standard** in every participant, in that order. The means are lower than the simulated peaks because a 100 ms window also takes the flanks of the wave, and the average reference takes a little away from every channel.'
+                '* **Compare conditions**, Parametric: repeated-measures ANOVA, **p < 0.0001**, partial η² about 0.95; every pair differs (Holm-corrected paired t-tests; Target − Standard about +6 µV). Nonparametric: Friedman χ²(2) = 16, p = 0.0003 (every participant ranks Target > Novel > Standard).'
+                '* **N1**: **Peak amplitude, Negative, 50 to 150 ms, at Cz**: about **−4.5 µV near 100 ms** in every condition (no edge warnings).'
+                '* **Rodent** (the `eeg/rodent` files, continuous, 4 skull screws at 1000 Hz, 60 s): 30 light flashes (events `flash`). Cut into trials from −100 to 400 ms: **30 trials**. With the baseline −100 to 0 ms, at **V1-L, V1-R**: a negative peak of about **−40 µV at 50 ms** and a positive one of about **+25 µV at 100 ms**; about 30% of that over M1.'};
+            t.inputs = {
+                'EEGLAB .set (the numbers inside, or in a separate .fdt file next to it): trials or a continuous recording with events, channel names and positions, and the history of what was done in EEGLAB'
+                'FieldTrip .mat (raw or timelock data): trials with trialinfo, channel names, electrode positions, and the cfg history'
+                'A plain .mat file with the numbers (channels × samples, or with trials in any order) plus a sampling rate; a form asks what each variable is. Values in volts are converted to µV'
+                'One file per participant, all with the same channels and trial times'};
+            t.outputs = {
+                '.csv: one row per participant and condition: Participant, Condition, Value_uV, Latency_s (peak only), Trials, PeakAtEdge (1 = the peak lies on the window edge)'
+                '.mat: struct `results` with the ERPs of every participant and the grand average, the settings, the measures and the statistics'};
+            t.details = {
+                '## ERPs (step 2)'
+                '* The **ERP** of a condition is the mean of its trials, per channel. With **Subtract a baseline**, the mean of the baseline window is first subtracted from every trial and channel, so each trial starts at 0 µV.'
+                '* The **grand average** is the mean of the participants'' ERPs, so every participant counts once whatever their number of trials; its shade is the SEM across participants. For one participant, the shade is the SEM across trials. Only conditions that every participant has are averaged (the ERPs line says which were left out).'
+                '* Several channels in **Channels to plot** are averaged into one waveform (a region of interest).'
+                '## Measures (step 3)'
+                '* **Mean amplitude**: the average voltage from the start to the end of the window, at the channels chosen (averaged). It is robust to noise and does not depend on the number of trials, so it is the usual choice.'
+                '* **Peak amplitude**: the largest positive (or negative) value in the window and its latency. Peaks grow with noise, so conditions with fewer trials get larger peaks; compare peak amplitudes only between conditions with similar numbers of trials. When the largest value is the first or last sample of the window, the signal was still rising or falling: it is flagged as not a real peak.'
+                '* Choose the window **before** looking at condition differences (from the grand average of all conditions, or the literature); choosing it where the conditions differ most inflates the effect.'
+                '## Statistics (step 4)'
+                '* One value per participant and condition; participants are matched across conditions (repeated measures). **2 conditions**: paired t-test (or Wilcoxon signed-rank); **3 or more**: repeated-measures ANOVA with Mauchly''s test and the Greenhouse–Geisser correction when needed, then Holm-corrected paired t-tests (or Friedman and Wilcoxon). The other family runs as a robustness check. Participants with a missing condition are left out.'
+                '## Continuous recordings'
+                '* **Cut into trials** takes, for every event, the samples from **Trial from** to **Trial to** around it; the event''s name becomes the trial''s condition. Events too close to the start or end of the recording are left out, and the Overview says how many.'};
+            t.trouble = {
+                '"needs a map" / the form opens', 'A plain .mat file does not say which variable is the EEG or how it is ordered. In the form choose the variable with the numbers, the sampling rate (a variable or typed), and the **Order of the numbers** (e.g. trials × channels × samples); the hint at the top says what was unclear.'
+                '"Unknown channel"', 'The names in **Channels** must match the file''s channel names (any case), separated by commas. The Overview tab and the butterfly view show the names.'
+                '"other channels / other trial times than participant 1"', 'Every participant must have the same channels in the same order and the same trial times. Interpolate or remove channels and cut the trials the same way in EEGLAB / FieldTrip before loading them together.'
+                'Peaks flagged "on the window edge"', 'The window cuts through a slope instead of around a peak. Widen the window, check the direction (Positive / Negative), or use the mean amplitude.'
+                'Condition missing from the grand average', 'Only conditions present in every participant are averaged and compared. Check the Overview for the trials per condition of each participant.'
+                'Statistics button greyed out', 'The test compares conditions across participants: load two or more participants, Show ERPs, then Measure.'};
         end
 
         %% topicSignalCharacterization - Signal Characterization

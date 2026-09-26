@@ -1,6 +1,6 @@
 # NeuronalDataAnalyzerLab
 
-[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-lightgrey.svg)](LICENSE.txt)
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2021a+-orange.svg)](https://www.mathworks.com/products/matlab.html)
 
@@ -8,7 +8,7 @@
 > not the green *Code → Download ZIP* button at the top of this page.
 > The green button gives you the in-development `main` branch; the
 > Releases page gives you a tagged, tested version (currently
-> [v0.3.0](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.3.0)).
+> [v0.4.0](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.4.0)).
 > Full walk-through below in [Install](#install).
 
 ![Main launcher window: LDF, electrophysiology, imaging, response features and batch processing](docs/main-launcher.png)
@@ -34,7 +34,7 @@ simulated experiment (LDF with whisker stimulation), analyse it from
 scratch in the normal windows and get feedback on the plan, the processing
 and the results; instructors can grade a folder of submissions.
 
-> **Status: early release (v0.3.0).** The UI works end-to-end on the lab's
+> **Status: early release (v0.4.0).** The UI works end-to-end on the lab's
 > data formats, but the public surface is not yet stable. See
 > [CHANGELOG.md](CHANGELOG.md) for what's in this release and what's next.
 
@@ -138,7 +138,7 @@ the SDK.
   See [tests/README.md](tests/README.md). CI runs code analysis and the
   tests on every push ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 - **Versioning:** semver, single source of truth in `core/UITheme.version`.
-  Each release is tagged (`v0.3.0`, ...); pushing the tag runs
+  Each release is tagged (`v0.4.0`, ...); pushing the tag runs
   [release.yml](.github/workflows/release.yml), which publishes the GitHub
   Release with that version's CHANGELOG section as notes and recorded in
   [CHANGELOG.md](CHANGELOG.md).

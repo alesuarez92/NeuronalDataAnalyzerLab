@@ -25,6 +25,8 @@
 %   'histology'        demoHistology: two culture images (nuclei + marker)
 %   'groups'           demoGroups: folder of 3 conditions x 8 animals (LDF trials)
 %   'intan' | 'openephys' | 'nwb'   demoFormats: the demo tank in that format
+% writeAll also writes eeg/ (core/demo/demoEEG: oddball scalp EEG of 8
+% participants and a continuous rodent recording, in every EEG format).
 %
 % Ground truth is in the .truth field of each struct (and saved as 'truth').
 % =========================================================================
@@ -104,6 +106,9 @@ classdef DemoData
             if exist('demoGroups', 'file') ~= 2
                 addpath(fullfile(fileparts(mfilename('fullpath')), 'demo'));
             end
+            if exist('EEGSource', 'file') ~= 2         % demoEEG writes with core/io
+                addpath(fullfile(fileparts(mfilename('fullpath')), 'io'));
+            end
         end
 
         %% folder - Where demo files are cached (tempdir/NeuroAnalyzerDemo)
@@ -178,6 +183,8 @@ classdef DemoData
             files.intan = f.intan;
             files.openephys = f.openephys;               % session folder
             files.nwb = f.nwb;
+            e = demoEEG(fullfile(folder, 'eeg'));
+            files.eeg = e.folder;                        % folder: scalp/ (8 participants) and rodent/
 
             files.folder = folder;
         end

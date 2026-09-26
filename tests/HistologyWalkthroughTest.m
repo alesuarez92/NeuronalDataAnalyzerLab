@@ -146,6 +146,8 @@ function testHistologyDemo(tests)
     b = HistologyApp(); cb = onCleanup(@() delete(b.UIFig));
     tests.verifyTrue(logical(b.openSession(p)), 'session not reopened');
     tests.verifyEqual(b.AlignedMethod, 'shift');
+    tests.verifyTrue(b.PixelSizeFromFile);
+    tests.verifyEqual(b.PixelSizeNote.Text, 'Read from the file.');
     tests.verifyNumElements(b.Regions, 2);
     tests.verifyEqual(b.CountsTable.Data, app.CountsTable.Data);
     shot(tests, b, 'HistologyApp_07_session_reopened', 'Counts');

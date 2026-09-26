@@ -19,6 +19,9 @@
 %   - histology (demo-like session): images, pixel size, alignment, the
 %     counting settings in um, Otsu (1979) cited only for the automatic
 %     threshold, markers and regions;
+%   - EEG analysis (demo-like session): participants, EEGLAB cited, the
+%     history read from the files, baseline, the measure and the
+%     repeated-measures test on it; a continuous recording's epochs;
 %   - several sessions given in any order come out in pipeline order,
 %     with one placeholder, one software paragraph and one reference list;
 %   - write() saves UTF-8 with a byte-order mark; a saved session file
@@ -196,6 +199,48 @@ function testWriteUTF8(tests)
     verifyHas(tests, back, char(181));   % micro sign survived the round trip
 end
 
+function testEEGAnalysis(tests)
+    [s, res] = eegSession();
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, 'EEG was recorded from 8 participants [please add: recording system');
+    verifyHas(tests, txt, 'cleaned in EEGLAB (Delorme & Makeig, 2004) before the analysis');
+    verifyHas(tests, txt, 'The data comprised 32 channels at 250 Hz, referenced to the average of all channels.');
+    verifyHas(tests, txt, ['The data files recorded these earlier processing steps: Band-pass filtered 0.1 to 30 Hz ' ...
+        '(pop_eegfiltnew); Re-referenced to the average of all channels (pop_reref).']);
+    verifyHas(tests, txt, 'Standard (320 trials), Target (120 trials) and Novel (80 trials) in total');
+    verifyHas(tests, txt, ['after subtracting from every trial and channel its mean from ' char(8722) '200 to 0 ms']);
+    verifyHas(tests, txt, 'each participant weighted equally');
+    verifyHas(tests, txt, 'the mean amplitude from 300 to 400 ms at Pz was measured.');
+    verifyHas(tests, txt, ['The mean amplitude from 300 to 400 ms at Pz was compared between Standard (n = 8), ' ...
+        'Target (n = 8) and Novel (n = 8), using one value per participant and condition, with participants ' ...
+        'matched across conditions.']);
+    verifyHas(tests, txt, 'one-way repeated-measures ANOVA');
+    tests.verifyTrue(any(startsWith(refs, 'Delorme A, Makeig S (2004). EEGLAB')));
+    tests.verifyFalse(any(startsWith(refs, 'Oostenveld')), 'FieldTrip not used, not cited');
+    tests.verifyTrue(res.main.p < 0.05);
+
+    % Peak measure, FieldTrip, continuous recordings cut into trials, no baseline, no test
+    s.settings.sources = repmat({'FieldTrip'}, 1, 8);
+    s.settings.trialWindow = [-0.1 0.4];
+    s.settings.baselineOn = false;
+    s.settings.measure = struct('Measure', 'peak', 'Polarity', 'negative', 'Window', [0.03 0.07], ...
+        'Channels', {{'V1-L', 'V1-R'}});
+    s.results = rmfield(s.results, 'groupTest');
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, 'cleaned in FieldTrip (Oostenveld et al., 2011)');
+    verifyHas(tests, txt, ['cut into epochs from ' char(8722) '100 to 400 ms around each event']);
+    verifyHas(tests, txt, 'without further baseline correction');
+    verifyHas(tests, txt, ['the negative peak amplitude from 30 to 70 ms averaged over V1-L and V1-R was measured ' ...
+        'as the most negative value']);
+    tests.verifyFalse(contains(txt, 'was compared between'), 'no test run, none described');
+
+    % Pipeline order: EEG Analysis before Signal Characterization
+    txt = MethodsWriter.fromSessions({rmStatsSession(), eegSession()});
+    tests.verifyLessThan(strfind(txt, 'EEG was recorded'), strfind(txt, 'Control (n = 8)'));
+end
+
 function testSessionFileAndErrors(tests)
     s = rmStatsSession();
     f = Session.save(fullfile(tests.TestData.dir, 'stats'), s);
@@ -331,6 +376,26 @@ function [s, res] = rmStatsSession()
     s.settings = struct('mode', 'Groups & statistics', 'single', sg, 'groups', gs);
     s.results.groupTest = res;
     s.summary = {sprintf('Group test: %s', res.summary)};
+end
+
+%% eegSession - Session like EEGAnalysisApp.sessionState on the EEG demo (P300 at Pz)
+function [s, res] = eegSession()
+    Y = [1.8 6.9 2.8; 1.8 7.3 4.1; 1.6 8.0 5.1; 1.7 6.6 4.7; 1.2 7.2 3.9; 0.6 8.5 4.4; 1.3 6.2 4.4; 0.3 6.4 3.3];
+    names = {'Standard', 'Target', 'Novel'};
+    res = GroupStats.compare(num2cell(Y, 1), names, 'rm', 'parametric');
+    s = Session.new('EEGAnalysisApp');
+    s.appTitle = 'EEG Analysis';
+    s.inputs = Session.fileInfo('', 'EEG demo (demoEEG), 8 participants');
+    parts = arrayfun(@(p) sprintf('sub-%02d_eeglab', p), 1:8, 'UniformOutput', false);
+    s.settings = struct('generator', 'demoEEG', 'participants', {parts}, 'maps', {cell(1, 8)}, ...
+        'sources', {repmat({'EEGLAB'}, 1, 8)}, 'continuous', false, 'trialWindow', [], 'fs', 250, ...
+        'nChannels', 32, 'reference', 'average of all channels', 'history', ...
+        {{'Band-pass filtered 0.1 to 30 Hz (pop_eegfiltnew).', 'Re-referenced to the average of all channels (pop_reref).'}}, ...
+        'baselineOn', true, 'baseline', [-0.2 0], 'channels', {{'Pz'}}, 'erpsShown', true, ...
+        'measure', struct('Measure', 'mean', 'Polarity', 'positive', 'Window', [0.3 0.4], 'Channels', {{'Pz'}}), ...
+        'measured', true, 'statsMethod', 'parametric', 'tested', true);
+    s.results = struct('conditions', {names}, 'trials', [320 120 80], 'groupTest', res);
+    s.summary = {'8 participant(s): ...', sprintf('Test: %s', res.summary)};
 end
 
 %% histologySession - Session like HistologyApp.sessionState on the histology demo
