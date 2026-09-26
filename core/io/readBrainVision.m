@@ -174,9 +174,11 @@ function txt = readText(p)
     fclose(fid);
     if numel(b) >= 3 && isequal(b(1:3), uint8([239 187 191])), b = b(4:end); end   % UTF-8 byte-order mark
     txt = char(b);
-    if any(b > 127) && isUtf8(b)
+    if any(b > 127)
+        enc = 'ISO-8859-1';                       % version 1 headers are Latin-1
+        if isUtf8(b), enc = 'UTF-8'; end
         try
-            txt = native2unicode(b, 'UTF-8');
+            txt = native2unicode(b, enc);
         catch
         end
     end
@@ -247,7 +249,7 @@ function [labels, refs, res, units] = channelInfos(H, nCh)
     for i = 1:numel(keys)
         c = sscanf(keys{i}, 'Ch%d');
         if isempty(c) || c < 1 || c > nCh, continue; end
-        f = strsplit(values{i}, ',');
+        f = strsplit(values{i}, ',', 'CollapseDelimiters', false);
         f = strrep(f, '\1', ',');                    % commas inside names are written as \1
         if numel(f) >= 1 && ~isempty(strtrim(f{1})), labels{c} = strtrim(f{1}); end
         if numel(f) >= 2, refs{c} = strtrim(f{2}); end
@@ -266,10 +268,9 @@ function [scale, notes] = unitScale(units, labels)
     other = {};
     conv = {};
     for c = 1:numel(units)
-        u = strrep(strrep(units{c}, char(181), 'u'), char(956), 'u');   % micro sign or Greek mu
-        u = regexprep(u, '^.u', 'u');                                    % 'ÂµV' read as Latin-1
+        u = unitKey(units{c});
         switch lower(u)
-            case {'uv', 'microvolt', 'microvolts', ''}
+            case {'uv', ''}
             case 'nv', scale(c) = 1e-3; conv{end + 1} = 'nV'; %#ok<AGROW>
             case 'mv', scale(c) = 1e3; conv{end + 1} = 'mV'; %#ok<AGROW>
             case 'v', scale(c) = 1e6; conv{end + 1} = 'V'; %#ok<AGROW>
@@ -283,6 +284,23 @@ function [scale, notes] = unitScale(units, labels)
     end
     if ~isempty(other)
         notes{end + 1} = sprintf('%s: not in volts, so the values were kept as they are.', EEGSource.listText(other));
+    end
+end
+
+%% unitKey - 'uv', 'nv', 'mv', 'v' or the unit itself (the micro sign in any encoding counts as u)
+function k = unitKey(u)
+    u = strtrim(u);
+    k = lower(u);
+    if isempty(u), k = 'uv'; return; end
+    if any(strcmpi(u, {'microvolt', 'microvolts'})), k = 'uv'; return; end
+    if any(strcmpi(u, {'millivolt', 'millivolts'})), k = 'mv'; return; end
+    if any(strcmpi(u, {'volt', 'volts'})), k = 'v'; return; end
+    if u(end) ~= 'V', return; end
+    pre = u(1:end - 1);
+    if isempty(pre), k = 'v';
+    elseif strcmp(pre, 'm'), k = 'mv';
+    elseif strcmp(pre, 'n'), k = 'nv';
+    elseif strcmpi(pre, 'u') || all(double(pre) > 127), k = 'uv';   % micro sign (Latin-1, UTF-8 or Greek mu)
     end
 end
 
@@ -389,7 +407,7 @@ function M = readMarkers(p)
         n = sscanf(keys{i}, 'Mk%d');
         if isempty(n), num(i) = NaN; continue; end
         num(i) = n;
-        f = strsplit(values{i}, ',');
+        f = strsplit(values{i}, ',', 'CollapseDelimiters', false);
         f = strrep(f, '\1', ',');
         f(end + 1:5) = {''};
         M(end + 1) = struct('type', strtrim(f{1}), 'desc', strtrim(f{2}), 'pos', str2double(f{3}), ...
@@ -509,7 +527,7 @@ function [locs, coord] = coordinates(H, labels)
     for i = 1:numel(keys)
         c = sscanf(keys{i}, 'Ch%d');
         if isempty(c) || c < 1 || c > n, continue; end
-        v = str2double(strsplit(values{i}, ','));
+        v = str2double(strsplit(values{i}, ',', 'CollapseDelimiters', false));
         if numel(v) < 3 || any(~isfinite(v(1:3))) || v(1) == 0, continue; end   % radius 0: no position
         r = v(1); th = v(2) * pi / 180; ph = v(3) * pi / 180;
         locs(c).x = r * sin(th) * cos(ph);

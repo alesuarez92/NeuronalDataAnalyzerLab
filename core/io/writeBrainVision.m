@@ -147,10 +147,13 @@ end
 %% writeText - Lines as Latin-1 (version 1) or UTF-8 (version 2), CRLF as BrainVision does
 function writeText(p, lines, version)
     txt = [strjoin(lines, sprintf('\r\n')) sprintf('\r\n')];
-    if version == 2
-        b = unicode2native(txt, 'UTF-8');
-    else
-        b = uint8(txt);
+    b = uint8(double(txt));                      % the text holds Latin-1 characters only (e.g. the micro sign)
+    if version == 2                              % UTF-8: each byte above 127 becomes two bytes
+        hi = b > 127;
+        v = double(b);
+        c = num2cell(v);
+        c(hi) = arrayfun(@(x) [192 + floor(x / 64), 128 + mod(x, 64)], v(hi), 'UniformOutput', false);
+        b = uint8([c{:}]);
     end
     fid = fopen(p, 'w');
     if fid < 0, error('NeuroAnalyzer:eeg:write', 'Cannot write %s', p); end

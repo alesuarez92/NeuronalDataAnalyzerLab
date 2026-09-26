@@ -35,6 +35,11 @@
 %              z = up, coordsys 'ras'; rodent: x = medial-lateral,
 %              y = anterior-posterior, coordsys 'bregma'); cfg.previous
 %              history; rodent events in the variable event
+%   brainvision  BrainVision .vhdr + .vmrk + .eeg. Scalp: an Analyzer
+%              export (float32 segments, markers Standard / Target / Novel
+%              at time 0, positions on the sphere). Rodent: a Recorder
+%              file (INT_16, 0.1 uV resolution, 'S  1' flash markers,
+%              reference channel Cb, the amplifier table in [Comment])
 %   matrix     plain .mat. Scalp: eeg (trials x channels x samples, in
 %              volts), srate, chanNames, times (s), condition. Rodent:
 %              data (channels x samples, uV), fs, labels, flashTimes (s)
@@ -50,7 +55,7 @@
 %   'Force'         true regenerates the cache (demoEEG() only)
 % Deterministic: RandStream('mt19937ar', 'Seed', 20260926 + participant;
 % rodent 20260926 + 100). Requires core/io on the path (EEGSource,
-% writeEEGLAB, writeFieldTrip). Toolboxes: none.
+% writeEEGLAB, writeFieldTrip, writeBrainVision). Toolboxes: none.
 % =========================================================================
 
 function files = demoEEG(folder, varargin)
@@ -58,7 +63,7 @@ function files = demoEEG(folder, varargin)
     for k = 1:2:numel(varargin)
         o.(varargin{k}) = varargin{k + 1};
     end
-    cacheVersion = 1;
+    cacheVersion = 2;
     cached = nargin < 1 || isempty(folder);
     if cached
         folder = fullfile(DemoData.folder(), 'eeg');
@@ -134,7 +139,7 @@ function [out, truth] = writeScalp(folder, nPart)
         'p300', struct('channel', 'Pz', 'latency', 0.35, 'amplitude', p300), ...
         'alpha', struct('channels', {{'O1', 'Oz', 'O2'}}, 'frequency', 10, 'amplitude', 4), ...
         'participants', struct('condition', {}, 'rejected', {}, 'ampScale', {}, 'latShift', {}, 'data', {}));
-    out = struct('eeglab', {}, 'eeglabfdt', {}, 'fieldtrip', {}, 'matrix', {});
+    out = struct('eeglab', {}, 'eeglabfdt', {}, 'fieldtrip', {}, 'brainvision', {}, 'matrix', {});
     locs = struct('label', labels, 'x', num2cell(posEEGLAB(:, 1)'), 'y', num2cell(posEEGLAB(:, 2)'), ...
         'z', num2cell(posEEGLAB(:, 3)'), 'theta', NaN, 'radius', NaN);
 
@@ -199,6 +204,10 @@ function [out, truth] = writeScalp(folder, nPart)
         writeFieldTrip(out(p).fieldtrip, eegFT, 'Cfg', c, 'ConditionNames', names, ...
             'Coordsys', 'ras', 'Unit', 'mm');
 
+        % BrainVision: an Analyzer export of the segments (positions x right, y nose, z up)
+        out(p).brainvision = [base '_brainvision.vhdr'];
+        writeBrainVision(out(p).brainvision, eeg, 'Positions', posRAS);
+
         % Plain matrix: trials x channels x samples, in volts
         M = struct('eeg', permute(double(data), [3 1 2]) * 1e-6, 'srate', fs, 'chanNames', {labels}, ...
             'times', times, 'condition', {cond});
@@ -239,7 +248,8 @@ function [out, truth] = writeRodent(folder)
     hist = strjoin({'EEG = pop_loadset(''filename'', ''rat01_raw.set'');', ...
         'EEG = pop_eegfiltnew(EEG, 1, 100);'}, newline);
     out = struct('eeglab', fullfile(folder, 'rat01_eeglab.set'), 'eeglabfdt', fullfile(folder, 'rat01_fdt.set'), ...
-        'fieldtrip', fullfile(folder, 'rat01_fieldtrip.mat'), 'matrix', fullfile(folder, 'rat01_matrix.mat'));
+        'fieldtrip', fullfile(folder, 'rat01_fieldtrip.mat'), 'brainvision', fullfile(folder, 'rat01_brainvision.vhdr'), ...
+        'matrix', fullfile(folder, 'rat01_matrix.mat'));
     writeEEGLAB(out.eeglab, eeg, 'History', hist, 'CoordSys', 'bregma, mm');
     writeEEGLAB(out.eeglabfdt, eeg, 'History', hist, 'CoordSys', 'bregma, mm', 'DataFile', true, 'Layout', 'fields');
 
@@ -249,6 +259,20 @@ function [out, truth] = writeRodent(folder)
     end
     c = struct('bpfilter', 'yes', 'bpfreq', [1 100], 'version', struct('name', 'ft_preprocessing'));
     writeFieldTrip(out.fieldtrip, eegFT, 'Cfg', c, 'Coordsys', 'bregma', 'Unit', 'mm');
+
+    % BrainVision Recorder: 16-bit integers of 0.1 uV, flashes as 'S  1', the amplifier table
+    eegBV = eeg;
+    [eegBV.events.type] = deal('S  1');
+    amp = {'A m p l i f i e r  S e t u p', '============================', 'Number of channels: 4', ...
+        sprintf('Sampling Rate [Hz]: %d', fs), '', 'Channels', '--------', ...
+        '#     Name      Phys. Chn.    Resolution / Unit   Low Cutoff [s]   High Cutoff [Hz]   Notch [Hz]'};
+    for k = 1:4
+        amp{end + 1} = sprintf('%-5d %-9s %-13d 0.1 %sV             10               250                Off', ...
+            k, labels{k}, k, char(181)); %#ok<AGROW>
+    end
+    amp = [amp, {'', 'S o f t w a r e  F i l t e r s', '==============================', 'Disabled'}];
+    writeBrainVision(out.brainvision, eegBV, 'BinaryFormat', 'INT_16', 'Resolution', 0.1, ...
+        'Reference', 'Cb', 'Comment', amp);
 
     M = struct('data', double(data), 'fs', fs, 'labels', {labels}, 'flashTimes', onsets);
     save(out.matrix, '-struct', 'M', '-v7');
@@ -271,7 +295,7 @@ function tf = allExist(files, kinds)
         if ~isfield(files, kinds{k}), tf = false; return; end
         f = files.(kinds{k});
         for i = 1:numel(f)
-            for fmt = {'eeglab', 'eeglabfdt', 'fieldtrip', 'matrix'}
+            for fmt = {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision', 'matrix'}
                 if ~(exist(f(i).(fmt{1}), 'file') == 2), tf = false; return; end
             end
         end

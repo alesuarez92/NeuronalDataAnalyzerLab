@@ -61,7 +61,7 @@ their files.
 | ✅ | FieldTrip raw and averaged structures | `trial`, `time`, `label`, `trialinfo`, electrode positions; history from `cfg.previous`. |
 | ✅ | Plain matrix `.mat` | A form says which variable is the data, the sampling rate, the trial and channel dimensions and the conditions. No code needed. |
 | 📅 | EDF / EDF+ / BDF | BioSemi, most clinical systems, and exports from OpenBCI, Natus, Compumedics and others. |
-| 📅 | BrainVision (`.vhdr` / `.eeg` / `.vmrk`) | Brain Products; also a common export from MNE and EEGLAB. |
+| ✅ | BrainVision (`.vhdr` / `.eeg` / `.vmrk`) | Brain Products Recorder and Analyzer; also a common export from MNE and EEGLAB. Continuous recordings with their markers, Analyzer segments (condition = marker at time 0), positions, units, and the amplifier filters used when recording. |
 | 📅 | EGI `.mff` | Magstim EGI geodesic nets. |
 | 📅 | EEG-BIDS folders | Shared datasets (OpenNeuro): the readers above plus the channel, electrode and event tables. |
 | 🟢 | Neuroscan / ANT `.cnt`, g.tec, Brainstorm, ERPLAB | Later, when needed: one small, separately tested reader each. |
@@ -99,7 +99,7 @@ NWB recordings are already read by Extract Ephys.
 | 📅 | 3. Electrode layouts | Templates, position files, bregma coordinates and the layout check. |
 | 📅 | 4. Scalp maps | Topography at a time or window: spherical spline on scalp layouts, flat interpolation on skull layouts; tested on the demo's known distribution. |
 | 📅 | 5. Time–frequency per condition | ERSP / ITPC and band power from the existing time–frequency code. |
-| 📅 | 6. Raw recordings | EDF / BDF, BrainVision, EGI `.mff`, EEG-BIDS, each with a tested writer. Basic steps only: filter, re-reference, cut trials at events, reject trials by amplitude, mark bad channels. ICA and advanced cleaning stay in EEGLAB / FieldTrip; Help explains how to bring their result back. |
+| 🔨 | 6. Raw recordings | BrainVision read first (the author's lab records with Brain Products); then EDF / BDF, EGI `.mff`, EEG-BIDS, each with a tested writer. Basic steps only: filter, re-reference, cut trials at events, reject trials by amplitude, mark bad channels. ICA and advanced cleaning stay in EEGLAB / FieldTrip; Help explains how to bring their result back. |
 | 📅 | 7. Batch, sessions, methods text, website | Same as the other pipelines, plus a walkthrough and later an EEG lesson in the virtual lab. |
 
 ## Direction: understand, check and teach

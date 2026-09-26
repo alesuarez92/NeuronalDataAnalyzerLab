@@ -16,33 +16,22 @@ Owner decision: `docs/dev/` stays out of `main`. **Delete this file before mergi
 - Keep EEG compatible with many systems; the owner's lab uses "Brain Lab" (asked whether that means
   Brain Products / BrainVision; the owner answered "Go", taken as yes — confirm when convenient).
 
-## In flight: NEW STRAND "EEG raw formats, BrainVision first" (next EEG step, ahead of layouts)
-- `core/io/readBrainVision.m` and `core/io/writeBrainVision.m` written (committed with [skip ci],
-  **untested**). Reader: .vhdr v1 / v2 (UTF-8), binary INT_16 / UINT_16 / INT_32 / FLOAT_32 / 64,
-  big-endian flag, ASCII (decimal comma, SkipLines / SkipColumns), multiplexed / vectorized,
-  resolution and unit (nV / uV / mV / V) per channel, markers (.vmrk; 'S  1' -> 'S 1'), continuous
-  events, Analyzer segments (MARKERBASED / FIXTIME, Time 0, condition = marker at time 0, Averaged),
-  [Coordinates] radius/theta/phi -> x right, y nose, z up, reference from [Channel Infos], Recorder
-  [Comment] amplifier / software filter tables -> notes / history. Writer: float32 / int16 / int32,
-  orientation, positions, reference, comment, version 1 / 2.
-- First Octave run failed: Octave's `regexp` rejects Latin-1 bytes > 127 as invalid UTF-8 in
-  `readIni` (the µ of "µV"). MATLAB is fine with char(181); for Octave checks, either decode
-  Latin-1 bytes to Unicode chars (`char(double(b))` already is; the issue is Octave's UTF-8 regexp),
-  or test in Octave with ASCII 'uV' units. Test script: see the "Next" list.
+## In flight: NEW STRAND "EEG raw formats, BrainVision first" (session 8, continued at the owner's request)
+- BrainVision read and wired in: `core/io/readBrainVision.m`, `writeBrainVision.m`, `EEGSource`
+  ('brainvision'; .vmrk / .eeg point to the .vhdr), EEG window load filter and tooltip, Help,
+  `demoEEG` (cacheVersion 2: scalp Analyzer export float32 with positions; rodent Recorder INT_16
+  0.1 uV, 'S  1' markers, ref Cb, amplifier table), `EEGFormatsTest` (demo, hand-built Recorder /
+  Analyzer / ASCII headers, writer round trip, detect), `EEGAnalysisWalkthroughTest` (loads the
+  BrainVision copy), ROADMAP, CHANGELOG [Unreleased], tests/README.
+- Checked locally in Octave (shims for verify* / RandStream / DemoData): all BrainVision tests pass.
+  Fixed on the way: `strsplit` collapses ',,' by default (use 'CollapseDelimiters', false);
+  Octave needs Latin-1 decoded with native2unicode and no char(956) literal.
+- MATLAB CI on this push: pending.
 
 ## Next
-1. Make the round trip pass locally (Octave, `apt-get install -y --no-install-recommends octave`):
-   continuous INT_16 with events and a Recorder [Comment] table; segmented float32 with positions,
-   version 2, vectorized. Check positions: Fpz (0,1,0) -> 1,90,90; Fp1 -> theta -90, phi -72;
-   Oz -> 1,90,-90; Cz -> 1,0,0.
-2. Wire in: `EEGSource.formats/detect/open` ('brainvision'; .vhdr; .vmrk / .eeg -> plain error
-   pointing to the .vhdr), EEG window load filter `*.set;*.mat;*.vhdr` and tooltip text, Help
-   (`topicEEGAnalysis` inputs), `demoEEG` writes `brainvision` for scalp (segmented, float32,
-   posRAS) and rodent (continuous, INT_16, 0.1 uV) + `allExist` list + cacheVersion 2,
-   `EEGFormatsTest` (demo agreement, hand-built files: 'S  1' markers, ASCII decimal comma,
-   big-endian, missing .eeg, name with \1, mV unit, averaged, bad intervals), `testDetect` format
-   list, ROADMAP (BrainVision row), CHANGELOG [Unreleased], tests/README.
-3. One CI run for all of it; then PR when the owner asks.
+1. Check that CI run; fix if red.
+2. Open the PR for BrainVision when the owner asks (delete this file first).
+3. Then, per ROADMAP: EDF / BDF reader, or step 3 (electrode layouts), as the owner prefers.
 
 ## Open questions for the owner
 - "Brain Lab" = Brain Products (BrainVision Recorder / Analyzer)? Continuous Recorder files,

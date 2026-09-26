@@ -3,8 +3,9 @@
 % EEG ANALYSIS - ERPs PER CONDITION, AMPLITUDE MEASURES AND STATISTICS
 % =========================================================================
 % Opened from the launcher (EEG card). For EEG that was already cleaned in
-% EEGLAB, FieldTrip or MATLAB: one file per participant (EEGLAB .set,
-% FieldTrip .mat or a plain .mat array), scalp or rodent.
+% EEGLAB, FieldTrip, BrainVision Analyzer or MATLAB, or recorded with
+% BrainVision Recorder: one file per participant (EEGLAB .set, FieldTrip
+% .mat, BrainVision .vhdr or a plain .mat array), scalp or rodent.
 %
 % Layout (UIKit.window): numbered step cards on the left
 %   1 Load EEG      (one or several files; a plain .mat file gets a short
@@ -130,8 +131,9 @@ classdef EEGAnalysisApp < handle
             [p, g, heights{1}] = stepCard(left, 1, 'Load EEG', {bh, 48, ch, ch, bh, 34});
             p.Layout.Row = 1;
             app.LoadBtn = UIKit.button(g, ['Load EEG files' char(8230)], @(~,~)app.loadDialog(), 'primary', ...
-                ['One file per participant, already cleaned: EEGLAB .set, FieldTrip .mat or a plain .mat with the ' ...
-                 'numbers (you will be asked what its variables are). Select several files at once for a group.']);
+                ['One file per participant: EEGLAB .set, FieldTrip .mat, BrainVision .vhdr (Brain Products Recorder or ' ...
+                 'Analyzer; keep its .vmrk and .eeg files next to it) or a plain .mat with the numbers (you will be ' ...
+                 'asked what its variables are). Select several files at once for a group.']);
             app.LoadBtn.Layout.Row = 2; app.LoadBtn.Layout.Column = 1;
             app.DemoBtn = UIKit.button(g, 'Try demo data', @(~,~)app.loadDemo(), 'secondary', ...
                 ['An oddball study: 8 participants, 32 channels, Standard / Target / Novel trials with a P300 at Pz ' ...
@@ -272,7 +274,7 @@ classdef EEGAnalysisApp < handle
         function loadDialog(app)
             start = ProjectManager.getImportDir();
             if isempty(start), start = pwd; end
-            [f, p] = uigetfile({'*.set;*.mat', 'EEG (EEGLAB .set, FieldTrip or plain .mat)'}, ...
+            [f, p] = uigetfile({'*.set;*.mat;*.vhdr', 'EEG (EEGLAB .set, FieldTrip or plain .mat, BrainVision .vhdr)'}, ...
                 'Load EEG (select one file per participant)', start, 'MultiSelect', 'on');
             figure(app.UIFig);
             if isequal(f, 0), return; end

@@ -1,6 +1,6 @@
 %% EEGSource.m
 % =========================================================================
-% EEG SOURCE - ONE DATA SHAPE FOR EEG FROM EEGLAB, FIELDTRIP AND PLAIN .MAT
+% EEG SOURCE - ONE DATA SHAPE FOR EEG FROM EEGLAB, FIELDTRIP, BRAINVISION AND .MAT
 % =========================================================================
 % Every EEG file is read into one struct, so the EEG window (and anything
 % after it) does not care where the data came from:
@@ -23,7 +23,7 @@
 %   eeg.source, eeg.format, eeg.file
 %
 %   list  = EEGSource.formats()           struct array: key, label, filter, hint
-%   fmt   = EEGSource.detect(path)        'eeglab' | 'fieldtrip' | 'matrix'
+%   fmt   = EEGSource.detect(path)        'eeglab' | 'fieldtrip' | 'brainvision' | 'matrix'
 %   eeg   = EEGSource.open(path, fmt, map) read (fmt 'auto'/omitted: detect;
 %                                          map only for 'matrix', see readEEGMatrix)
 %   eeg   = EEGSource.make(data, fs, Name, Value, ...)   assemble + check
@@ -49,13 +49,15 @@ classdef EEGSource
         %% formats - Supported sources, in dropdown order
         function list = formats()
             list = struct( ...
-                'key',    {'eeglab', 'fieldtrip', 'matrix'}, ...
-                'label',  {'EEGLAB dataset (.set)', 'FieldTrip data (.mat)', 'MATLAB matrix (.mat)'}, ...
+                'key',    {'eeglab', 'fieldtrip', 'brainvision', 'matrix'}, ...
+                'label',  {'EEGLAB dataset (.set)', 'FieldTrip data (.mat)', 'BrainVision (.vhdr)', 'MATLAB matrix (.mat)'}, ...
                 'filter', {{'*.set;*.mat', 'EEGLAB dataset (*.set, *.mat)'}, ...
                            {'*.mat', 'FieldTrip data (*.mat)'}, ...
+                           {'*.vhdr', 'BrainVision header (*.vhdr)'}, ...
                            {'*.mat', 'MATLAB file (*.mat)'}}, ...
                 'hint',   {'An EEGLAB .set file (with its .fdt file in the same folder, if there is one), or a .mat file holding an EEG variable', ...
                            'A .mat file holding a FieldTrip structure (label, trial, time) or an average (label, avg, time)', ...
+                           'Brain Products BrainVision Recorder or Analyzer: the .vhdr file, with its .vmrk and .eeg files in the same folder', ...
                            'Any .mat file with the EEG as a number array: you say which variable holds what'});
         end
 
@@ -74,6 +76,11 @@ classdef EEGSource
             [~, ~, ext] = fileparts(p);
             switch lower(ext)
                 case '.set', fmt = 'eeglab'; return;
+                case '.vhdr', fmt = 'brainvision'; return;
+                case {'.vmrk', '.eeg'}
+                    error('NeuroAnalyzer:io:unknownFormat', ['%s is one part of a BrainVision recording ' ...
+                        '(markers or numbers). Choose the .vhdr file with the same name instead; it ' ...
+                        'reads all three parts.'], p);
                 case '.fdt'
                     error('NeuroAnalyzer:io:unknownFormat', ['%s holds only the numbers of an EEGLAB ' ...
                         'dataset. Choose the .set file with the same name instead.'], p);
@@ -99,6 +106,7 @@ classdef EEGSource
             switch lower(fmt)
                 case 'eeglab',    eeg = readEEGLAB(p);
                 case 'fieldtrip', eeg = readFieldTrip(p);
+                case 'brainvision', eeg = readBrainVision(p);
                 case 'matrix'
                     if nargin < 3 || isempty(map)
                         g = EEGSource.guessMatrixMap(p);
@@ -113,7 +121,7 @@ classdef EEGSource
                     eeg = readEEGMatrix(p, map);
                 otherwise
                     error('NeuroAnalyzer:io:unknownFormat', ...
-                        'Unknown format ''%s'' (use eeglab, fieldtrip or matrix).', fmt);
+                        'Unknown format ''%s'' (use eeglab, fieldtrip, brainvision or matrix).', fmt);
             end
         end
 

@@ -7,6 +7,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- **EEG: BrainVision files** (Brain Products Recorder and Analyzer, and
+  exports from EEGLAB / MNE; `core/io/readBrainVision.m`,
+  `writeBrainVision.m`): the EEG Analysis window now loads `.vhdr` files
+  (with their `.vmrk` and `.eeg` files next to them). Continuous
+  recordings keep their markers as events (`S  1` is shown as `S 1`) and
+  can be cut into trials in the window; segments exported from Analyzer
+  become trials, with the marker at time 0 as the condition. Binary
+  (16- / 32-bit integers, 32-bit floats, either byte order) and text
+  data, each channel's resolution and unit, electrode positions, the
+  reference channel, and, in plain words, the amplifier and software
+  filters used when recording, pauses, bad intervals and averages. The EEG
+  demo is also written in this format.
+
 ## [0.4.0] - 2026-09-26
 
 ### Added

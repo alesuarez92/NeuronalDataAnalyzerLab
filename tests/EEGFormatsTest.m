@@ -1,6 +1,7 @@
 %% EEGFormatsTest.m
 % =========================================================================
-% UNIT TESTS FOR THE EEG DATA MODEL AND IMPORTERS (EEGLAB, FIELDTRIP, .mat)
+% UNIT TESTS FOR THE EEG DATA MODEL AND IMPORTERS (EEGLAB, FIELDTRIP,
+% BRAINVISION, .mat)
 % =========================================================================
 % The synthetic study written by core/demo/demoEEG (oddball scalp EEG and
 % a continuous rodent recording) is read back from every format: each
@@ -9,7 +10,8 @@
 % Because a round trip only proves the readers agree with our own
 % writers, each format also has hand-built files assembled here from the
 % published layouts (EEGLAB EEG struct with a .fdt file, FieldTrip raw and
-% timelock structures), and clear-error checks (missing .fdt, truncated
+% timelock structures, BrainVision headers as Recorder and Analyzer write
+% them), and clear-error checks (missing .fdt, truncated
 % data, wrong sizes, unknown variables). The demo's known answers (N1,
 % P300 order, alpha, VEP) are checked on the data as read.
 % =========================================================================
@@ -139,7 +141,7 @@ function testAllFormatsAgree(tests)
     d = tests.TestData.demo;
     for p = 1:2
         ref = readEEGLAB(d.scalp(p).eeglab);
-        for fmt = {'eeglabfdt', 'fieldtrip', 'matrix'}
+        for fmt = {'eeglabfdt', 'fieldtrip', 'brainvision', 'matrix'}
             eeg = EEGSource.open(d.scalp(p).(fmt{1}));
             tag = sprintf('participant %d, %s', p, fmt{1});
             verifyEqual(tests, double(eeg.data), double(ref.data), 'AbsTol', 1e-4, tag);
@@ -159,6 +161,9 @@ function testDetect(tests)
         verifyEqual(tests, EEGSource.detect(f.eeglabfdt), 'eeglab');
         verifyEqual(tests, EEGSource.detect(f.fieldtrip), 'fieldtrip');
         verifyEqual(tests, EEGSource.detect(f.matrix), 'matrix');
+        verifyEqual(tests, EEGSource.detect(f.brainvision), 'brainvision');
+        verifyError(tests, @() EEGSource.detect(strrep(f.brainvision, '.vhdr', '.vmrk')), 'NeuroAnalyzer:io:unknownFormat');
+        verifyError(tests, @() EEGSource.detect(strrep(f.brainvision, '.vhdr', '.eeg')), 'NeuroAnalyzer:io:unknownFormat');
     end
     % An EEG variable inside a .mat file is EEGLAB too
     s = load(d.scalp(1).eeglab, '-mat');
@@ -173,7 +178,7 @@ function testDetect(tests)
     verifyError(tests, @() EEGSource.detect(fdt), 'NeuroAnalyzer:io:unknownFormat');
     verifyError(tests, @() EEGSource.detect(fullfile(tests.TestData.tmp, 'none.set')), 'NeuroAnalyzer:io:fileNotFound');
     list = EEGSource.formats();
-    verifyEqual(tests, {list.key}, {'eeglab', 'fieldtrip', 'matrix'});
+    verifyEqual(tests, {list.key}, {'eeglab', 'fieldtrip', 'brainvision', 'matrix'});
 end
 
 %% ------------------------------------------------------------ Demo, rodent
@@ -480,7 +485,207 @@ function testHistoryIsReadNotRun(tests)
     verifyEqual(tests, info.reference, 'TP9 and TP10');
 end
 
+%% ------------------------------------------------------------ BrainVision
+
+function testBrainVisionDemo(tests)
+    d = tests.TestData.demo;
+    tr = d.truth.scalp;
+    P = tr.participants(1);
+    % Scalp: an Analyzer export of the segments
+    eeg = readBrainVision(d.scalp(1).brainvision);
+    verifyEqual(tests, eeg.data, P.data, 'float32 numbers exactly as written');
+    verifyEqual(tests, eeg.fs, 250);
+    verifyEqual(tests, eeg.times, tr.times, 'AbsTol', 1e-9, 'time 0 from the Time 0 marker');
+    verifyEqual(tests, eeg.labels, tr.labels);
+    verifyTrue(tests, eeg.isEpoched);
+    verifyEqual(tests, eeg.trials.condition, P.condition, 'condition = marker at time 0');
+    verifyEqual(tests, [[eeg.chanlocs.x]', [eeg.chanlocs.y]', [eeg.chanlocs.z]'], tr.posRAS, 'AbsTol', 1e-6);
+    verifyEqual(tests, eeg.coordSystem, 'BrainVision (x = right ear, y = nose, z = up)');
+    verifyEqual(tests, eeg.reference, 'unknown');
+    verifyEqual(tests, eeg.history, {'Cut into 65 segments of -200 to 796 ms (BrainVision Analyzer segmentation).'});
+    verifyEmpty(tests, eeg.notes);
+    verifyEqual(tests, eeg.source, 'BrainVision');
+    verifyEqual(tests, EEGSource.open(d.scalp(1).brainvision).data, eeg.data);
+
+    % Rodent: a Recorder file, 16-bit integers of 0.1 uV
+    r = d.truth.rodent;
+    eeg = readBrainVision(d.rodent.brainvision);
+    verifyFalse(tests, eeg.isEpoched);
+    verifyEqual(tests, size(eeg.data), [4 60000]);
+    verifyEqual(tests, double(eeg.data), double(r.data), 'AbsTol', 0.05 + 1e-4, 'rounded to 0.1 uV');
+    verifyEqual(tests, eeg.labels, r.labels);
+    verifyEqual(tests, numel(eeg.events), 30);
+    verifyEqual(tests, [eeg.events.latency], r.onsets, 'AbsTol', 1e-9);
+    verifyEqual(tests, unique({eeg.events.type}), {'S 1'}, '''S  1'' with the spaces collapsed');
+    verifyEqual(tests, eeg.reference, 'channel Cb');
+    verifyEqual(tests, eeg.coordSystem, '');
+    verifyEqual(tests, eeg.notes, { ...
+        'When recorded, the amplifier filtered from 0.0159 Hz (time constant 10 s), up to 250 Hz, no notch filter.', ...
+        'No software filter was applied while recording.'});
+    verifyEmpty(tests, eeg.history);
+    % The VEP is there after cutting trials around the flashes
+    ep = EEGAnalysis.epoch(eeg, 'Window', [-0.1 0.4]);
+    erp = EEGAnalysis.conditionERPs(ep, 'Baseline', [-0.1 0]);
+    m = EEGAnalysis.measure(erp, 'Channels', {'V1-L', 'V1-R'}, 'Window', [0.03 0.07], ...
+        'Measure', 'peak', 'Polarity', 'negative');
+    verifyLessThan(tests, m.value, -25);
+    verifyEqual(tests, m.condition, 'S 1');
+end
+
+function testBrainVisionRecorderHandBuilt(tests)
+    % A Recorder header as written by BrainVision Recorder 1.2x: Latin-1
+    % micro sign, empty reference fields, INT_16 multiplexed, resolutions
+    % per channel, a channel in mV, a comma in a name (\1), the data file
+    % named with a Windows path, markers with 'S  1' / 'R  2', a comment, a
+    % bad interval and a second New Segment (a paused recording). The data
+    % file ends in the middle of a sample.
+    tmp = fullfile(tests.TestData.tmp, 'bvrec');
+    mkdir(tmp);
+    mu = char(181);
+    hdr = {'Brain Vision Data Exchange Header File Version 1.0', ...
+        '; Data created by the Vision Recorder', '', '[Common Infos]', ...
+        'Codepage=UTF-8', 'DataFile=C:\Vision\Raw Files\rec.eeg', 'MarkerFile=rec.vmrk', ...
+        'DataFormat=BINARY', '; Data orientation: MULTIPLEXED=ch1,pt1, ch2,pt1 ...', ...
+        'DataOrientation=MULTIPLEXED', 'NumberOfChannels=3', '; Sampling interval in microseconds', ...
+        'SamplingInterval=2000', '', '[Binary Infos]', 'BinaryFormat=INT_16', '', '[Channel Infos]', ...
+        '; Each entry: Ch<Channel number>=<Name>,<Reference channel name>,', ...
+        ['Ch1=Fp1,,0.1,' mu 'V'], ['Ch2=A\1B,,0.5,' mu 'V'], 'Ch3=EOG,,0.001,mV', '', ...
+        '[Comment]', '', 'A m p l i f i e r  S e t u p', '============================', ...
+        '#     Name      Phys. Chn.    Resolution / Unit   Low Cutoff [s]   High Cutoff [Hz]   Notch [Hz]', ...
+        ['1     Fp1         1                0.1 ' mu 'V             DC              1000              50'], ...
+        ['2     A,B         2                0.5 ' mu 'V             DC              1000              50'], ...
+        '3     EOG         3                0.001 mV           DC              1000              50', '', ...
+        'S o f t w a r e  F i l t e r s', '==============================', ...
+        '#     Low Cutoff [s]   High Cutoff [Hz]   Notch [Hz]', ...
+        '1     0.1592              70                 Off', '2     0.1592              70                 Off', ...
+        '3     0.1592              70                 Off'};
+    writeLatin1(fullfile(tmp, 'rec.vhdr'), hdr);
+    mrk = {'Brain Vision Data Exchange Marker File, Version 1.0', '', '[Common Infos]', 'DataFile=rec.eeg', '', ...
+        '[Marker Infos]', '; Each entry: Mk<Marker number>=<Type>,<Description>,<Position in data points>,', ...
+        'Mk1=New Segment,,1,1,0,20260926101500000000', 'Mk2=Stimulus,S  1,11,1,0', 'Mk3=Response,R  2,26,1,0', ...
+        'Mk4=Comment,eyes closed,30,1,0', 'Mk5=Bad Interval,,31,5,0', 'Mk6=New Segment,,41,1,0', ...
+        'Mk7=Stimulus,S  1,51,1,0'};
+    writeLatin1(fullfile(tmp, 'rec.vmrk'), mrk);
+    raw = int16(reshape(1:180, 3, 60));
+    fid = fopen(fullfile(tmp, 'rec.eeg'), 'w', 'ieee-le');
+    fwrite(fid, [raw(:); 7], 'int16');                   % one number too many
+    fclose(fid);
+
+    eeg = EEGSource.open(fullfile(tmp, 'rec.vhdr'));
+    verifyEqual(tests, eeg.fs, 500);
+    verifyEqual(tests, size(eeg.data), [3 60]);
+    verifyEqual(tests, eeg.labels, {'Fp1', 'A,B', 'EOG'});
+    verifyEqual(tests, double(eeg.data(1, 1:3)), [1 4 7] * 0.1, 'AbsTol', 1e-5, 'resolution 0.1 uV');
+    verifyEqual(tests, double(eeg.data(2, 1:3)), [2 5 8] * 0.5, 'AbsTol', 1e-5, 'resolution 0.5 uV');
+    verifyEqual(tests, double(eeg.data(3, 1:3)), [3 6 9], 'AbsTol', 1e-4, '0.001 mV = 1 uV');
+    verifyEqual(tests, {eeg.events.type}, {'S 1', 'R 2', 'S 1'}, 'stimuli and responses; no comment, no bad interval');
+    verifyEqual(tests, [eeg.events.latency], [10 25 50] / 500, 'AbsTol', 1e-12);
+    verifyEqual(tests, eeg.reference, 'unknown');
+    verifyEqual(tests, eeg.coordSystem, '');
+    verifyEqual(tests, eeg.history, {'Filtered while recording (Recorder software filter): from 1 Hz (time constant 0.1592 s), up to 70 Hz, no notch filter.'});
+    notes = strjoin(eeg.notes, ' | ');
+    verifyTrue(tests, contains(notes, 'ended in the middle of a sample'), notes);
+    verifyTrue(tests, contains(notes, 'converted to'), notes);
+    verifyTrue(tests, contains(notes, 'paused or restarted 1 time(s)'), notes);
+    verifyTrue(tests, contains(notes, '1 bad interval(s)'), notes);
+    verifyTrue(tests, contains(notes, '1 comment marker(s)'), notes);
+    verifyTrue(tests, contains(notes, 'from DC (no high-pass), up to 1000 Hz, notch at 50 Hz'), notes);
+
+    % Errors: missing data file, not a header, frequency data
+    delete(fullfile(tmp, 'rec.eeg'));
+    verifyError(tests, @() readBrainVision(fullfile(tmp, 'rec.vhdr')), 'NeuroAnalyzer:io:fileNotFound');
+    writeLatin1(fullfile(tmp, 'bad.vhdr'), {'Some other file', '[Common Infos]', 'NumberOfChannels=1'});
+    verifyError(tests, @() readBrainVision(fullfile(tmp, 'bad.vhdr')), 'NeuroAnalyzer:eeg:notBrainVision');
+    fq = strrep(hdr, 'DataFormat=BINARY', 'DataType=FREQUENCYDOMAIN');
+    writeLatin1(fullfile(tmp, 'fq.vhdr'), fq);
+    verifyError(tests, @() readBrainVision(fullfile(tmp, 'fq.vhdr')), 'NeuroAnalyzer:eeg:unsupported');
+    verifyError(tests, @() readBrainVision(fullfile(tmp, 'none.vhdr')), 'NeuroAnalyzer:io:fileNotFound');
+end
+
+function testBrainVisionAnalyzerHandBuilt(tests)
+    % Analyzer exports: (1) big-endian float32 segments cut at fixed times,
+    % no Time 0 marker, averaged, positions on a unit sphere; (2) ASCII,
+    % vectorized, decimal comma, a header line and channel names in the
+    % first column (SkipLines / SkipColumns).
+    tmp = fullfile(tests.TestData.tmp, 'bvana');
+    mkdir(tmp);
+    hdr = {'BrainVision Data Exchange Header File Version 2.0', '', '[Common Infos]', 'Codepage=UTF-8', ...
+        'DataFile=avg.dat', 'MarkerFile=avg.vmrk', 'DataFormat=BINARY', 'DataOrientation=MULTIPLEXED', ...
+        'DataType=TIMEDOMAIN', 'NumberOfChannels=2', 'SamplingInterval=4000', 'SegmentationType=FIXTIME', ...
+        'SegmentDataPoints=4', 'Averaged=YES', 'AveragedSegments=40', '', '[Binary Infos]', ...
+        'BinaryFormat=IEEE_FLOAT_32', 'UseBigEndianOrder=YES', '', '[Channel Infos]', ...
+        'Ch1=Cz,Ref,1,µV', 'Ch2=Oz,Ref,1,µV', '', '[Coordinates]', 'Ch1=1,0,0', 'Ch2=1,90,-90'};
+    writeUtf8(fullfile(tmp, 'avg.vhdr'), hdr);
+    writeUtf8(fullfile(tmp, 'avg.vmrk'), {'BrainVision Data Exchange Marker File Version 2.0', '', ...
+        '[Marker Infos]', 'Mk1=New Segment,,1,1,0', 'Mk2=New Segment,,5,1,0'});
+    vals = single(reshape(1:16, 2, 8)) / 4;
+    fid = fopen(fullfile(tmp, 'avg.dat'), 'w', 'ieee-be');
+    fwrite(fid, vals, 'float32');
+    fclose(fid);
+    eeg = readBrainVision(fullfile(tmp, 'avg.vhdr'));
+    verifyEqual(tests, size(eeg.data), [2 4 2]);
+    verifyEqual(tests, eeg.data(:, :, 2), vals(:, 5:8), 'big-endian float32, second segment');
+    verifyEqual(tests, eeg.times, (0:3) / 250, 'AbsTol', 1e-12, 'no Time 0: segments start at 0 s');
+    verifyEqual(tests, eeg.trials.condition, {'All trials', 'All trials'});
+    verifyEqual(tests, eeg.reference, 'channel Ref');
+    verifyEqual(tests, [eeg.chanlocs.z], [1 0], 'AbsTol', 1e-12);
+    verifyEqual(tests, [eeg.chanlocs.y], [0 -1], 'AbsTol', 1e-12);
+    verifyEqual(tests, eeg.coordSystem, 'BrainVision (x = right ear, y = nose, z = up); on a unit sphere');
+    notes = strjoin(eeg.notes, ' | ');
+    verifyTrue(tests, contains(notes, 'no Time 0 marker'), notes);
+    verifyTrue(tests, contains(notes, 'averages of 40 segments'), notes);
+
+    % ASCII export
+    hdr = {'Brain Vision Data Exchange Header File Version 1.0', '[Common Infos]', 'DataFile=txt.dat', ...
+        'DataFormat=ASCII', 'DataOrientation=VECTORIZED', 'NumberOfChannels=2', 'SamplingInterval=1000', '', ...
+        '[ASCII Infos]', 'DecimalSymbol=,', 'SkipLines=1', 'SkipColumns=1', '', '[Channel Infos]', ...
+        'Ch1=C3,,1,uV', 'Ch2=C4,,1,uV'};
+    writeLatin1(fullfile(tmp, 'txt.vhdr'), hdr);
+    writeLatin1(fullfile(tmp, 'txt.dat'), {'Channel  values', 'C3 1,5 -2,25 3', 'C4 4 5,5 -6,75'});
+    eeg = readBrainVision(fullfile(tmp, 'txt.vhdr'));
+    verifyEqual(tests, double(eeg.data), [1.5 -2.25 3; 4 5.5 -6.75], 'AbsTol', 1e-6);
+    verifyEqual(tests, eeg.fs, 1000);
+    verifyFalse(tests, eeg.isEpoched);
+    verifyTrue(tests, contains(strjoin(eeg.notes, ' '), 'no marker file'));
+end
+
+function testBrainVisionWriterRoundTrip(tests)
+    % Our writer against our reader for the options the demo does not use
+    tmp = fullfile(tests.TestData.tmp, 'bvrt');
+    mkdir(tmp);
+    x = single(round(randn(RandStream('mt19937ar', 'Seed', 5), 3, 100) * 100) / 10);
+    P = [0 1 0; -cosd(72) sind(72) 0; 0 0 1];           % Fpz, Fp1, Cz (x right, y nose, z up)
+    eeg = EEGSource.make(x, 200, 'Labels', {'Fpz', 'Fp1', 'Cz'}, 'Unit', 'uV', 'IsEpoched', false, ...
+        'Events', struct('type', {'go, left', 'stop'}, 'latency', {0.1, 0.3}, 'duration', {0, 0.05}));
+    out = writeBrainVision(fullfile(tmp, 'rt.vhdr'), eeg, 'BinaryFormat', 'INT_32', 'Resolution', 0.1, ...
+        'Orientation', 'VECTORIZED', 'Positions', P, 'Version', 2, 'Reference', 'TP9');
+    txt = fileread(out.vhdr);
+    verifyTrue(tests, contains(txt, 'Ch2=1,-90,-72'), 'Fp1 as BrainVision writes it');
+    verifyTrue(tests, contains(txt, 'Ch3=1,0,0'));
+    r = readBrainVision(out.vhdr);
+    verifyEqual(tests, double(r.data), double(x), 'AbsTol', 1e-4);
+    verifyEqual(tests, {r.events.type}, {'go, left', 'stop'}, 'a comma in a description (\1)');
+    verifyEqual(tests, [r.events.duration], [0 0.05], 'AbsTol', 1e-12);
+    verifyEqual(tests, [[r.chanlocs.x]', [r.chanlocs.y]', [r.chanlocs.z]'], P ./ vecnorm(P, 2, 2), 'AbsTol', 1e-3);
+    verifyEqual(tests, r.reference, 'channel TP9');
+    verifyError(tests, @() writeBrainVision(fullfile(tmp, 'big.vhdr'), ...
+        EEGSource.make(single([1e5 0]), 100, 'Unit', 'uV', 'IsEpoched', false), 'BinaryFormat', 'INT_16'), ...
+        'NeuroAnalyzer:eeg:badOption');
+end
+
 %% --------------------------------------------------------------- helpers
+
+function writeLatin1(p, lines)
+    fid = fopen(p, 'w');
+    fwrite(fid, uint8(double([strjoin(lines, sprintf('\r\n')) sprintf('\r\n')])), 'uint8');
+    fclose(fid);
+end
+
+function writeUtf8(p, lines)
+    fid = fopen(p, 'w');
+    fwrite(fid, unicode2native([strjoin(lines, sprintf('\r\n')) sprintf('\r\n')], 'UTF-8'), 'uint8');
+    fclose(fid);
+end
 
 function lines = eeglabHistoryLines(rej)
     lines = { ...

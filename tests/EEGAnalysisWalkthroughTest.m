@@ -7,9 +7,10 @@
 %   -> P300 mean amplitude 300-400 ms -> repeated-measures statistics ->
 %   N1 peak at Cz -> an edge peak flagged -> export .csv / .mat -> session
 %   save / reopen; then the continuous rodent recording cut into trials
-%   around its flashes (VEP over V1) and a plain .mat file read with the
-%   guessed map. Checks the results against the demo's known answers
-%   (core/demo/demoEEG.m) and saves a frame after every step to
+%   around its flashes (VEP over V1), a plain .mat file read with the
+%   guessed map and the BrainVision copy of the study. Checks the results
+%   against the demo's known answers (core/demo/demoEEG.m) and saves a
+%   frame after every step to
 %   test-artifacts/screens/walkthrough/EEGAnalysisApp_<NN>_<step>.png.
 % Skipped when no display is available.
 % =========================================================================
@@ -247,4 +248,12 @@ function testRodentContinuousAndPlainMat(tests)
     tests.verifyTrue(logical(app.showERPs()));
     tests.verifyNumElements(app.Grand.conditions, 3);
     shot(tests, app, 'EEGAnalysisApp_10_plain_mat', 'Overview');
+
+    % BrainVision (Analyzer export): the same study, conditions from the markers at time 0
+    tests.verifyTrue(logical(app.openFiles({f.scalp(1).brainvision, f.scalp(2).brainvision})));
+    tests.verifyEqual(size(app.EEGs{1}.data), [32 250 65]);
+    tests.verifyTrue(contains(strjoin(app.OverviewText.Value(:)', newline), 'BrainVision'));
+    app.setChannels({'Pz'});
+    tests.verifyTrue(logical(app.showERPs()));
+    tests.verifyEqual(sort(app.Grand.conditions), {'Novel', 'Standard', 'Target'});
 end
