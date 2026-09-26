@@ -132,6 +132,34 @@ function testChannelIndex(tests)
     end
 end
 
+function testGrandAverageExact(tests)
+    a = EEGAnalysis.conditionERPs(tinyEEG());
+    x = 10 * ones(2, 5, 3);
+    b = EEGAnalysis.conditionERPs(EEGSource.make(x, 10, 'Times', (-2:2) / 10, 'Labels', {'Fz', 'Cz'}, ...
+        'Conditions', {'B', 'C', 'B'}, 'IsEpoched', true, 'Unit', 'uV'));
+    ga = EEGAnalysis.grandAverage({a, b});
+    verifyEqual(tests, ga.conditions, {'B'}, 'only the conditions every participant has');
+    verifyEqual(tests, ga.n, 2, 'participants');
+    verifyEqual(tests, ga.trials, 4, 'trials in total (2 + 2)');
+    shape = [0 0 3 6 3];
+    B1 = 3 + [1; 2] * shape;
+    verifyEqual(tests, ga.mean, (B1 + 10) / 2, 'AbsTol', 1e-12, 'each participant counts once');
+    verifyEqual(tests, ga.sem, abs(B1 - 10) / 2, 'AbsTol', 1e-12, 'SD over 2 participants / sqrt(2)');
+    verifyEqual(tests, ga.notes, {'Left out of the grand average: A and C (not recorded in every participant).'});
+
+    one = EEGAnalysis.grandAverage({a});
+    verifyEqual(tests, one.mean, a.mean);
+    verifyEqual(tests, one.trials, a.n);
+    verifyEmpty(tests, one.notes);
+
+    c = a; c.labels = {'Fz', 'Pz'};
+    verifyError(tests, @() EEGAnalysis.grandAverage({a, c}), 'NeuroAnalyzer:eeg:mismatch');
+    c = a; c.times = c.times + 0.1;
+    verifyError(tests, @() EEGAnalysis.grandAverage({a, c}), 'NeuroAnalyzer:eeg:mismatch');
+    c = a; c.conditions = {'X', 'Y'};
+    verifyError(tests, @() EEGAnalysis.grandAverage({a, c}), 'NeuroAnalyzer:eeg:unknownCondition');
+end
+
 %% ------------------------------------------------------------- Demo answers
 
 function testDemoP300Order(tests)

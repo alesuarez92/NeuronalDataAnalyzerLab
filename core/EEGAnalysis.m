@@ -21,6 +21,14 @@
 %       erp.mean / erp.sem: channels x time x conditions (uV); erp.n:
 %       trials per condition; erp.conditions, erp.times, erp.labels,
 %       erp.fs, erp.baseline.
+%   ga  = EEGAnalysis.grandAverage(erps)
+%       Grand average of several participants' ERPs (a cell of
+%       conditionERPs results with the same channels and times): the mean
+%       of the participant averages, so every participant counts once.
+%       ga.sem is the SEM across participants; ga.n the number of
+%       participants per condition, ga.trials the trials in total. Only
+%       the conditions every participant has are kept (ga.notes says which
+%       were left out). One participant: its ERP as it is.
 %   d   = EEGAnalysis.difference(erp, condA, condB)
 %       Difference wave condA minus condB: d.mean (channels x time),
 %       d.label ('Target minus Standard'), d.times, d.labels.
@@ -44,7 +52,7 @@
 %
 % Errors: NeuroAnalyzer:eeg:notEpoched, NeuroAnalyzer:eeg:unknownChannel,
 % NeuroAnalyzer:eeg:unknownCondition, NeuroAnalyzer:eeg:badWindow,
-% NeuroAnalyzer:eeg:badOption.
+% NeuroAnalyzer:eeg:badOption, NeuroAnalyzer:eeg:mismatch.
 % =========================================================================
 
 classdef EEGAnalysis
@@ -150,6 +158,60 @@ classdef EEGAnalysis
                 else
                     erp.sem(:, :, c) = NaN;
                 end
+            end
+        end
+
+        %% grandAverage - Mean of the participants' ERPs (each participant once)
+        function ga = grandAverage(erps)
+            if isstruct(erps), erps = num2cell(erps); end
+            if isempty(erps)
+                error('NeuroAnalyzer:eeg:badOption', 'No ERPs to average.');
+            end
+            ref = erps{1};
+            ga = ref;
+            ga.trials = ref.n;
+            ga.notes = {};
+            if numel(erps) == 1, return; end
+            for p = 2:numel(erps)
+                e = erps{p};
+                if numel(e.labels) ~= numel(ref.labels) || ~all(strcmpi(e.labels, ref.labels))
+                    error('NeuroAnalyzer:eeg:mismatch', ['Participant %d has other channels than participant 1 ' ...
+                        '(the channel names and their order must be the same to average them).'], p);
+                end
+                if numel(e.times) ~= numel(ref.times) || max(abs(e.times - ref.times)) > 1e-6
+                    error('NeuroAnalyzer:eeg:mismatch', ['Participant %d has other trial times than participant 1 ' ...
+                        '(%g to %g s at %g Hz instead of %g to %g s at %g Hz).'], p, e.times(1), e.times(end), ...
+                        e.fs, ref.times(1), ref.times(end), ref.fs);
+                end
+            end
+            conds = ref.conditions;
+            for p = 2:numel(erps)
+                conds = conds(ismember(conds, erps{p}.conditions));
+            end
+            if isempty(conds)
+                error('NeuroAnalyzer:eeg:unknownCondition', 'The participants have no condition in common.');
+            end
+            every = cellfun(@(e) e.conditions, erps, 'UniformOutput', false);
+            every = [every{:}];
+            left = EEGSource.stableUnique(every(~ismember(every, conds)));
+            P = numel(erps);
+            C = numel(conds);
+            [nCh, nS, ~] = size(ref.mean);
+            X = zeros(nCh, nS, C, P);
+            T = zeros(P, C);
+            for p = 1:P
+                [~, j] = ismember(conds, erps{p}.conditions);
+                X(:, :, :, p) = erps{p}.mean(:, :, j);
+                T(p, :) = erps{p}.n(j);
+            end
+            ga.conditions = conds;
+            ga.mean = mean(X, 4);
+            ga.sem = std(X, 0, 4) / sqrt(P);
+            ga.n = repmat(P, 1, C);
+            ga.trials = sum(T, 1);
+            if ~isempty(left)
+                ga.notes = {sprintf('Left out of the grand average: %s (not recorded in every participant).', ...
+                    EEGSource.listText(left))};
             end
         end
 
