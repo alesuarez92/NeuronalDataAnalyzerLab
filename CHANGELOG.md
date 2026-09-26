@@ -7,6 +7,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-26
+
 ### Added
 
 - **Histology / culture** (launcher → Imaging → *Histology / culture*,
@@ -296,7 +298,8 @@ formats, but the public surface is not yet stable. Expect tightening
 of error handling, more validation around input formats, and additional
 analyses in 0.2.x.
 
-[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.3.0...HEAD
+[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.1.0

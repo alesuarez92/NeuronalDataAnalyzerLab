@@ -1,7 +1,7 @@
 # Contributing to NeuronalDataAnalyzerLab
 
 Thanks for your interest. This is an early-stage research toolbox
-(currently v0.3.0) and contributions that flow back to the canonical
+(currently v0.4.0) and contributions that flow back to the canonical
 repo are welcome.
 
 ## How to use it
@@ -76,7 +76,7 @@ source of truth — every app's footer reads from it.
 - `MAJOR` — incompatible change to the data formats consumed/produced
   by an app, or removal of a public-facing feature.
 
-Releases are git tags (`v0.3.0`, ...) with a corresponding entry in
+Releases are git tags (`v0.4.0`, ...) with a corresponding entry in
 [CHANGELOG.md](CHANGELOG.md). Release checklist:
 
 1. Set the new version in `core/UITheme.m` and `CITATION.cff` (with the
