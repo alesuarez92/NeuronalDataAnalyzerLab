@@ -17,7 +17,8 @@
 %       Several sessions of a pipeline (cellstr of paths, struct array or
 %       cell of structs) in pipeline order (Extract LDF -> Process LDF ->
 %       LDF Average -> Extract Ephys -> LFP Analysis -> MUA Analysis ->
-%       ROI Analysis -> Histology / culture -> Signal Characterization), one placeholder paragraph
+%       ROI Analysis -> Histology / culture -> EEG Analysis -> Signal
+%       Characterization), one placeholder paragraph
 %       at the start, one software paragraph at the end and one reference
 %       list. Identical paragraphs (the same session twice) appear once.
 %   full = MethodsWriter.compose(txt, refs)
@@ -51,7 +52,7 @@ classdef MethodsWriter
         % Window classes in pipeline order (unknown windows go before the last)
         PipelineOrder = {'ExtractLDFApp', 'ProcessingLDFApp', 'LDFGrandAverageApp', ...
             'ExtractEphysApp', 'LFPAnalysisApp', 'MUAAnalysisApp', 'ROIAnalysisApp', ...
-            'HistologyApp', 'SignalCharacterizationApp'}
+            'HistologyApp', 'EEGAnalysisApp', 'SignalCharacterizationApp'}
         Placeholder = ['[Describe the animals (species, strain, sex, age and number), anaesthesia ' ...
             'and surgery, and the recording or imaging hardware (probe or electrode type, amplifier, ' ...
             'microscope, acquisition system) here.]']
@@ -160,6 +161,12 @@ classdef MethodsWriter
                     'the Second International Conference on Knowledge Discovery and Data Mining (KDD-96), pp. 226-231.']
                 'otsu1979', 'Otsu, 1979', ['Otsu N (1979). A threshold selection method from gray-level ' ...
                     'histograms. IEEE Trans Syst Man Cybern 9(1):62-66.']
+                'delorme2004', 'Delorme & Makeig, 2004', ['Delorme A, Makeig S (2004). EEGLAB: an open source ' ...
+                    'toolbox for analysis of single-trial EEG dynamics including independent component analysis. ' ...
+                    'J Neurosci Methods 134(1):9-21.']
+                'oostenveld2011', 'Oostenveld et al., 2011', ['Oostenveld R, Fries P, Maris E, Schoffelen JM (2011). ' ...
+                    'FieldTrip: open source software for advanced analysis of MEG, EEG, and invasive ' ...
+                    'electrophysiological data. Comput Intell Neurosci 2011:156869.']
                 'student1908', 'Student, 1908', 'Student (1908). The probable error of a mean. Biometrika 6(1):1-25.'
                 'welch1947', 'Welch, 1947', ['Welch BL (1947). The generalization of ''Student''s'' problem when ' ...
                     'several different population variances are involved. Biometrika 34(1-2):28-35.']
@@ -275,6 +282,7 @@ classdef MethodsWriter
                 case 'MUAAnalysisApp',            [paras, tbx] = MethodsWriter.muaAnalysis(s);
                 case 'ROIAnalysisApp',            paras = MethodsWriter.roiAnalysis(s);
                 case 'HistologyApp',              paras = MethodsWriter.histology(s);
+                case 'EEGAnalysisApp',            paras = MethodsWriter.eegAnalysis(s);
                 case 'SignalCharacterizationApp', paras = MethodsWriter.signalCharacterization(s);
                 otherwise
                     ttl = MethodsWriter.getf(s, 'appTitle', '');
@@ -1156,6 +1164,104 @@ classdef MethodsWriter
             end
         end
 
+        %% eegAnalysis - EEG files, earlier processing, epochs, ERPs, measure, statistics
+        function paras = eegAnalysis(s)
+            st = MethodsWriter.getf(s, 'settings', struct());
+            names = cellstr(MethodsWriter.getf(st, 'participants', {}));
+            nP = numel(names);
+            if nP == 0, paras = {}; return; end
+            src = cellstr(MethodsWriter.getf(st, 'sources', {}));
+            src = unique(src(~cellfun(@isempty, src)));
+            tools = {};
+            if any(strcmp(src, 'EEGLAB')), tools{end+1} = 'EEGLAB ({{delorme2004}})'; end
+            if any(strcmp(src, 'FieldTrip')), tools{end+1} = 'FieldTrip ({{oostenveld2011}})'; end
+            t = sprintf(['EEG was recorded from %s [please add: recording system, electrodes and montage, ' ...
+                'sampling and online filters]'], MethodsWriter.plural(nP, 'participant'));
+            if isempty(tools)
+                t = [t ' and cleaned before the analysis [please add: cleaning steps and software].'];
+            else
+                t = sprintf('%s and cleaned in %s before the analysis.', t, MethodsWriter.listText(tools));
+            end
+            parts = {t};
+            nCh = MethodsWriter.getf(st, 'nChannels', NaN);
+            fs = MethodsWriter.getf(st, 'fs', NaN);
+            ref = char(MethodsWriter.getf(st, 'reference', ''));
+            if MethodsWriter.isNum(nCh) && MethodsWriter.isNum(fs)
+                t = sprintf('The data comprised %s at %s Hz', MethodsWriter.plural(nCh, 'channel'), MethodsWriter.num(fs));
+                if ~isempty(ref) && ~strcmpi(ref, 'unknown'), t = sprintf('%s, referenced to the %s', t, ref); end
+                parts{end+1} = [t '.'];
+            end
+            hist = cellstr(MethodsWriter.getf(st, 'history', {}));
+            hist = hist(~cellfun(@isempty, hist));
+            if ~isempty(hist)
+                parts{end+1} = sprintf('The data files recorded these earlier processing steps: %s', ...
+                    strjoin(cellfun(@(h) regexprep(strtrim(h), '\.$', ''), hist, 'UniformOutput', false), '; '));
+                parts{end} = [parts{end} '.'];
+            end
+            tw = MethodsWriter.getf(st, 'trialWindow', []);
+            if isnumeric(tw) && numel(tw) == 2
+                parts{end+1} = sprintf(['The continuous recordings were cut into epochs from %s to %s ms around ' ...
+                    'each event; events too close to the start or end of a recording were left out.'], ...
+                    MethodsWriter.num(tw(1) * 1000), MethodsWriter.num(tw(2) * 1000));
+            end
+            paras = {strjoin(parts, ' ')};
+            if ~logical(MethodsWriter.getf(st, 'erpsShown', false)), return; end
+
+            conds = cellstr(MethodsWriter.getf(s, 'results.conditions', {}));
+            trials = MethodsWriter.getf(s, 'results.trials', []);
+            cl = conds;
+            if numel(trials) == numel(conds)
+                cl = arrayfun(@(k) sprintf('%s (%s)', conds{k}, MethodsWriter.plural(trials(k), 'trial')), ...
+                    1:numel(conds), 'UniformOutput', false);
+            end
+            t = 'Event-related potentials (ERPs) were computed for each participant as the mean of the trials of each condition';
+            if ~isempty(cl), t = sprintf('%s (%s in total)', t, MethodsWriter.listText(cl)); end
+            bl = MethodsWriter.getf(st, 'baseline', []);
+            if logical(MethodsWriter.getf(st, 'baselineOn', false)) && isnumeric(bl) && numel(bl) == 2
+                t = sprintf(['%s, after subtracting from every trial and channel its mean from %s to %s ms ' ...
+                    '(baseline correction)'], t, MethodsWriter.num(bl(1) * 1000), MethodsWriter.num(bl(2) * 1000));
+            else
+                t = [t ', without further baseline correction'];
+            end
+            parts = {[t '.']};
+            if nP > 1
+                parts{end+1} = 'Grand averages were the mean of the participants'' ERPs, each participant weighted equally.';
+            end
+            m = MethodsWriter.getf(st, 'measure', struct());
+            mtxt = '';
+            if logical(MethodsWriter.getf(st, 'measured', false)) && isfield(m, 'Window')
+                w = m.Window * 1000;
+                ch = cellstr(MethodsWriter.getf(m, 'Channels', {}));
+                ch = ch(~cellfun(@isempty, ch));
+                if isempty(ch)
+                    where = 'averaged over all channels';
+                elseif numel(ch) == 1
+                    where = sprintf('at %s', ch{1});
+                else
+                    where = sprintf('averaged over %s', MethodsWriter.listText(ch));
+                end
+                if strcmpi(MethodsWriter.getf(m, 'Measure', 'mean'), 'peak')
+                    pol = lower(MethodsWriter.getf(m, 'Polarity', 'positive'));
+                    mtxt = sprintf('%s peak amplitude from %s to %s ms %s', pol, MethodsWriter.num(w(1)), ...
+                        MethodsWriter.num(w(2)), where);
+                    parts{end+1} = sprintf(['In each participant''s ERP, the %s was measured as the most %s value ' ...
+                        'in the window, with its latency; peaks falling on the edge of the window were flagged.'], ...
+                        mtxt, pol);
+                else
+                    mtxt = sprintf('mean amplitude from %s to %s ms %s', MethodsWriter.num(w(1)), ...
+                        MethodsWriter.num(w(2)), where);
+                    parts{end+1} = sprintf('In each participant''s ERP, the %s was measured.', mtxt);
+                end
+            end
+            paras{end+1} = strjoin(parts, ' ');
+            gt = MethodsWriter.getf(s, 'results.groupTest', []);
+            if isstruct(gt) && isfield(gt, 'main') && isstruct(gt.main) && ~isempty(mtxt)
+                gs = struct('featureText', mtxt, 'subjectText', ...
+                    'one value per participant and condition, with participants matched across conditions');
+                paras{end+1} = MethodsWriter.groupText(gt, gs);
+            end
+        end
+
         %% baselineClause - ", with stimulus onset at t0 = 0 s, ..." sentence ending
         function t = baselineClause(t0, bl, dirn)
             det = {};
@@ -1207,7 +1313,8 @@ classdef MethodsWriter
                 end
             end
             feat = MethodsWriter.getf(gs, 'feature', '');
-            fd = MethodsWriter.featureDefinition(feat);
+            fd = MethodsWriter.getf(gs, 'featureText', '');        % EEG Analysis: its own wording
+            if isempty(fd), fd = MethodsWriter.featureDefinition(feat); end
             if isempty(fd), fd = 'response feature'; end
             design = lower(MethodsWriter.getf(gt, 'design', ''));
             method = lower(MethodsWriter.getf(gt, 'method', 'parametric'));
@@ -1221,7 +1328,7 @@ classdef MethodsWriter
                 case 'Each series'
                     subj = 'one value per trial (each trial treated as one subject)';
                 otherwise
-                    subj = '';
+                    subj = MethodsWriter.getf(gs, 'subjectText', '');
             end
             t = sprintf('The %s was compared between %s', fd, MethodsWriter.listText(grp));
             if ~isempty(subj), t = sprintf('%s, using %s', t, subj); end

@@ -71,6 +71,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   EEGLAB history or FieldTrip `cfg.previous`. Nothing in a file is run;
   EEGLAB and FieldTrip are not needed. Values stored in volts are
   converted to µV, and the note says so.
+- **EEG Analysis window** (launcher → *EEG*, `apps/EEGAnalysisApp.m`,
+  `core/EEGAnalysis.m`): load one cleaned EEG file per participant
+  (EEGLAB, FieldTrip or a plain .mat, for which a short form asks what
+  each variable is), read in the *Overview* tab what each file holds and
+  what was already done to it, cut continuous recordings into trials
+  around their events, and plot the ERPs per condition (one participant or
+  the grand average, with SEM), every channel of one condition, or a
+  difference wave. Measure the mean or peak amplitude in a time window
+  per participant and condition (peaks on the window's edge are flagged),
+  then compare the conditions within participants (paired t-test /
+  Wilcoxon, or repeated-measures ANOVA / Friedman with post hoc tests).
+  Export as .csv (one row per participant and condition) or .mat;
+  sessions, report and methods text (citing EEGLAB or FieldTrip when the
+  files came from them). Help → *EEG Analysis* gives the demo's answers;
+  *Generate all demo files* now also writes the EEG demo.
 - **EEG demo data** (`core/demo/demoEEG.m`): a synthetic oddball study (8
   participants, 32 channels, Standard / Target / Novel, known P1, N1,
   P300 and alpha, 5 trials already rejected) and a rodent recording (4
