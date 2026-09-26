@@ -39,7 +39,7 @@ Owner decision: step 2 continues on the same branch (no PR for step 1 alone).
   hidden butterfly lines / SEM shades left behind (`cla` keeps hidden handles), a y axis stuck at
   [0 1] (ylim read before the first draw, then fixed), measures listed in each file's condition order.
   All fixed in the app, with test checks. The same push has the two Histology fixes (session pixel
-  note; Help / website 2.6 px, listed as a row to check). CI on this push: pending.
+  note; Help / website 2.6 px, listed as a row to check). CI run 36246389147 on 7ada14e: green.
 
 ## Next
 1. Check that CI run (GitHub MCP `actions_list` / `get_job_logs`). Likely places for failures:
