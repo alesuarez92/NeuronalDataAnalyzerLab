@@ -1,7 +1,8 @@
 name: Update screenshots
 
 # Run by hand (Actions → Update screenshots → Run workflow). Runs the app in
-# MATLAB on demo data (the same tests as CI), then commits to a branch:
+# MATLAB on demo data (the same tests as CI; code from main unless 'source'
+# names another branch), then commits to a branch:
 # - every website frame (website/assets/frames/*.png) that has a fresh
 #   screenshot with the same name, and the README launcher image
 #   (docs/main-launcher.png);
@@ -16,6 +17,10 @@ on:
         description: 'Branch that receives the commit (created from main if missing)'
         required: true
         default: 'claude/admiring-cori-52ekpa'
+      source:
+        description: 'Branch whose code makes the screenshots (main, or a branch with windows not yet merged)'
+        required: true
+        default: 'main'
       include_all:
         description: 'Also commit every screenshot under review-screens/ (for review only)'
         type: boolean
@@ -35,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ inputs.source }}
           fetch-depth: 0
 
       - uses: matlab-actions/setup-matlab@v2
@@ -62,6 +67,7 @@ jobs:
         env:
           BRANCH: ${{ inputs.branch }}
           INCLUDE_ALL: ${{ inputs.include_all }}
+          SOURCE: ${{ inputs.source }}
         run: |
           set -e
           test "$BRANCH" != "main" || { echo "Refusing to push to main"; exit 1; }
@@ -97,7 +103,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No screenshot changed."
           else
-            git commit -q -m "Screenshots from CI (main @ $src_sha): $n website frames and the README launcher image"
+            git commit -q -m "Screenshots from CI ($SOURCE @ $src_sha): $n website frames and the README launcher image"
             git push -q origin "$BRANCH"
           fi
           echo "Matched $n website frames."
