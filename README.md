@@ -8,7 +8,7 @@
 > not the green *Code → Download ZIP* button at the top of this page.
 > The green button gives you the in-development `main` branch; the
 > Releases page gives you a tagged, tested version (currently
-> [v0.5.1](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.5.1)).
+> [v0.5.2](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.5.2)).
 > Full walk-through below in [Install](#install).
 
 ![The launcher: Learn (Course and Virtual lab, coming soon) and one tile per analysis, grouped as blood flow, electrophysiology, EEG, imaging and across techniques](docs/main-launcher.png)
@@ -36,7 +36,7 @@ any window with synthetic data whose answers are known; the
 (plan, record and analyse a simulated experiment) are coming soon, also free; in the
 launcher their tiles show a greyed-out *Coming soon* button.
 
-> **Status: early release (v0.5.1).** The UI works end-to-end on the lab's
+> **Status: early release (v0.5.2).** The UI works end-to-end on the lab's
 > data formats, but the public surface is not yet stable. See
 > [CHANGELOG.md](CHANGELOG.md) for what's in this release and what's next.
 
@@ -188,7 +188,7 @@ The website has the same on its Community page (About → Community).
 If you use Neuronal Data Analyzer Lab, or results produced with it, in work
 that you publish or present, cite it (this is a condition of the licence):
 
-> Suarez, A. (2026). *Neuronal Data Analyzer Lab* (version 0.5.1) [Computer
+> Suarez, A. (2026). *Neuronal Data Analyzer Lab* (version 0.5.2) [Computer
 > software]. https://github.com/alesuarez92/NeuronalDataAnalyzerLab
 
 GitHub's **Cite this repository** button (right-hand column) gives the same

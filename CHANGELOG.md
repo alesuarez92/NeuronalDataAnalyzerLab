@@ -10,6 +10,14 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-09-29
+
+### Changed
+
+- **Launcher: Course and Virtual lab** keep their tiles under **Learn** with
+  a greyed-out *Coming soon* button; they no longer point to website pages,
+  which are offline until the Course and the Virtual lab are ready.
+
 ## [0.5.1] - 2026-09-29
 
 ### Changed
@@ -394,5 +402,6 @@ formats, but the public surface is not yet stable. Expect tightening
 of error handling, more validation around input formats, and additional
 analyses in 0.2.x.
 
-[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.5.1...HEAD
+[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.5.2
 [0.5.1]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.5.1
