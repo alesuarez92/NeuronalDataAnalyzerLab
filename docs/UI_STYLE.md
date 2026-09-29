@@ -54,7 +54,6 @@ Every window is built from **`core/UIKit.m`** with colors and sizes from
 ├──────────────────────────────────────────────────────────────┤
 │ Import folder: …   Export folder: …            [Set folders] │
 ├──────────────────────────────────────────────────────────────┤
-│ LEARN      Course · Virtual lab                              │  2 tiles per row (both disabled "Coming soon")
 │ ANALYSES                                                     │
 │ ▌BLOOD FLOW ───────  ▌ELECTROPHYSIOLOGY ─────────────────    │  family headings
 │ ┌ LDF ─────── ? ┐    ┌ LFP ──────── ? ┐ ┌ MUA ──────── ? ┐  │  tiles: colour stripe,
@@ -64,7 +63,7 @@ Every window is built from **`core/UIKit.m`** with colors and sizes from
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- Tiles, families and the Learn area come from `core/Techniques.m`: a new
+- Tiles and families come from `core/Techniques.m`: a new
   technique is one row in `Techniques.list()`, with no change to `Main.m`.
   Keep the website's Analyses menu in the same order.
 - Family colours: `UITheme.plotColors` rows 2, 1, 4, 3 and `headerBg`.
