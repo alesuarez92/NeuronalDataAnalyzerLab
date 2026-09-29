@@ -487,7 +487,7 @@ classdef HelpApp < handle
                 'Neuronal Data Analyzer Lab: analysis of blood flow (LDF), electrophysiology, EEG and imaging, step by step.');
             t.quick = {
                 'In the launcher, click **Set folders** and choose your **Import** folder (raw data) and **Export** folder (results). You can use one folder for both.'
-                'New here? Pick a window on the left and click **Try it with demo data**: it opens that window with synthetic data whose answers are known, so you can practise and check your numbers before using your own recordings.'
+                'New here? Pick a window on the left and click **Try it with demo data**: it opens that window with synthetic data whose answers are known, so you can practise and check your numbers before using your own recordings. The **Course** and the **Virtual lab** are coming soon.'
                 'Under **Analyses**, find the tile for your data (grouped as Blood flow, Electrophysiology, EEG, Imaging and Across techniques) and click its numbered steps **in order**.'
                 'In every window, work down the numbered step cards on the left: **Load** → **Settings** → **Run** → **Save**. The teal button is the recommended next action; greyed-out buttons are not possible yet.'
                 'Read the **status bar** at the bottom of each window: it says what happened and what to do next.'
@@ -521,7 +521,7 @@ classdef HelpApp < handle
             t.detailsTitle = 'Overview';
             t.details = {
                 '## The launcher'
-                '**? Help** at the top right opens this Help; every window''s topic has **Try it with demo data**.'
+                'The **Learn** area: the **Course** (step-by-step lessons in the real windows) and the **Virtual lab** (a simulated experiment to plan, record and analyse) are shown with a greyed-out **Coming soon** button: they are not in this release. **? Help** at the top right opens this Help; every window''s topic has **Try it with demo data**.'
                 'The **Analyses** area has one tile per technique, grouped by family in the same order as the website''s Analyses menu. Each tile has its steps as numbered buttons (hover one to see which file goes in and out) and a **?** that opens its topic here.'
                 '| Family | Tile: windows, in order | Starts from | Ends with |'
                 '| Blood flow | LDF: 1 Extract → 2 Process → 3 Average | LabChart .mat export | Trials .mat; grand average (mean ± SD) |'

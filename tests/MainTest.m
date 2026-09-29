@@ -7,8 +7,9 @@
 % test-artifacts/screens/Main_small.png for review) and 1 column (560 px,
 % cover hidden) and back. Then presses every button through its
 % ButtonPushedFcn, as a click does: each step button opens its step's
-% window, each ? and the header Help open Help on the right topic. The
-% body has only the Analyses area (no Learn area).
+% window, each ? and the header Help open Help on the right topic; the
+% Learn area has only the Course and the Virtual lab, whose disabled
+% "Coming soon" buttons open nothing.
 % "Open a session..." asks for a file with a dialog, so its work is
 % tested through openSessionFile(p): a session saved by Extract LDF opens
 % in Extract LDF, a session of an unknown window is refused.
@@ -105,6 +106,7 @@ function testLayoutFollowsTheWindowWidth(tests)
     T = Techniques.list();
     F = Techniques.families();
     tests.verifyEqual({app.Tiles.id}, {T.id}, 'one tile per row of Techniques.list, in order');
+    tests.verifyEqual(fieldnames(app.LearnButtons)', {'course', 'lab'});
 
     % Default width: 3 columns, every family heading, the cover shown
     resizeTo(app, Main.DefaultSize(1), 900);
@@ -126,6 +128,7 @@ function testLayoutFollowsTheWindowWidth(tests)
     tests.verifyEqual(tilePlace(app, 'eeg'), [2 2]);
     tests.verifyEqual(tilePlace(app, 'lfp'), [4 1]);
     tests.verifyEqual(headings(app), {F.name}, 'every family keeps its heading');
+    tests.verifyEqual(numel(app.LearnGrid.ColumnWidth), 2, 'Learn: two tiles per row');
     pause(0.5);
     try
         exportapp(app.UIFig, fullfile(tests.TestData.outDir, 'Main_small.png'));
@@ -136,6 +139,7 @@ function testLayoutFollowsTheWindowWidth(tests)
     % 560 wide: 1 column, no cover art (no room next to the title)
     resizeTo(app, 560, 640);
     tests.verifyEqual(app.Columns, 1);
+    tests.verifyEqual(numel(app.LearnGrid.ColumnWidth), 1);
     cols = arrayfun(@(t) t.panel.Layout.Column, app.Tiles);
     rows = arrayfun(@(t) t.panel.Layout.Row, app.Tiles);
     tests.verifyTrue(all(cols == 1), 'one column');
@@ -193,16 +197,18 @@ function testEveryHelpButtonOpensItsTopic(tests)
     closeOpened(app);
 end
 
-function testOnlyTheAnalysesArea(tests)
-    % No Learn area: Help and demo data are reached through ? Help
+function testLearnButtons(tests)
     app = Main(); c = onCleanup(@() delete(app.UIFig));
-    tests.verifyFalse(isprop(app, 'LearnButtons'), 'no Learn buttons');
-    tests.verifyEqual(numel(app.BodyGrid.RowHeight), 2, 'body: Analyses heading and tiles');
-    labels = findall(app.BodyGrid, 'Type', 'uilabel');
-    texts = {labels.Text};
-    tests.verifyFalse(any(strcmp(texts, 'LEARN')), 'no LEARN heading');
-    tests.verifyTrue(any(strcmp(texts, 'ANALYSES')), 'ANALYSES heading');
-    tests.verifyTrue(any(contains(texts, 'Try it with demo data')), 'the heading points to demo data in ? Help');
+    for id = {'course', 'lab'}
+        b = app.LearnButtons.(id{1});
+        tests.verifyEqual(b.Text, 'Coming soon', ['Learn: ' id{1}]);
+        tests.verifyEqual(char(b.Enable), 'off', ['Learn: ' id{1} ' is disabled']);
+        press(b);
+        tests.verifyEmpty(app.LastOpened, ['Learn: ' id{1} ' opens nothing']);
+        tests.verifyTrue(contains(app.StatusLabel.Text, 'coming soon'), app.StatusLabel.Text);
+    end
+    tests.verifyEqual(fieldnames(app.LearnButtons)', {'course', 'lab'}, ...
+        'Help and demo data are reached through ? Help, not Learn cards');
 end
 
 function testOpenSessionFile(tests)
