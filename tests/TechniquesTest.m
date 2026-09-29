@@ -25,7 +25,7 @@ end
 
 function testEveryWindowClassExists(tests)
     c = Techniques.windows();
-    tests.verifyGreaterThanOrEqual(numel(c), 13);
+    tests.verifyGreaterThanOrEqual(numel(c), 11);   % 11 windows since Course, Virtual lab and the Help card left the launcher
     for k = 1:numel(c)
         mc = meta.class.fromName(c{k});
         tests.verifyNotEmpty(mc, sprintf('window class %s does not exist', c{k}));
@@ -63,8 +63,8 @@ function testRowsAreComplete(tests)
     [~, first] = unique({T.family}, 'first');
     tests.verifyEqual({T(sort(first)).family}, {F.id}, 'tiles are listed family by family, in family order');
     L = Techniques.learn();
-    tests.verifyEqual({L.id}, {'course', 'lab', 'demo', 'help'});
-    tests.verifyEqual([L.available], [false false true true], 'Course and Virtual lab: coming soon');
+    tests.verifyEqual({L.id}, {'course', 'lab'});
+    tests.verifyEqual([L.available], [false false], 'Course and Virtual lab: coming soon');
     for i = 1:numel(L)
         tests.verifyTrue(any(strcmp(topics, L(i).help)), sprintf('learn %s: no Help topic', L(i).id));
     end

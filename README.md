@@ -11,7 +11,7 @@
 > [v0.5.1](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.5.1)).
 > Full walk-through below in [Install](#install).
 
-![The launcher: Learn (Course, Virtual lab, Try with demo data, Help) and one tile per analysis, grouped as blood flow, electrophysiology, EEG, imaging and across techniques](docs/main-launcher.png)
+![The launcher: Learn (Course and Virtual lab, coming soon) and one tile per analysis, grouped as blood flow, electrophysiology, EEG, imaging and across techniques](docs/main-launcher.png)
 
 Neuroscience analysis toolbox for **Laser Doppler Flowmetry**,
 **electrophysiology** (LFP: ERP, CSD, time–frequency; MUA: spike detection,
@@ -30,8 +30,8 @@ parameter, software versions and references, ready to edit). Every window has **
 answers**, so results can be checked before using real recordings.
 
 Everything needed to learn the tool is free: the in-app **Help** explains
-every window step by step, *Try with demo data* opens any window with
-synthetic data whose answers are known, and the
+every window step by step, and its *Try it with demo data* button opens
+any window with synthetic data whose answers are known; the
 project website has a guide and walkthroughs. A hands-on **Course** and a **Virtual lab**
 (plan, record and analyse a simulated experiment) are coming soon; in the
 launcher their tiles show a greyed-out *Coming soon* button.
@@ -84,8 +84,8 @@ a "Cite this repository" button from [CITATION.cff](CITATION.cff).
    NeuroAnalyzerLab
    ```
 
-   The launcher opens. New here? Start under **Learn** (*Try with demo
-   data*, or Help). For your own data, find its tile under
+   The launcher opens. New here? Click **? Help** (top right), pick a
+   window and click *Try it with demo data*. For your own data, find its tile under
    **Analyses** and click the numbered steps in order; each tile's **?**
    explains it.
 

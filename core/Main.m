@@ -11,9 +11,10 @@
 %            ? Help
 %   folders  Import / Export folder and Set folders
 %   body     (scrolls when the window is small)
-%            LEARN: Course and Virtual lab (Coming soon, disabled), Try with demo data (choose a
-%            window, it opens with synthetic data whose answers are known)
-%            and Help, two per row
+%            LEARN: Course and Virtual lab (Coming soon, disabled), two per
+%            row. Help is the ? Help button in the cover; every window's
+%            Help topic has "Try it with demo data" (synthetic data whose
+%            answers are known)
 %            ANALYSES: one tile per technique, grouped by family: Blood
 %            flow, Electrophysiology, EEG, Imaging, Across techniques. A
 %            tile has a description, its steps as numbered buttons in order
@@ -39,8 +40,7 @@ classdef Main < handle
         BodyGrid           % Scrolling body: Learn heading, Learn tiles, Analyses heading, tiles
         LearnGrid          % Learn tiles
         LearnTiles         % Panels of the Learn tiles (Techniques.learn order)
-        LearnButtons       % struct with one button per Learn item id (course, lab, demo, help)
-        DemoDrop           % Window that "Try with demo data" opens
+        LearnButtons       % struct with one button per Learn item id (course, lab)
         TileGrid           % Family headings and analysis tiles
         Tiles              % One per Techniques.list() row: id, family, panel, steps (buttons), help (? button)
         StatusLabel        % Status bar (toolbox availability, last action)
@@ -177,7 +177,8 @@ classdef Main < handle
                 'ColumnWidth', {'1x'}, 'Padding', [16 8 16 12], 'RowSpacing', 6, ...
                 'BackgroundColor', T.bgGray, 'Scrollable', 'on');
             sectionHeading(app.BodyGrid, 'LEARN', ...
-                'New here? Practise on simulated data with known answers before your own.');
+                ['New here? Open ? Help (top right): every window''s topic has ' char(9654) ...
+                ' Try it with demo data, synthetic data whose answers are known.']);
             % Grids start with a cell for every tile; layoutTiles sets the real rows and columns
             nLearn = numel(Techniques.learn());
             app.LearnGrid = uigridlayout(app.BodyGrid, [nLearn 1], 'ColumnWidth', {'1x'}, ...
@@ -204,35 +205,24 @@ classdef Main < handle
             app.LearnButtons = struct();
             for i = 1:numel(L)
                 id = L(i).id;
-                isDemo = strcmp(id, 'demo');
                 p = uipanel(app.LearnGrid, 'BackgroundColor', T.cardBg, 'BorderType', 'line', ...
                     'HighlightColor', T.cardBorder);
                 app.LearnTiles(i) = p;
-                if isDemo, cw = 176; else, cw = 84; end
-                g = uigridlayout(p, [2 2], 'ColumnWidth', {'1x', cw}, 'RowHeight', {20, '1x'}, ...
+                g = uigridlayout(p, [2 2], 'ColumnWidth', {'1x', 84}, 'RowHeight', {20, '1x'}, ...
                     'Padding', [12 8 12 8], 'RowSpacing', 2, 'ColumnSpacing', 10, 'BackgroundColor', T.cardBg);
                 uilabel(g, 'Text', L(i).name, 'FontSize', T.fontButton + 1, 'FontWeight', 'bold', ...
                     'FontColor', T.sectionTitleColor);
                 d = uilabel(g, 'Text', L(i).description, 'FontSize', T.fontSmall, 'FontColor', T.bodyColor, ...
                     'WordWrap', 'on', 'VerticalAlignment', 'top');
                 d.Layout.Row = 2; d.Layout.Column = 1;
-                if isDemo
-                    c = uigridlayout(g, [2 1], 'RowHeight', {T.controlHeight - 2, T.buttonHeight - 4}, ...
-                        'Padding', [0 0 0 0], 'RowSpacing', 4, 'BackgroundColor', T.cardBg);
-                    [labels, classes] = Techniques.demoChoices();
-                    app.DemoDrop = uidropdown(c, 'Items', labels, 'ItemsData', classes, ...
-                        'FontSize', T.fontSmall, 'Tooltip', 'The window to open with demo data');
-                    b = UIKit.button(c, [char(9654) ' Try'], @(~,~)app.tryDemo(), 'secondary', L(i).tooltip);
-                else
-                    c = uigridlayout(g, [3 1], 'RowHeight', {'1x', T.buttonHeight, '1x'}, ...
-                        'Padding', [0 0 0 0], 'RowSpacing', 0, 'BackgroundColor', T.cardBg);
-                    uilabel(c, 'Text', '');
-                    b = UIKit.button(c, 'Open', @(~,~)app.openLearn(id), 'secondary', L(i).tooltip);
-                    b.Layout.Row = 2;
-                    if ~L(i).available
-                        b.Text = 'Coming soon';
-                        b.Enable = 'off';
-                    end
+                c = uigridlayout(g, [3 1], 'RowHeight', {'1x', T.buttonHeight, '1x'}, ...
+                    'Padding', [0 0 0 0], 'RowSpacing', 0, 'BackgroundColor', T.cardBg);
+                uilabel(c, 'Text', '');
+                b = UIKit.button(c, 'Open', @(~,~)app.openLearn(id), 'secondary', L(i).tooltip);
+                b.Layout.Row = 2;
+                if ~L(i).available
+                    b.Text = 'Coming soon';
+                    b.Enable = 'off';
                 end
                 c.Layout.Row = [1 2]; c.Layout.Column = 2;
                 app.LearnButtons.(id) = b;
@@ -394,7 +384,7 @@ classdef Main < handle
             end
         end
 
-        %% openLearn - Open a Learn item by id ('course', 'lab', 'demo', 'help')
+        %% openLearn - Open a Learn item by id ('course', 'lab')
         function win = openLearn(app, id)
             L = Techniques.learn();
             it = L(strcmp({L.id}, id));
@@ -402,10 +392,6 @@ classdef Main < handle
                 win = [];
                 app.LastOpened = [];
                 UIKit.setStatus(app.StatusLabel, sprintf('%s: coming soon', it.name), 'warning');
-            elseif strcmp(it.window, 'HelpApp')
-                win = app.openHelp(it.help);
-            elseif isempty(it.window)
-                win = app.tryDemo();
             else
                 win = app.launch(str2func(it.window), it.name);
             end
@@ -427,32 +413,6 @@ classdef Main < handle
             catch ME
                 UIKit.setStatus(app.StatusLabel, 'Could not open Help', 'error');
                 UIKit.alert(app.UIFig, sprintf('Could not open Help:\n%s', ME.message), 'Help');
-            end
-        end
-
-        %% tryDemo - Open a window with its demo data (default: the one chosen in the Learn area)
-        function win = tryDemo(app, cls)
-            win = [];
-            app.LastOpened = [];
-            if nargin < 2 || isempty(cls), cls = app.DemoDrop.Value; end
-            k = find(strcmp(app.DemoDrop.ItemsData, cls), 1);
-            if isempty(k)
-                UIKit.setStatus(app.StatusLabel, sprintf('%s has no demo data', cls), 'error');
-                return;
-            end
-            app.DemoDrop.Value = cls;
-            name = app.DemoDrop.Items{k};
-            UIKit.setStatus(app.StatusLabel, sprintf('Opening %s with demo data', name), 'busy');
-            try
-                win = feval(cls);
-                app.LastOpened = win;
-                win.loadDemo();
-                UIKit.setStatus(app.StatusLabel, sprintf(['Opened %s with demo data. The expected ' ...
-                    'results are under "Demo data" in its Help (? Help in the window).'], name), 'success');
-            catch ME
-                UIKit.setStatus(app.StatusLabel, sprintf('Could not open %s with demo data', name), 'error');
-                UIKit.alert(app.UIFig, sprintf('Could not open %s with demo data:\n%s', name, ME.message), ...
-                    'Try with demo data');
             end
         end
 

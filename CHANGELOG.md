@@ -31,6 +31,10 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   button; on the website their pages say what they will offer. Everything
   needed to learn the tool stays free: the in-app Help, *Try with demo
   data* and the website's guide and walkthroughs.
+- **Launcher: Help and demo data in one place.** The Learn area keeps only
+  the Course and Virtual lab. **? Help** (top right) opens the Help, where
+  every window's topic has *Try it with demo data*; each tile's **?** opens
+  its topic directly.
 - **The website is kept apart from this repository.** It stays online
   (Help → *Learn more* opens it); its source is no longer in the toolbox.
 

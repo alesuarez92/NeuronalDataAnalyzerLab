@@ -7,9 +7,9 @@
 % test-artifacts/screens/Main_small.png for review) and 1 column (560 px,
 % cover hidden) and back. Then presses every button through its
 % ButtonPushedFcn, as a click does: each step button opens its step's
-% window, each ? and the header Help open Help on the right topic, the
-% Learn tiles open Help and a window with demo data; the Course and the
-% Virtual lab show a disabled "Coming soon" button that opens nothing.
+% window, each ? and the header Help open Help on the right topic; the
+% Learn area has only the Course and the Virtual lab, whose disabled
+% "Coming soon" buttons open nothing.
 % "Open a session..." asks for a file with a dialog, so its work is
 % tested through openSessionFile(p): a session saved by Extract LDF opens
 % in Extract LDF, a session of an unknown window is refused.
@@ -106,7 +106,7 @@ function testLayoutFollowsTheWindowWidth(tests)
     T = Techniques.list();
     F = Techniques.families();
     tests.verifyEqual({app.Tiles.id}, {T.id}, 'one tile per row of Techniques.list, in order');
-    tests.verifyEqual(fieldnames(app.LearnButtons)', {'course', 'lab', 'demo', 'help'});
+    tests.verifyEqual(fieldnames(app.LearnButtons)', {'course', 'lab'});
 
     % Default width: 3 columns, every family heading, the cover shown
     resizeTo(app, Main.DefaultSize(1), 900);
@@ -207,26 +207,8 @@ function testLearnButtons(tests)
         tests.verifyEmpty(app.LastOpened, ['Learn: ' id{1} ' opens nothing']);
         tests.verifyTrue(contains(app.StatusLabel.Text, 'coming soon'), app.StatusLabel.Text);
     end
-    press(app.LearnButtons.help);
-    tests.verifyTrue(isa(app.LastOpened, 'HelpApp'), 'Learn: Help');
-    if isa(app.LastOpened, 'HelpApp')
-        tests.verifyEqual(app.LastOpened.TopicList.Value, 'Welcome');
-    end
-    closeOpened(app);
-
-    % Try with demo data: the window chosen in the list, with its demo loaded
-    [labels, classes] = Techniques.demoChoices();
-    tests.verifyEqual(app.DemoDrop.Items, labels);
-    tests.verifyEqual(app.DemoDrop.ItemsData, classes);
-    app.DemoDrop.Value = 'ExtractLDFApp';
-    press(app.LearnButtons.demo);
-    tests.verifyTrue(isa(app.LastOpened, 'ExtractLDFApp'), 'Try opens the chosen window');
-    if isa(app.LastOpened, 'ExtractLDFApp')
-        tests.verifyNotEmpty(app.LastOpened.AppData.RawStim, 'with its demo data loaded');
-    end
-    tests.verifyTrue(contains(app.StatusLabel.Text, 'Extract LDF'), app.StatusLabel.Text);
-    closeOpened(app);
-    tests.verifyEmpty(app.tryDemo('NoSuchApp'), 'a window without demo data is refused');
+    tests.verifyEqual(fieldnames(app.LearnButtons)', {'course', 'lab'}, ...
+        'Help and demo data are reached through ? Help, not Learn cards');
 end
 
 function testOpenSessionFile(tests)
