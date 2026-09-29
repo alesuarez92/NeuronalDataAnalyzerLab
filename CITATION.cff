@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+title: Neuronal Data Analyzer Lab
+message: >-
+  If you use this software, or results produced with it, in work that you
+  publish or present, you must cite it using the metadata below (citation
+  condition in LICENSE.txt).
+type: software
+authors:
+  - given-names: Alejandro
+    family-names: Suarez
+    email: alesr713@gmail.com
+repository-code: "https://github.com/alesuarez92/NeuronalDataAnalyzerLab"
+url: "https://github.com/alesuarez92/NeuronalDataAnalyzerLab"
+abstract: >-
+  Neuroscience analysis toolbox for Laser Doppler Flowmetry, electrophysiology
+  (LFP, MUA), ROI / coregistered image analysis (brightness, movement, ΔF/F,
+  blood-flow speed, kymograph, vessel diameter), and signal characterization
+  (peak latency, onset delay, FWHM, AUC, rise/decay time, stimulation–response
+  integration). MATLAB.
+keywords:
+  - neuroscience
+  - electrophysiology
+  - laser-doppler-flowmetry
+  - calcium-imaging
+  - lfp
+  - mua
+  - signal-processing
+  - matlab
+license: PolyForm-Noncommercial-1.0.0
+version: "0.5.1"
+date-released: "2026-09-29"

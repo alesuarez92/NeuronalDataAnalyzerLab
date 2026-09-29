@@ -1,0 +1,41 @@
+name: Unclear or wrong explanation
+description: A Help page, website page or message that is hard to follow, or says something that is not right.
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you: explanations are meant to be read by scientists who do not
+        program, so a sentence that confused you is worth reporting. If it is
+        a scientific statement you think is wrong, a reference helps.
+
+  - type: input
+    id: where
+    attributes:
+      label: Where is it?
+      description: The Help topic and step, the website page, or the window and message.
+      placeholder: "Help, LDF Process, step 2 (Downsample and filter)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: text
+    attributes:
+      label: What it says
+      description: Copy the sentence or describe the part you mean.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is unclear or wrong
+      description: What you expected, what you did not understand, or why it is not right.
+    validations:
+      required: true
+
+  - type: textarea
+    id: source
+    attributes:
+      label: Source (optional)
+      description: A paper, book or manual that supports the correction (author, year, DOI or link).

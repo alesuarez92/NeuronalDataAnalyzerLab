@@ -1,0 +1,57 @@
+name: Feature request
+description: Suggest a new analysis, app, or workflow.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the experimental workflow first, then the analysis you wish
+        the tool did. That lets us pick a design that fits the rest of the
+        toolbox instead of bolting on a one-off function.
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Experimental use case
+      description: >-
+        What kind of recording / experiment is this for? What signals, what
+        sampling rate, what stimulation paradigm?
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What you want the tool to do
+      description: One paragraph in plain language. Skip MATLAB details — just the analysis goal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why_existing_isnt_enough
+    attributes:
+      label: Why the existing apps don't already cover this
+      description: >-
+        Helps us decide whether this is a new app, a new feature on an existing
+        app, or a missing parameter on an analysis you already have.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope (best guess — fine if unsure)
+      options:
+        - New analysis option in an existing app
+        - New app under one of the existing sections
+        - New section / pipeline
+        - Tooling / packaging / docs
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Reference material (optional)
+      description: >-
+        Papers, screenshots, equations, or example datasets that describe
+        what you have in mind.

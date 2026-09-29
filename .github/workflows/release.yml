@@ -1,0 +1,78 @@
+name: Release
+
+# Publishes the GitHub Release for the version in core/UITheme.m
+# (version = '...'): notes = that version's section of CHANGELOG.md,
+# assets = GitHub's source ZIP / tarball.
+# - Push a tag vX.Y.Z on main: the tag must match the app version.
+# - Or run it by hand (Actions → Release → Run workflow) on main: the tag
+#   vX.Y.Z is created from the app version. Optionally deletes branches
+#   that were merged (space-separated names).
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      delete_branches:
+        description: 'Branches to delete after releasing (space-separated, optional)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write   # create the tag / release, delete merged branches
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version and tag
+        id: v
+        run: |
+          app=$(sed -n "s/^ *version = '\(.*\)'.*/\1/p" core/UITheme.m | head -1)
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            tag="$GITHUB_REF_NAME"
+            test "${tag#v}" = "$app" || { echo "Tag $tag does not match app version $app"; exit 1; }
+          else
+            test "$GITHUB_REF_NAME" = "main" || { echo "Run it on main"; exit 1; }
+            tag="v$app"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$app" >> "$GITHUB_OUTPUT"
+
+      - name: Check CITATION.cff shows this version
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          grep -q "version: \"$v\"" CITATION.cff || { echo "CITATION.cff is not version $v"; exit 1; }
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          awk -v v="$v" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md
+          printf '\nInstall: download the source ZIP below, unzip it, open MATLAB in that folder and run `NeuroAnalyzerLab`. See the README for details.\n' >> notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+          else
+            gh release create "$TAG" --title "Neuronal Data Analyzer Lab $TAG" --notes-file notes.md --target "$GITHUB_SHA"
+          fi
+
+      - name: Delete merged branches
+        if: github.event_name == 'workflow_dispatch' && inputs.delete_branches != ''
+        env:
+          BRANCHES: ${{ inputs.delete_branches }}
+        run: |
+          for b in $BRANCHES; do
+            test "$b" != "main" || continue
+            git push origin --delete "$b" || echo "Could not delete $b"
+          done
