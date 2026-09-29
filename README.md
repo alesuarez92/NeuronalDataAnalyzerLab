@@ -32,8 +32,8 @@ answers**, so results can be checked before using real recordings.
 Everything needed to learn the tool is free: the in-app **Help** explains
 every window step by step, and its *Try it with demo data* button opens
 any window with synthetic data whose answers are known; the
-project website has a guide and walkthroughs. A hands-on **Course** and a **Virtual lab**
-(plan, record and analyse a simulated experiment) are coming soon; in the
+[project website](https://neuroanalyzerlab.com) has a guide and walkthroughs. A hands-on **Course** and a **Virtual lab**
+(plan, record and analyse a simulated experiment) are coming soon, also free; in the
 launcher their tiles show a greyed-out *Coming soon* button.
 
 > **Status: early release (v0.5.1).** The UI works end-to-end on the lab's
@@ -197,7 +197,7 @@ section, also name the version you used and the settings you chose.
 
 ## Author
 
-© 2026 Alejandro Suarez, Ph.D. · [GitHub](https://github.com/alesuarez92) · licensed under the [PolyForm Noncommercial License 1.0.0 with a citation condition](LICENSE.txt)
+© 2026 Alejandro Suarez, Ph.D. · [ORCID](https://orcid.org/0000-0002-0931-8512) · [GitHub](https://github.com/alesuarez92) · licensed under the [PolyForm Noncommercial License 1.0.0 with a citation condition](LICENSE.txt)
 
 Neuronal Data Analyzer Lab was developed with the assistance of **Claude** (Anthropic),
 an AI model, used through Claude Code. The author designs and directs the

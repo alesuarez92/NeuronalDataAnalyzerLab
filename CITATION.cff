@@ -9,8 +9,9 @@ authors:
   - given-names: Alejandro
     family-names: Suarez
     email: alesr713@gmail.com
+    orcid: "https://orcid.org/0000-0002-0931-8512"
 repository-code: "https://github.com/alesuarez92/NeuronalDataAnalyzerLab"
-url: "https://github.com/alesuarez92/NeuronalDataAnalyzerLab"
+url: "https://neuroanalyzerlab.com"
 abstract: >-
   Neuroscience analysis toolbox for Laser Doppler Flowmetry, electrophysiology
   (LFP, MUA), ROI / coregistered image analysis (brightness, movement, ΔF/F,

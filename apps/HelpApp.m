@@ -46,7 +46,7 @@ classdef HelpApp < handle
 
     properties(Constant)
         IssuesURL = 'https://github.com/alesuarez92/NeuronalDataAnalyzerLab/issues'
-        WebsiteURL = 'https://neuronalanalyzerlab.alesr713.workers.dev'
+        WebsiteURL = 'https://neuroanalyzerlab.com'
     end
 
     methods
