@@ -11,7 +11,7 @@
 > [v0.5.1](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.5.1)).
 > Full walk-through below in [Install](#install).
 
-![The launcher: Learn (Course and Virtual lab, coming soon) and one tile per analysis, grouped as blood flow, electrophysiology, EEG, imaging and across techniques](docs/main-launcher.png)
+![The launcher: one tile per analysis, grouped as blood flow, electrophysiology, EEG, imaging and across techniques](docs/main-launcher.png)
 
 Neuroscience analysis toolbox for **Laser Doppler Flowmetry**,
 **electrophysiology** (LFP: ERP, CSD, time–frequency; MUA: spike detection,
@@ -32,9 +32,7 @@ answers**, so results can be checked before using real recordings.
 Everything needed to learn the tool is free: the in-app **Help** explains
 every window step by step, and its *Try it with demo data* button opens
 any window with synthetic data whose answers are known; the
-[project website](https://neuroanalyzerlab.com) has a guide and walkthroughs. A hands-on **Course** and a **Virtual lab**
-(plan, record and analyse a simulated experiment) are coming soon, also free; in the
-launcher their tiles show a greyed-out *Coming soon* button.
+[project website](https://neuroanalyzerlab.com) has a guide and walkthroughs.
 
 > **Status: early release (v0.5.1).** The UI works end-to-end on the lab's
 > data formats, but the public surface is not yet stable. See
@@ -103,7 +101,7 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | Path | Contents |
 | --- | --- |
 | `NeuroAnalyzerLab.m` | Entry point; run this to open the launcher. |
-| `core/` | `Main.m` launcher (tiles from `Techniques.m`, the table of every analysis and learning window), `UITheme`, project-path manager, data loader, validation, processing, signal-feature library. |
+| `core/` | `Main.m` launcher (tiles from `Techniques.m`, the table of every analysis window), `UITheme`, project-path manager, data loader, validation, processing, signal-feature library. |
 | `core/imaging/` | ROI / line-based image analysis: ΔF/F, kymograph, vessel diameter, intensity, movement, motion correction, cell detection. |
 | `core/Histology.m` | Still images of sections and cultures: loading with pixel size, channel and image alignment, cell counting, marker co-localisation, counts per region. |
 | `core/io/` | Readers and writers for Intan RHD, Open Ephys binary, NWB, NumPy .npy, and EEG files (BrainVision, EEGLAB, FieldTrip, plain matrices). |

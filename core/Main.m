@@ -11,18 +11,17 @@
 %            ? Help
 %   folders  Import / Export folder and Set folders
 %   body     (scrolls when the window is small)
-%            LEARN: Course and Virtual lab (Coming soon, disabled), two per
-%            row. Help is the ? Help button in the cover; every window's
-%            Help topic has "Try it with demo data" (synthetic data whose
-%            answers are known)
 %            ANALYSES: one tile per technique, grouped by family: Blood
 %            flow, Electrophysiology, EEG, Imaging, Across techniques. A
 %            tile has a description, its steps as numbered buttons in order
 %            (tooltips say which file goes in and out), the files in and out
-%            and a ? that opens its Help topic.
+%            and a ? that opens its Help topic. The heading's hint points
+%            newcomers to ? Help in the cover: every window's Help topic
+%            has "Try it with demo data" (synthetic data whose answers are
+%            known)
 %   status   toolbox availability and the last action;  footer
 %
-% Families, tiles and the Learn area come from Techniques.m, so a new
+% Families and tiles come from Techniques.m, so a new
 % technique is one new row there. The tiles wrap with the window width:
 % 3 columns from about 1000 px, 2 from about 660 px, else 1 (Main.pack
 % keeps each family together when it fits a row).
@@ -37,10 +36,7 @@ classdef Main < handle
         ProjectPanel
         ImportLabel
         ExportLabel
-        BodyGrid           % Scrolling body: Learn heading, Learn tiles, Analyses heading, tiles
-        LearnGrid          % Learn tiles
-        LearnTiles         % Panels of the Learn tiles (Techniques.learn order)
-        LearnButtons       % struct with one button per Learn item id (course, lab)
+        BodyGrid           % Scrolling body: Analyses heading, tiles
         TileGrid           % Family headings and analysis tiles
         Tiles              % One per Techniques.list() row: id, family, panel, steps (buttons), help (? button)
         StatusLabel        % Status bar (toolbox availability, last action)
@@ -64,7 +60,6 @@ classdef Main < handle
         TileMinWidth = 300
         TileHeight = 144
         HeadingHeight = 32
-        LearnHeight = 78
         Gap = 12
     end
 
@@ -169,24 +164,17 @@ classdef Main < handle
                 'Choose the Import (data) and Export (results) folders; remembered between sessions');
         end
 
-        %% buildBody - Scrolling body: LEARN (tiles) and ANALYSES (family tiles)
+        %% buildBody - Scrolling body: ANALYSES (family tiles)
         function buildBody(app, parent)
             T = UITheme;
             body = uipanel(parent, 'BackgroundColor', T.bgGray, 'BorderType', 'none');
-            app.BodyGrid = uigridlayout(body, [4 1], 'RowHeight', {30, Main.LearnHeight, 30, 100}, ...
+            app.BodyGrid = uigridlayout(body, [2 1], 'RowHeight', {30, 100}, ...
                 'ColumnWidth', {'1x'}, 'Padding', [16 8 16 12], 'RowSpacing', 6, ...
                 'BackgroundColor', T.bgGray, 'Scrollable', 'on');
-            sectionHeading(app.BodyGrid, 'LEARN', ...
-                ['New here? Open ? Help (top right): every window''s topic has ' char(9654) ...
-                ' Try it with demo data, synthetic data whose answers are known.']);
-            % Grids start with a cell for every tile; layoutTiles sets the real rows and columns
-            nLearn = numel(Techniques.learn());
-            app.LearnGrid = uigridlayout(app.BodyGrid, [nLearn 1], 'ColumnWidth', {'1x'}, ...
-                'RowHeight', repmat({Main.LearnHeight}, 1, nLearn), 'Padding', [0 0 0 0], 'ColumnSpacing', Main.Gap, ...
-                'RowSpacing', 10, 'BackgroundColor', T.bgGray);
-            app.buildLearn();
             sectionHeading(app.BodyGrid, 'ANALYSES', ['Pick the tile for your data and click its ' ...
-                'steps in order: each step saves a file that the next one opens. ? explains the tile.']);
+                'steps in order. New here? ? Help (top right) has ' char(9654) ' Try it with demo data ' ...
+                'for every window.']);
+            % The grid starts with a cell for every tile; layoutTiles sets the real rows and columns
             L = Techniques.list();
             app.TileGrid = uigridlayout(app.BodyGrid, [2 * numel(L), 1], 'Padding', [0 0 0 0], ...
                 'ColumnSpacing', Main.Gap, 'RowSpacing', 0, 'BackgroundColor', T.bgGray);
@@ -194,38 +182,6 @@ classdef Main < handle
             app.Tiles = struct('id', {}, 'family', {}, 'panel', {}, 'steps', {}, 'help', {});
             for i = 1:numel(L)
                 app.Tiles(i) = app.buildTile(L(i), F(strcmp({F.id}, L(i).family)).color);
-            end
-        end
-
-        %% buildLearn - One tile per Techniques.learn() item
-        function buildLearn(app)
-            T = UITheme;
-            L = Techniques.learn();
-            app.LearnTiles = gobjects(1, numel(L));
-            app.LearnButtons = struct();
-            for i = 1:numel(L)
-                id = L(i).id;
-                p = uipanel(app.LearnGrid, 'BackgroundColor', T.cardBg, 'BorderType', 'line', ...
-                    'HighlightColor', T.cardBorder);
-                app.LearnTiles(i) = p;
-                g = uigridlayout(p, [2 2], 'ColumnWidth', {'1x', 84}, 'RowHeight', {20, '1x'}, ...
-                    'Padding', [12 8 12 8], 'RowSpacing', 2, 'ColumnSpacing', 10, 'BackgroundColor', T.cardBg);
-                uilabel(g, 'Text', L(i).name, 'FontSize', T.fontButton + 1, 'FontWeight', 'bold', ...
-                    'FontColor', T.sectionTitleColor);
-                d = uilabel(g, 'Text', L(i).description, 'FontSize', T.fontSmall, 'FontColor', T.bodyColor, ...
-                    'WordWrap', 'on', 'VerticalAlignment', 'top');
-                d.Layout.Row = 2; d.Layout.Column = 1;
-                c = uigridlayout(g, [3 1], 'RowHeight', {'1x', T.buttonHeight, '1x'}, ...
-                    'Padding', [0 0 0 0], 'RowSpacing', 0, 'BackgroundColor', T.cardBg);
-                uilabel(c, 'Text', '');
-                b = UIKit.button(c, 'Open', @(~,~)app.openLearn(id), 'secondary', L(i).tooltip);
-                b.Layout.Row = 2;
-                if ~L(i).available
-                    b.Text = 'Coming soon';
-                    b.Enable = 'off';
-                end
-                c.Layout.Row = [1 2]; c.Layout.Column = 2;
-                app.LearnButtons.(id) = b;
             end
         end
 
@@ -295,9 +251,6 @@ classdef Main < handle
             for i = 1:numel(app.Tiles)
                 app.Tiles(i).panel.Layout.Row = 1; app.Tiles(i).panel.Layout.Column = 1;
             end
-            for i = 1:numel(app.LearnTiles)
-                app.LearnTiles(i).Layout.Row = 1; app.LearnTiles(i).Layout.Column = 1;
-            end
             cellfun(@delete, app.Headings);
             app.Headings = {};
 
@@ -322,18 +275,7 @@ classdef Main < handle
                 end
             end
 
-            % Learn: two tiles per row, one in a narrow window
-            nl = numel(app.LearnTiles);
-            if n >= 2, lc = 2; else, lc = 1; end
-            lr = ceil(nl / lc);
-            app.LearnGrid.ColumnWidth = repmat({'1x'}, 1, lc);
-            app.LearnGrid.RowHeight = repmat({Main.LearnHeight}, 1, lr);
-            for i = 1:nl
-                app.LearnTiles(i).Layout.Row = ceil(i / lc);
-                app.LearnTiles(i).Layout.Column = mod(i - 1, lc) + 1;
-            end
-            learnH = lr * Main.LearnHeight + (lr - 1) * app.LearnGrid.RowSpacing;
-            app.BodyGrid.RowHeight = {30, learnH, 30, sum([heights{:}])};
+            app.BodyGrid.RowHeight = {30, sum([heights{:}])};
             app.Columns = n;
         end
 
@@ -381,19 +323,6 @@ classdef Main < handle
             catch ME
                 UIKit.setStatus(app.StatusLabel, sprintf('Could not open %s', name), 'error');
                 UIKit.alert(app.UIFig, sprintf('Could not open %s:\n%s', name, ME.message), name);
-            end
-        end
-
-        %% openLearn - Open a Learn item by id ('course', 'lab')
-        function win = openLearn(app, id)
-            L = Techniques.learn();
-            it = L(strcmp({L.id}, id));
-            if ~it.available
-                win = [];
-                app.LastOpened = [];
-                UIKit.setStatus(app.StatusLabel, sprintf('%s: coming soon', it.name), 'warning');
-            else
-                win = app.launch(str2func(it.window), it.name);
             end
         end
 
@@ -579,7 +508,7 @@ end
 %  Local helpers
 %% ------------------------------------------------------------------------
 
-%% sectionHeading - "LEARN" / "ANALYSES" with a one-line explanation
+%% sectionHeading - "ANALYSES" with a one-line explanation
 function g = sectionHeading(parent, titleText, hintText)
     T = UITheme;
     g = uigridlayout(parent, [1 2], 'ColumnWidth', {'fit', '1x'}, 'RowHeight', {'1x'}, ...

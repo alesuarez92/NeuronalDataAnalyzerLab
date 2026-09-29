@@ -25,7 +25,7 @@ end
 
 function testEveryWindowClassExists(tests)
     c = Techniques.windows();
-    tests.verifyGreaterThanOrEqual(numel(c), 11);   % 11 windows since Course, Virtual lab and the Help card left the launcher
+    tests.verifyGreaterThanOrEqual(numel(c), 11);   % 11 analysis windows
     for k = 1:numel(c)
         mc = meta.class.fromName(c{k});
         tests.verifyNotEmpty(mc, sprintf('window class %s does not exist', c{k}));
@@ -62,12 +62,7 @@ function testRowsAreComplete(tests)
     % Families in the order of their first tile, every family used
     [~, first] = unique({T.family}, 'first');
     tests.verifyEqual({T(sort(first)).family}, {F.id}, 'tiles are listed family by family, in family order');
-    L = Techniques.learn();
-    tests.verifyEqual({L.id}, {'course', 'lab'});
-    tests.verifyEqual([L.available], [false false], 'Course and Virtual lab: coming soon');
-    for i = 1:numel(L)
-        tests.verifyTrue(any(strcmp(topics, L(i).help)), sprintf('learn %s: no Help topic', L(i).id));
-    end
+    tests.verifyFalse(any(strcmp(methods('Techniques'), 'learn')), 'no Learn area in the launcher');
 end
 
 function testSessionsOpenInEveryAnalysisWindow(tests)
@@ -88,8 +83,7 @@ function testWebsitePageNamesAreWellFormed(tests)
     % 'page' or 'page#anchor', lower case, no .html: HelpApp.websitePage
     % builds the link to the online page from it
     T = Techniques.list();
-    L = Techniques.learn();
-    for w = [{T.web}, {L.web}]
+    for w = {T.web}
         if isempty(w{1}), continue; end   % no website page
         tests.verifyNotEmpty(regexp(w{1}, '^[a-z0-9-]+(#[a-z0-9-]+)?$', 'once'), ...
             sprintf('website page name "%s" is not page or page#anchor', w{1}));

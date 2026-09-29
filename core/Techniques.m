@@ -1,6 +1,6 @@
 %% Techniques.m
 % =========================================================================
-% TECHNIQUES - ONE TABLE OF EVERY ANALYSIS AND LEARNING WINDOW
+% TECHNIQUES - ONE TABLE OF EVERY ANALYSIS WINDOW
 % =========================================================================
 % The launcher (Main), Help (HelpApp.demoWindow / websitePage) and the
 % tests read this table, so a new technique is one new row in list().
@@ -14,10 +14,6 @@
 %       that window), tooltip (which file goes in and out) and action
 %       ('' = open the window; 'session' = choose a session file and open
 %       it in the window that saved it)
-%   L = Techniques.learn()      the Learn area: id, name, description,
-%       window, help, web ('' = no website page yet), tooltip, available
-%       (false = shown with a disabled "Coming soon" button: Course and
-%       Virtual lab are not in this release)
 %   c = Techniques.windows()    every window class named in the tables
 %   [labels, classes] = Techniques.demoChoices()  windows that have demo
 %       data, named like the windows ("Extract LDF", "EEG analysis")
@@ -25,9 +21,8 @@
 %   c = Techniques.windowForTopic(topic)  window a Help topic's demo opens
 %   p = Techniques.pageForTopic(topic)    website page of a Help topic
 %
-% Families follow the website's Analyses menu and the Learn area its
-% Learn menu, so people find things in the same place in the app and
-% online.
+% Families follow the website's Analyses menu, so people find things in
+% the same place in the app and online.
 % =========================================================================
 
 classdef Techniques
@@ -128,19 +123,6 @@ classdef Techniques
                          'window with its files (checked by MD5), settings and results.'], 'session'))];
         end
 
-        %% learn - The Learn area of the launcher, in order
-        function L = learn()
-            L = [ ...
-                lrn('course', 'Course', ...
-                    'Step-by-step lessons in the real windows, with sample data and checks. Coming soon.', ...
-                    '', 'Welcome', 'course', ...
-                    'Coming soon: step-by-step lessons in the real windows, with sample data and checks', false), ...
-                lrn('lab', 'Virtual lab', ...
-                    'Plan, record and analyse a simulated experiment, with feedback on every step. Coming soon.', ...
-                    '', 'Welcome', 'lab', ...
-                    'Coming soon: plan, record and analyse a simulated experiment, with feedback on every step', false)];
-        end
-
         %% windows - Every window class named in the tables (unique, in order)
         function c = windows()
             c = {};
@@ -148,8 +130,6 @@ classdef Techniques
             for i = 1:numel(T)
                 c = [c, {T(i).steps.window}]; %#ok<AGROW>
             end
-            L = Techniques.learn();
-            c = [c, {L.window}];
             c = c(~cellfun(@isempty, c));
             [~, k] = unique(c, 'first');
             c = c(sort(k));
@@ -199,10 +179,6 @@ classdef Techniques
                 k = find(strcmpi({T(i).steps.help}, topic) & ~cellfun(@isempty, {T(i).steps.window}), 1);
                 if ~isempty(k), cls = T(i).steps(k).window; return; end
             end
-            L = Techniques.learn();
-            k = find(strcmpi({L.help}, topic) & ~strcmp({L.window}, 'HelpApp') & ...
-                ~cellfun(@isempty, {L.window}), 1);
-            if ~isempty(k), cls = L(k).window; end
         end
 
         %% pageForTopic - Website page of a Help topic ('' = not in the tables)
@@ -215,9 +191,6 @@ classdef Techniques
                     page = T(i).web; return;
                 end
             end
-            L = Techniques.learn();
-            k = find(strcmpi({L.help}, topic) & ~strcmpi({L.help}, 'Welcome'), 1);
-            if ~isempty(k), page = L(k).web; end
         end
     end
 end
@@ -234,11 +207,6 @@ end
 function s = stp(label, window, help, tooltip, action)
     if nargin < 5, action = ''; end
     s = struct('label', label, 'window', window, 'help', help, 'tooltip', tooltip, 'action', action);
-end
-
-function l = lrn(id, name, description, window, help, web, tooltip, available)
-    l = struct('id', id, 'name', name, 'description', description, 'window', window, ...
-        'help', help, 'web', web, 'tooltip', tooltip, 'available', logical(available));
 end
 
 function s = ephysExtractTip()

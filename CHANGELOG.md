@@ -10,6 +10,14 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+### Removed
+
+- **Launcher: the Learn area** (the greyed-out *Coming soon* tiles of the
+  Course and the Virtual lab). The launcher shows only the analyses; its
+  heading points newcomers to **? Help**, where every window's topic has
+  *Try it with demo data*. The Help's *Getting started* topic no longer
+  mentions the Course or the Virtual lab.
+
 ## [0.5.1] - 2026-09-29
 
 ### Changed
