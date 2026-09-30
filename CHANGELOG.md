@@ -34,6 +34,17 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   speckle with known contrast in cortex, a vessel and static tissue, and
   a +25% flow response of an activated area after four stimuli; new Help
   topic *Laser Speckle* with the answers.
+- **Blood-flow recordings from the common acquisition systems**
+  (`core/io/SignalSource.m`, `readSignalText.m`, `readBiopacACQ.m`,
+  `writeBiopacACQ.m`): LabChart .mat exports with several blocks, channel
+  rates, units and comments; LabChart and AcqKnowledge text exports;
+  BIOPAC AcqKnowledge .acq files (3.x to 5.x, Windows and Mac, compressed
+  or not, with event markers; checked against the 32 sample files of the
+  bioread project); AcqKnowledge and Spike2 .mat exports; any delimited
+  table (PeriSoft, moorVMS-PC, spreadsheets: decimal comma, clock times,
+  units rows). The flow and stimulus channels are found from their names,
+  and comments / markers can be the stimulus. (Not yet in the Extract LDF
+  window.)
 - `core/io/readImageStack.m`: one reader for image stacks over time
   (.mat, multi-page TIFF with the ImageJ frame interval, channels and
   pixel size, and video).
