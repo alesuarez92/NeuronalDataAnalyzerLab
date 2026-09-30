@@ -31,7 +31,7 @@ them exposed two limits, which are now fixed.
 | ✅ | Per-unit responses | MUA | Raster and PSTH per unit, auto- and cross-correlograms. |
 | ✅ | Motion correction and many ROIs | Imaging | Rigid registration, several ROIs at once, automatic cell detection from a local correlation image. |
 | ✅ | Histology and culture images | Imaging | Cell counts in still images, marker-positive cells, counts per region and per mm², channel and section / time-point alignment (shift or landmarks), with plain-language checks. |
-| ✅ | More acquisition systems | Data formats | Intan RHD2000, Open Ephys binary and NWB 2.x import; NWB export. |
+| ✅ | More acquisition systems | Data formats | Intan RHD2000, Open Ephys binary and NWB 2.x import; NWB export. Then SpikeGLX, Blackrock, Neuralynx, Plexon `.plx`, Multi Channel Systems HDF5, Intan `.rhs`, Open Ephys legacy `.continuous` and Axon ABF 2 in Extract Ephys; LabChart, AcqKnowledge, Spike2, EDF and tables in Extract LDF. |
 | ✅ | Batch processing | Every pipeline | Run one pipeline over a folder of animals or sessions with the same settings and get one summary table plus a per-file log. |
 | ✅ | Session files and reports | Reproducibility | Save settings, input-file provenance (with checksums) and results together; a one-page PDF report per analysis for the lab notebook. |
 | ✅ | CSD methods | LFP | Inverse CSD (delta, step, spline) and kernel CSD next to the standard CSD, tested against laminar data with a known CSD. |
@@ -60,7 +60,7 @@ their files.
 | ✅ | EEGLAB (`.set` / `.fdt`, or an `EEG` variable in a `.mat`) | Trials, events, channel positions, removed ICA components and history. |
 | ✅ | FieldTrip raw and averaged structures | `trial`, `time`, `label`, `trialinfo`, electrode positions; history from `cfg.previous`. |
 | ✅ | Plain matrix `.mat` | A form says which variable is the data, the sampling rate, the trial and channel dimensions and the conditions. No code needed. |
-| 📅 | EDF / EDF+ / BDF | BioSemi, most clinical systems, and exports from OpenBCI, Natus, Compumedics and others. |
+| ✅ | EDF / EDF+ / BDF | BioSemi, most clinical systems, and exports from OpenBCI, Natus, Compumedics and others. Continuous recordings; EDF+ annotations and BioSemi trigger codes become events; EDF+D gaps kept. |
 | ✅ | BrainVision (`.vhdr` / `.eeg` / `.vmrk`) | Brain Products Recorder and Analyzer; also a common export from MNE and EEGLAB. Continuous recordings with their markers, Analyzer segments (condition = marker at time 0), positions, units, and the amplifier filters used when recording. |
 | 📅 | EGI `.mff` | Magstim EGI geodesic nets. |
 | 📅 | EEG-BIDS folders | Shared datasets (OpenNeuro): the readers above plus the channel, electrode and event tables. |
@@ -99,7 +99,7 @@ NWB recordings are already read by Extract Ephys.
 | 📅 | 3. Electrode layouts | Templates, position files, bregma coordinates and the layout check. |
 | 📅 | 4. Scalp maps | Topography at a time or window: spherical spline on scalp layouts, flat interpolation on skull layouts; tested on the demo's known distribution. |
 | 📅 | 5. Time–frequency per condition | ERSP / ITPC and band power from the existing time–frequency code. |
-| 🔨 | 6. Raw recordings | BrainVision read first (the author's lab records with Brain Products); then EDF / BDF, EGI `.mff`, EEG-BIDS, each with a tested writer. Basic steps only: filter, re-reference, cut trials at events, reject trials by amplitude, mark bad channels. ICA and advanced cleaning stay in EEGLAB / FieldTrip; Help explains how to bring their result back. |
+| 🔨 | 6. Raw recordings | BrainVision read first (the author's lab records with Brain Products); EDF / BDF done; then EGI `.mff`, EEG-BIDS, each with a tested writer. Basic steps only: filter, re-reference, cut trials at events, reject trials by amplitude, mark bad channels. ICA and advanced cleaning stay in EEGLAB / FieldTrip; Help explains how to bring their result back. |
 | 📅 | 7. Batch, sessions, methods text, website | Same as the other pipelines, plus a walkthrough. |
 
 ## Direction: understand, check and teach
@@ -139,9 +139,8 @@ Scoped items that are known to be missing. Each is self-contained.
 | | Item | Notes |
 |---|---|---|
 | 🟢 | Validated NWB export | Without [matnwb](https://github.com/NeurodataWithoutBorders/matnwb) the built-in writer follows the NWB 2.7 layout but is not validated. Run `nwbinspector` / `pynwb.validate` on the exported files in CI and fix any findings. |
-| 🟢 | Intan stimulation files (`.rhs`) | Only `.rhd` recording files are read today (`core/io/readIntanRHD.m`). |
 | 🟢 | Intan "one file per signal type / per channel" | Only the traditional single-file `.rhd` format is supported. |
-| 🟢 | Legacy Open Ephys format (`.continuous`) | Only the binary format (`structure.oebin`) is read. |
+| 🟢 | Plexon `.pl2` | Only `.plx` files are read; export `.pl2` recordings to `.plx` in Plexon's software for now. |
 | 🟢 | NWB 1.x and 3-D series | Only NWB 2.x files with 2-D ElectricalSeries are read. |
 | 🟢 | Long recordings | Recordings are loaded into memory in full. Read in chunks, or use memory-mapped files for Open Ephys and NWB. |
 | 🟢 | Spike export to NWB | Export sorted units (spike times, waveforms, cluster quality) as an NWB `Units` table. |

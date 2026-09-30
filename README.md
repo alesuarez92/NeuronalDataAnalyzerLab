@@ -16,7 +16,8 @@
 Neuroscience analysis toolbox for **Laser Doppler Flowmetry**,
 **electrophysiology** (LFP: ERP, CSD, time–frequency; MUA: spike detection,
 sorting with cluster merge/split, raster/PSTH, correlograms; TDT, Intan,
-Open Ephys and NWB recordings), **ROI / coregistered image analysis**
+Open Ephys, NWB, SpikeGLX, Blackrock, Neuralynx, Plexon, Multi Channel
+Systems and Axon ABF recordings), **ROI / coregistered image analysis**
 (motion correction, multiple ROIs, cell detection, ΔF/F, kymograph,
 robust vessel diameter), **histology and culture images** (cell counts,
 marker-positive cells, counts per region and per mm², section and time-point
@@ -106,7 +107,7 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | `core/` | `Main.m` launcher (tiles from `Techniques.m`, the table of every analysis and learning window), `UITheme`, project-path manager, data loader, validation, processing, signal-feature library. |
 | `core/imaging/` | ROI / line-based image analysis: ΔF/F, kymograph, vessel diameter, intensity, movement, motion correction, cell detection. |
 | `core/Histology.m` | Still images of sections and cultures: loading with pixel size, channel and image alignment, cell counting, marker co-localisation, counts per region. |
-| `core/io/` | Readers and writers for Intan RHD, Open Ephys binary, NWB, NumPy .npy, and EEG files (BrainVision, EEGLAB, FieldTrip, plain matrices). |
+| `core/io/` | Readers and writers for electrophysiology (Intan RHD / RHS, Open Ephys binary and legacy, NWB, SpikeGLX, Blackrock, Neuralynx, Plexon, Multi Channel Systems HDF5, Axon ABF), blood-flow recordings (LabChart, AcqKnowledge, Spike2 exports, EDF / BDF, tables, Perimed), imaging files (TIFF metadata, Inscopix, ThorImage, Prairie View, Miniscope, ImageJ / QuPath regions), NumPy .npy, and EEG files (BrainVision, EEGLAB, FieldTrip, EDF / BDF, plain matrices). |
 | `core/demo/`, `core/DemoData.m` | Synthetic demo recordings with ground truth. |
 | `core/Batch.m`, `core/Session.m`, `core/Report.m`, `core/MethodsWriter.m` | Batch processing, session files, PDF reports, methods text. |
 | `apps/` | Sub-app windows: Extract / Process / Average LDF, Extract Ephys, LFP & MUA processing and analysis, EEG Analysis, ROI Analysis, Histology / culture, Signal Characterization, Batch Processing, Help. |
