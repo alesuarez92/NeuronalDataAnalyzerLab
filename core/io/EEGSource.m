@@ -1,6 +1,6 @@
 %% EEGSource.m
 % =========================================================================
-% EEG SOURCE - ONE DATA SHAPE FOR EEG FROM EEGLAB, FIELDTRIP, BRAINVISION AND .MAT
+% EEG SOURCE - ONE DATA SHAPE FOR EEG FROM EEGLAB, FIELDTRIP, BRAINVISION, EDF AND .MAT
 % =========================================================================
 % Every EEG file is read into one struct, so the EEG window (and anything
 % after it) does not care where the data came from:
@@ -23,9 +23,12 @@
 %   eeg.source, eeg.format, eeg.file
 %
 %   list  = EEGSource.formats()           struct array: key, label, filter, hint
-%   fmt   = EEGSource.detect(path)        'eeglab' | 'fieldtrip' | 'brainvision' | 'matrix'
+%   fmt   = EEGSource.detect(path)        'eeglab' | 'fieldtrip' | 'brainvision' | 'edf' | 'matrix'
 %   eeg   = EEGSource.open(path, fmt, map) read (fmt 'auto'/omitted: detect;
 %                                          map only for 'matrix', see readEEGMatrix)
+%   eeg   = EEGSource.fromEDF(path)       EDF / EDF+ / BDF via readEDF: the voltage
+%                                          channels at the common rate, annotations
+%                                          and BDF Status codes as events
 %   eeg   = EEGSource.make(data, fs, Name, Value, ...)   assemble + check
 %   [ok, problems] = EEGSource.validate(eeg)
 %   lines = EEGSource.describe(eeg)       overview in plain sentences
@@ -49,15 +52,18 @@ classdef EEGSource
         %% formats - Supported sources, in dropdown order
         function list = formats()
             list = struct( ...
-                'key',    {'eeglab', 'fieldtrip', 'brainvision', 'matrix'}, ...
-                'label',  {'EEGLAB dataset (.set)', 'FieldTrip data (.mat)', 'BrainVision (.vhdr)', 'MATLAB matrix (.mat)'}, ...
+                'key',    {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'matrix'}, ...
+                'label',  {'EEGLAB dataset (.set)', 'FieldTrip data (.mat)', 'BrainVision (.vhdr)', ...
+                           'EDF / BDF (.edf, .bdf)', 'MATLAB matrix (.mat)'}, ...
                 'filter', {{'*.set;*.mat', 'EEGLAB dataset (*.set, *.mat)'}, ...
                            {'*.mat', 'FieldTrip data (*.mat)'}, ...
                            {'*.vhdr', 'BrainVision header (*.vhdr)'}, ...
+                           {'*.edf;*.bdf', 'EDF / EDF+ / BDF (*.edf, *.bdf)'}, ...
                            {'*.mat', 'MATLAB file (*.mat)'}}, ...
                 'hint',   {'An EEGLAB .set file (with its .fdt file in the same folder, if there is one), or a .mat file holding an EEG variable', ...
                            'A .mat file holding a FieldTrip structure (label, trial, time) or an average (label, avg, time)', ...
                            'Brain Products BrainVision Recorder or Analyzer: the .vhdr file, with its .vmrk and .eeg files in the same folder', ...
+                           'European Data Format (EDF, EDF+) or BioSemi BDF: continuous recordings; annotations and BDF trigger codes become events', ...
                            'Any .mat file with the EEG as a number array: you say which variable holds what'});
         end
 
@@ -77,6 +83,7 @@ classdef EEGSource
             switch lower(ext)
                 case '.set', fmt = 'eeglab'; return;
                 case '.vhdr', fmt = 'brainvision'; return;
+                case {'.edf', '.bdf'}, fmt = 'edf'; return;
                 case {'.vmrk', '.eeg'}
                     error('NeuroAnalyzer:io:unknownFormat', ['%s is one part of a BrainVision recording ' ...
                         '(markers or numbers). Choose the .vhdr file with the same name instead; it ' ...
@@ -107,6 +114,7 @@ classdef EEGSource
                 case 'eeglab',    eeg = readEEGLAB(p);
                 case 'fieldtrip', eeg = readFieldTrip(p);
                 case 'brainvision', eeg = readBrainVision(p);
+                case 'edf',       eeg = EEGSource.fromEDF(p);
                 case 'matrix'
                     if nargin < 3 || isempty(map)
                         g = EEGSource.guessMatrixMap(p);
@@ -121,8 +129,76 @@ classdef EEGSource
                     eeg = readEEGMatrix(p, map);
                 otherwise
                     error('NeuroAnalyzer:io:unknownFormat', ...
-                        'Unknown format ''%s'' (use eeglab, fieldtrip, brainvision or matrix).', fmt);
+                        'Unknown format ''%s'' (use eeglab, fieldtrip, brainvision, edf or matrix).', fmt);
             end
+        end
+
+        %% fromEDF - EDF / EDF+ / BDF recording as continuous EEG
+        % EEG channels: those in V / mV / uV / nV at the most common rate
+        % (the 'EEG ' prefix of EDF+ labels is dropped); the others are
+        % named in the notes. Events: EDF+ annotations (text as the type)
+        % and each change of the BDF Status trigger code ('Code <n>').
+        function eeg = fromEDF(p)
+            E = readEDF(p);
+            n = numel(E.signals);
+            scale = nan(1, n);
+            for k = 1:n
+                switch lower(strrep(E.signals(k).units, char(181), 'u'))
+                    case {'uv', 'microvolt', 'microvolts'}, scale(k) = 1;
+                    case {'mv', 'millivolt', 'millivolts'}, scale(k) = 1e3;
+                    case {'v', 'volt', 'volts'},            scale(k) = 1e6;
+                    case {'nv', 'nanovolt', 'nanovolts'},  scale(k) = 1e-3;
+                end
+            end
+            isTrig = strcmpi({E.signals.label}, 'Status') | ~cellfun(@isempty, ...
+                regexpi({E.signals.label}, '^(trig|trigger|stim|sti\d*|event|marker)', 'once'));
+            isEEG = isfinite(scale) & ~isTrig;
+            if ~any(isEEG)
+                [~, b, x] = fileparts(p);
+                error('NeuroAnalyzer:eeg:invalid', ['%s%s has no channels in volts (uV, mV or V): ' ...
+                    'nothing to read as EEG.'], b, x);
+            end
+            fsAll = [E.signals.fs];
+            fs = mode(fsAll(isEEG));
+            use = find(isEEG & fsAll == fs);
+            nS = min(arrayfun(@(k) numel(E.signals(k).data), use));
+            X = zeros(numel(use), nS);
+            for j = 1:numel(use)
+                X(j, :) = E.signals(use(j)).data(1:nS) * scale(use(j));
+            end
+            labels = regexprep({E.signals(use).label}, '^EEG\s+', '');
+            notes = E.notes;
+            left = setdiff(1:n, use);
+            if ~isempty(left)
+                notes{end + 1} = sprintf('Not read as EEG (other units, other rate or trigger): %s.', ...
+                    strjoin({E.signals(left).label}, ', '));
+            end
+            pf = unique({E.signals(use).prefilter});
+            pf = pf(~cellfun(@isempty, pf));
+            if ~isempty(pf)
+                notes{end + 1} = sprintf('Filters at recording (from the file): %s.', strjoin(pf, '; '));
+            end
+            ev = struct('type', {}, 'latency', {}, 'duration', {});
+            for a = E.annotations(:)'
+                d = a.duration; if ~isfinite(d), d = 0; end
+                ev(end + 1) = struct('type', a.text, 'latency', a.onset, 'duration', d); %#ok<AGROW>
+            end
+            st = find(strcmpi({E.signals.label}, 'Status'), 1);
+            if ~isempty(st)
+                c = E.signals(st).data;
+                i = find(diff([0 c]) ~= 0 & c ~= 0);
+                for j = i
+                    ev(end + 1) = struct('type', sprintf('Code %d', c(j)), 'latency', (j - 1) / E.signals(st).fs, ...
+                        'duration', 0); %#ok<AGROW>
+                end
+            end
+            if ~isempty(ev)
+                [~, o] = sort([ev.latency]);
+                ev = ev(o);
+            end
+            src = E.format;
+            eeg = EEGSource.make(X, fs, 'Labels', labels, 'Events', ev, 'Notes', notes, 'Unit', 'uV', ...
+                'Source', src, 'Format', 'edf', 'File', p, 'IsEpoched', false);
         end
 
         %% make - Assemble the common struct and check it

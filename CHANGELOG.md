@@ -103,7 +103,10 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   export, with EDF+ annotations (onset, duration, text), discontinuous
   EDF+D recordings (records placed at their times) and BioSemi's 24-bit
   BDF with its Status trigger word. Extract LDF opens them again (the
-  annotations can be the stimulus); the LDF demo is also written as EDF+.
+  annotations can be the stimulus), and EEG analysis reads them as
+  continuous EEG (the channels in volts, annotations and BioSemi trigger
+  codes as events); the LDF demo and the rodent EEG demo are also written
+  as EDF+ (and BDF).
   Values and annotations were checked during development against pyedflib
   and MNE-Python.
 

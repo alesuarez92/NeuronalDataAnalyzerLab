@@ -1,7 +1,7 @@
 %% EEGFormatsTest.m
 % =========================================================================
 % UNIT TESTS FOR THE EEG DATA MODEL AND IMPORTERS (EEGLAB, FIELDTRIP,
-% BRAINVISION, .mat)
+% BRAINVISION, EDF / BDF, .mat)
 % =========================================================================
 % The synthetic study written by core/demo/demoEEG (oddball scalp EEG and
 % a continuous rodent recording) is read back from every format: each
@@ -178,10 +178,35 @@ function testDetect(tests)
     verifyError(tests, @() EEGSource.detect(fdt), 'NeuroAnalyzer:io:unknownFormat');
     verifyError(tests, @() EEGSource.detect(fullfile(tests.TestData.tmp, 'none.set')), 'NeuroAnalyzer:io:fileNotFound');
     list = EEGSource.formats();
-    verifyEqual(tests, {list.key}, {'eeglab', 'fieldtrip', 'brainvision', 'matrix'});
+    verifyEqual(tests, {list.key}, {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'matrix'});
+    verifyEqual(tests, EEGSource.detect(d.rodent.edf), 'edf');
+    verifyEqual(tests, EEGSource.detect(d.rodent.bdf), 'edf');
 end
 
 %% ------------------------------------------------------------ Demo, rodent
+
+function testRodentEDFAndBDF(tests)
+    % EDF+ (16 bits, flash annotations) and BDF (24 bits, Status trigger code 1)
+    d = tests.TestData.demo;
+    tr = d.truth.rodent;
+    fmts = {'edf', 'bdf'};
+    tol = [2e-3 2e-5];                                  % half a step of 16 / 24 bits
+    types = {'flash', 'Code 1'};
+    for k = 1:2
+        eeg = EEGSource.open(d.rodent.(fmts{k}));
+        tag = fmts{k};
+        verifyFalse(tests, eeg.isEpoched, tag);
+        verifyEqual(tests, eeg.fs, 1000, tag);
+        verifyEqual(tests, size(eeg.data), [4 60000], tag);
+        verifyEqual(tests, double(eeg.data), double(tr.data), 'AbsTol', tol(k), tag);
+        verifyEqual(tests, eeg.labels, tr.labels, tag);
+        verifyEqual(tests, numel(eeg.events), 30, tag);
+        verifyEqual(tests, [eeg.events.latency], tr.onsets, 'AbsTol', 1e-9, tag);
+        verifyEqual(tests, unique({eeg.events.type}), types(k), tag);
+    end
+    eeg = EEGSource.open(d.rodent.bdf);
+    verifyTrue(tests, any(contains(eeg.notes, 'Status')), 'Status is not EEG');
+end
 
 function testRodentContinuous(tests)
     d = tests.TestData.demo;

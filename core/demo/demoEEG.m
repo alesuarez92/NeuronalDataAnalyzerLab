@@ -40,6 +40,10 @@
 %              at time 0, positions on the sphere). Rodent: a Recorder
 %              file (INT_16, 0.1 uV resolution, 'S  1' flash markers,
 %              reference channel Cb, the amplifier table in [Comment])
+%   edf        rodent only: EDF+C (writeEDF), channels 'EEG M1-L' ... in uV
+%              (16 bits), 'flash' annotations, 1 s records
+%   bdf        rodent only: BioSemi BDF (24 bits) with a Status channel,
+%              trigger code 1 for 10 ms at each flash
 %   matrix     plain .mat. Scalp: eeg (trials x channels x samples, in
 %              volts), srate, chanNames, times (s), condition. Rodent:
 %              data (channels x samples, uV), fs, labels, flashTimes (s)
@@ -54,15 +58,16 @@
 %   'Participants'  number of scalp participants (default 8)
 %   'Kinds'         subset of {'scalp', 'rodent'} (default both)
 %   'Formats'       subset of {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision',
-%                   'matrix'} to write (default all)
+%                   'matrix', 'edf', 'bdf'} to write (default all; edf and bdf
+%                   are written for the rodent only)
 %   'Force'         true regenerates the cache (demoEEG() only)
 % Deterministic: RandStream('mt19937ar', 'Seed', 20260926 + participant;
 % rodent 20260926 + 100). Requires core/io on the path (EEGSource,
-% writeEEGLAB, writeFieldTrip, writeBrainVision). Toolboxes: none.
+% writeEEGLAB, writeFieldTrip, writeBrainVision, writeEDF). Toolboxes: none.
 % =========================================================================
 
 function files = demoEEG(folder, varargin)
-    allFormats = {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision', 'matrix'};
+    allFormats = {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision', 'matrix', 'edf', 'bdf'};
     o = struct('Participants', 8, 'Kinds', {{'scalp', 'rodent'}}, 'Formats', {allFormats}, 'Force', false);
     for k = 1:2:numel(varargin)
         o.(varargin{k}) = varargin{k + 1};
@@ -264,7 +269,8 @@ function [out, truth] = writeRodent(folder, formats)
         'EEG = pop_eegfiltnew(EEG, 1, 100);'}, newline);
     out = struct('eeglab', fullfile(folder, 'rat01_eeglab.set'), 'eeglabfdt', fullfile(folder, 'rat01_fdt.set'), ...
         'fieldtrip', fullfile(folder, 'rat01_fieldtrip.mat'), 'brainvision', fullfile(folder, 'rat01_brainvision.vhdr'), ...
-        'matrix', fullfile(folder, 'rat01_matrix.mat'));
+        'matrix', fullfile(folder, 'rat01_matrix.mat'), 'edf', fullfile(folder, 'rat01_edf.edf'), ...
+        'bdf', fullfile(folder, 'rat01_biosemi.bdf'));
     has = @(f) any(strcmp(formats, f));
     if has('eeglab'), writeEEGLAB(out.eeglab, eeg, 'History', hist, 'CoordSys', 'bregma, mm'); end
     if has('eeglabfdt')
@@ -300,6 +306,22 @@ function [out, truth] = writeRodent(folder, formats)
         M = struct('data', double(data), 'fs', fs, 'labels', {labels}, 'flashTimes', onsets);
         save(out.matrix, '-struct', 'M', '-v7');
     end
+
+    % EDF+C: 'EEG <name>' labels, flashes as annotations
+    sig = struct('label', strcat('EEG', {' '}, labels), 'units', 'uV', 'fs', fs, ...
+        'data', num2cell(double(data), 2)');
+    if has('edf')
+        writeEDF(out.edf, sig, 'Format', 'EDF+C', 'Annotations', ...
+            struct('onset', num2cell(onsets), 'duration', 0, 'text', 'flash'));
+    end
+    % BDF: 24 bits, trigger code 1 on the Status channel for 10 ms at each flash
+    if has('bdf')
+        status = zeros(1, N);
+        for k = 1:numel(onsets), status(round(onsets(k) * fs) + (1:10)) = 1; end
+        sigB = [struct('label', labels, 'units', 'uV', 'fs', fs, 'data', num2cell(double(data), 2)'), ...
+            struct('label', 'Status', 'units', '', 'fs', fs, 'data', status)];
+        writeEDF(out.bdf, sigB, 'Format', 'BDF');
+    end
     for f = setdiff(fieldnames(out)', formats)
         out.(f{1}) = '';                                         % not written
     end
@@ -323,6 +345,7 @@ function tf = allExist(files, kinds, formats)
         f = files.(kinds{k});
         for i = 1:numel(f)
             for fmt = formats
+                if ~isfield(f(i), fmt{1}), continue; end            % rodent-only formats
                 if ~(exist(f(i).(fmt{1}), 'file') == 2), tf = false; return; end
             end
         end
