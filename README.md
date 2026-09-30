@@ -1,6 +1,6 @@
 # Neuronal Data Analyzer Lab
 
-[![Version](https://img.shields.io/badge/version-0.5.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.5.2-blue.svg)](CHANGELOG.md)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE.txt)
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2021a+-orange.svg)](https://www.mathworks.com/products/matlab.html)
 
