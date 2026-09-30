@@ -157,7 +157,7 @@ classdef EphysSource
             fmt = 'nwb';
             try
                 I = h5info(p, '/');
-                if any(strcmp({I.Attributes.Name}, 'McsHdf5ProtocolType')), fmt = 'mcs'; end
+                if isstruct(I.Attributes) && any(strcmp({I.Attributes.Name}, 'McsHdf5ProtocolType')), fmt = 'mcs'; end
             catch
             end
         end

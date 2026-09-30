@@ -38,7 +38,7 @@ try
 catch
     error('NeuroAnalyzer:io:mcs', '%s%s is not an HDF5 file.', base, ext);
 end
-if ~any(strcmp({I.Attributes.Name}, 'McsHdf5ProtocolType'))
+if ~isstruct(I.Attributes) || ~any(strcmp({I.Attributes.Name}, 'McsHdf5ProtocolType'))
     error('NeuroAnalyzer:io:mcs', ['%s%s is not a Multi Channel Systems HDF5 file (no McsHdf5ProtocolType): ' ...
         'export the .msrd / .mcd recording to HDF5 with Multi Channel DataManager.'], base, ext);
 end
