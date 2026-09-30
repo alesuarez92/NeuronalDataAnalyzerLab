@@ -81,6 +81,23 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   Manager's RoiSet.zip: polygon, freehand, traced, rectangle and oval, with
   their names) or QuPath (GeoJSON annotations, Polygon and MultiPolygon,
   names or classifications) become Histology regions.
+- **Electrophysiology recordings from eight more systems** (Extract Ephys
+  → *Source*; `core/io/readSpikeGLX.m`, `readBlackrock.m`,
+  `readNeuralynx.m`, `readPlexon.m`, `readMCS.m`, `readIntanRHS.m`,
+  `readOpenEphysLegacy.m`, `readABF.m`): SpikeGLX (Neuropixels 1.0 / 2.0
+  imec and nidq, sync and digital bits), Blackrock NSx 2.1-3.0 with the
+  NEV digital input, Neuralynx .ncs folders with Events.nev TTLs, Plexon
+  .plx (continuous channels placed by time stamp, AI and event channels,
+  sorted spike times), Multi Channel Systems HDF5 (electrode, auxiliary
+  and digital streams, events; MATLAB only), Intan .rhs (digital and
+  analog inputs, stimulation current), Open Ephys legacy .continuous
+  folders and Axon ABF 2 (gap-free or episodic). The format is also
+  recognized from the file's extension, folder contents or first bytes;
+  *Try demo data* writes the demo in each one, and the methods text names
+  it. Each reader was checked during development against python-neo (and
+  pyABF) on files from its synthetic writer (`write*.m`, used by the tests
+  and the demo); for Multi Channel Systems, the file layout was checked
+  with McsPyDataTools.
 
 ### Changed
 

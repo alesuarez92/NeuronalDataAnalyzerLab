@@ -10,7 +10,11 @@
 % assembled here from the published format descriptions (Intan RHD2000
 % header, NumPy .npy header, Open Ephys structure.oebin + continuous.dat,
 % an NWB-shaped HDF5 file made with h5create/h5write), plus clear-error
-% checks (wrong magic number, missing files, truncated data).
+% checks (wrong magic number, missing files, truncated data). The other
+% readers (SpikeGLX, Blackrock, Neuralynx, Plexon, Multi Channel Systems,
+% Intan RHS, Open Ephys legacy, ABF) have their own tests in
+% EphysFormatsTest; here the demo in each of those formats goes through
+% EphysSource (detection by extension, folder contents and first bytes).
 % =========================================================================
 
 function tests = FormatsFeaturesTest
@@ -457,7 +461,7 @@ function testEphysSourceDetectAndOpen(tests)
     verifyError(tests, @() EphysSource.detect(f), 'NeuroAnalyzer:io:unknownFormat');
     copyfile(d.intan, fullfile(tests.TestData.tmp, 'renamed.dat'));
     verifyEqual(tests, EphysSource.detect(fullfile(tests.TestData.tmp, 'renamed.dat')), 'intan', 'by magic number');
-    verifyError(tests, @() EphysSource.open(d.intan, 'plexon'), 'NeuroAnalyzer:io:unknownFormat');
+    verifyError(tests, @() EphysSource.open(d.intan, 'xyz'), 'NeuroAnalyzer:io:unknownFormat');
     for fmt = {'intan', 'openephys', 'nwb'}
         rec = EphysSource.open(d.(fmt{1}), 'auto');
         verifyEqual(tests, rec.info.format, fmt{1});
@@ -486,7 +490,55 @@ function testEphysSourceHelpers(tests)
     verifyEqual(tests, rec.info.duration, 0.05);
     verifyEqual(tests, rec.info.channelNames, {'Ch 1', 'Ch 2'});
     list = EphysSource.formats();
-    verifyEqual(tests, {list.key}, {'tdt', 'intan', 'openephys', 'nwb'});
+    verifyEqual(tests, {list.key}, {'tdt', 'intan', 'openephys', 'nwb', 'spikeglx', 'blackrock', ...
+        'neuralynx', 'plexon', 'mcs', 'intanrhs', 'openephyslegacy', 'abf'});
+    verifyEqual(tests, EphysSource.label('plexon'), 'Plexon .plx');
+end
+
+function testEphysSourceMoreFormatsDemo(tests)
+    % The demo in each of the other formats, opened with format detection
+    d = tests.TestData.demo;
+    fmts = {'spikeglx', 'blackrock', 'neuralynx', 'plexon', 'mcs', 'intanrhs', 'openephyslegacy', 'abf'};
+    for k = 1:numel(fmts)
+        f = fmts{k};
+        if ~isfield(d, f), continue; end                % mcs: needs the HDF5 functions
+        tr = d.truth.(f);
+        verifyEqual(tests, EphysSource.detect(d.(f)), f, f);
+        rec = EphysSource.open(d.(f));
+        verifyEqual(tests, rec.info.format, f, f);
+        verifyEqual(tests, rec.streams.xRAW.fs, tr.fs, 'AbsTol', 1e-6, f);
+        verifyEqual(tests, size(rec.streams.xRAW.data), [4 tr.nSamples], f);
+        n = size(tr.data, 2);
+        err = max(max(abs(double(rec.streams.xRAW.data(:, 1:n)) - tr.data)));
+        verifyLessThanOrEqual(tests, err, tr.lsb / 2 + 1e-10, f);
+        verifyEqual(tests, rec.info.stimNames{1}, tr.stimName, f);
+        fs = rec.streams.Whis.fs;
+        verifyEqual(tests, EphysSource.risingEdges(rec.streams.Whis.data(1, :), fs), d.truth.onsets, 'AbsTol', 2 / fs, f);
+    end
+end
+
+function testEphysSourceDetectByContents(tests)
+    d = tests.TestData.demo;
+    verifyEqual(tests, EphysSource.detect(strrep(d.blackrock, '.ns6', '.nev')), 'blackrock');
+    verifyEqual(tests, EphysSource.detect(fullfile(d.neuralynx, 'Events.nev')), 'neuralynx');
+    verifyEqual(tests, EphysSource.detect(fullfile(d.neuralynx, 'CSC2.ncs')), 'neuralynx');
+    verifyEqual(tests, EphysSource.detect(fullfile(d.openephyslegacy, '100_CH1.continuous')), 'openephyslegacy');
+    verifyEqual(tests, EphysSource.detect(strrep(d.spikeglx, '.bin', '.meta')), 'spikeglx');
+    % Renamed files: by their first bytes
+    src = {d.plexon, d.intanrhs, d.abf, d.blackrock, fullfile(d.neuralynx, 'CSC1.ncs'), ...
+        fullfile(d.openephyslegacy, '100_CH1.continuous')};
+    expect = {'plexon', 'intanrhs', 'abf', 'blackrock', 'neuralynx', 'openephyslegacy'};
+    for k = 1:numel(src)
+        g = fullfile(tests.TestData.tmp, sprintf('renamed%d.dat', k));
+        copyfile(src{k}, g);
+        verifyEqual(tests, EphysSource.detect(g), expect{k}, expect{k});
+    end
+    if isfield(d, 'mcs')
+        verifyEqual(tests, EphysSource.detect(d.mcs), 'mcs');
+        g = fullfile(tests.TestData.tmp, 'renamed_mcs.dat');
+        copyfile(d.mcs, g);
+        verifyEqual(tests, EphysSource.detect(g), 'mcs', 'HDF5 signature, MCS attribute');
+    end
 end
 
 function testDemoFormatsCache(tests)

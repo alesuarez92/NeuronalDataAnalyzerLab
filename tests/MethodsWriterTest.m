@@ -184,6 +184,19 @@ function testExtractLDFFormats(tests)
     verifyHas(tests, txt, 'with LabChart (ADInstruments) and exported as a text file (LDF on');
 end
 
+function testExtractEphysFormats(tests)
+    % The recording format named in the first sentence
+    e = Session.new('ExtractEphysApp');
+    names = {'plexon', 'Plexon data file (.plx)'; 'mcs', 'Multi Channel Systems HDF5 file'; ...
+        'abf', 'Axon Binary File (ABF 2)'; 'openephyslegacy', 'Open Ephys data format (.continuous) files'};
+    for k = 1:size(names, 1)
+        e.settings = struct('format', names{k, 1});
+        [txt, refs] = MethodsWriter.fromSession(e);
+        checkClean(tests, txt, refs);
+        verifyHas(tests, txt, ['acquisition system] and read from the ' names{k, 2}]);
+    end
+end
+
 function testHistology(tests)
     s = histologySession();
     [txt, refs] = MethodsWriter.fromSession(s);

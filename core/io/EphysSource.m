@@ -1,6 +1,6 @@
 %% EphysSource.m
 % =========================================================================
-% EPHYS SOURCE - ONE ADAPTER FOR TDT, INTAN, OPEN EPHYS AND NWB RECORDINGS
+% EPHYS SOURCE - ONE ADAPTER FOR THE ELECTROPHYSIOLOGY RECORDING FORMATS
 % =========================================================================
 % Every acquisition format is read into the struct shape Extract Ephys
 % already uses for TDT tanks (TDTbin2mat), so the rest of the pipeline is
@@ -15,7 +15,8 @@
 %
 %   list = EphysSource.formats()        struct array: key, label, pick
 %                                       ('folder' | 'file'), filter, prompt, hint
-%   fmt  = EphysSource.detect(path)     'tdt' | 'intan' | 'openephys' | 'nwb'
+%   fmt  = EphysSource.detect(path)     a format key (by extension, folder
+%                                       contents or the first bytes)
 %   rec  = EphysSource.open(path, fmt)  read with the matching reader
 %                                       (fmt 'auto' or omitted: detect)
 %   rec  = EphysSource.makeRecording(raw, fs, stim, stimFs, info)
@@ -24,7 +25,11 @@
 %
 % Readers: TDT tank folder (TDTbin2mat from the TDT MATLAB SDK, or the
 % DemoData stand-in for demo tanks), Intan .rhd (readIntanRHD), Open
-% Ephys binary folder (readOpenEphysBinary), NWB 2.x file (readNWB).
+% Ephys binary folder (readOpenEphysBinary), NWB 2.x file (readNWB),
+% SpikeGLX (readSpikeGLX), Blackrock NSx / NEV (readBlackrock), Neuralynx
+% .ncs folder (readNeuralynx), Plexon .plx (readPlexon), Multi Channel
+% Systems HDF5 (readMCS), Intan .rhs (readIntanRHS), Open Ephys legacy
+% .continuous folder (readOpenEphysLegacy), Axon ABF 2 (readABF).
 % Errors: NeuroAnalyzer:io:fileNotFound, NeuroAnalyzer:io:unknownFormat.
 % Toolboxes: none (TDT tanks need the TDT MATLAB SDK).
 % =========================================================================
@@ -35,18 +40,40 @@ classdef EphysSource
         %% formats - Supported sources, in dropdown order
         function list = formats()
             list = struct( ...
-                'key',    {'tdt', 'intan', 'openephys', 'nwb'}, ...
-                'label',  {'TDT tank', 'Intan .rhd', 'Open Ephys folder', 'NWB file'}, ...
-                'pick',   {'folder', 'file', 'folder', 'file'}, ...
+                'key',    {'tdt', 'intan', 'openephys', 'nwb', 'spikeglx', 'blackrock', 'neuralynx', ...
+                           'plexon', 'mcs', 'intanrhs', 'openephyslegacy', 'abf'}, ...
+                'label',  {'TDT tank', 'Intan .rhd', 'Open Ephys folder', 'NWB file', 'SpikeGLX', ...
+                           'Blackrock NSx', 'Neuralynx folder', 'Plexon .plx', 'Multi Channel Systems HDF5', ...
+                           'Intan .rhs', 'Open Ephys legacy folder', 'Axon ABF'}, ...
+                'pick',   {'folder', 'file', 'folder', 'file', 'file', 'file', 'folder', 'file', 'file', ...
+                           'file', 'folder', 'file'}, ...
                 'filter', {{}, {'*.rhd', 'Intan RHD2000 data file (*.rhd)'}, {}, ...
-                           {'*.nwb;*.h5;*.hdf5', 'NWB file (*.nwb, *.h5)'}}, ...
+                           {'*.nwb;*.h5;*.hdf5', 'NWB file (*.nwb, *.h5)'}, ...
+                           {'*.bin;*.meta', 'SpikeGLX binary or metadata (*.bin, *.meta)'}, ...
+                           {'*.ns1;*.ns2;*.ns3;*.ns4;*.ns5;*.ns6;*.nev', 'Blackrock NSx / NEV (*.ns1-*.ns6, *.nev)'}, {}, ...
+                           {'*.plx', 'Plexon data file (*.plx)'}, ...
+                           {'*.h5;*.hdf5', 'Multi Channel Systems HDF5 (*.h5)'}, ...
+                           {'*.rhs', 'Intan RHS2000 data file (*.rhs)'}, {}, ...
+                           {'*.abf', 'Axon Binary File (*.abf)'}}, ...
                 'prompt', {'Select TDT Tank Folder', 'Select Intan .rhd file', ...
                            'Select Open Ephys recording folder (contains structure.oebin)', ...
-                           'Select NWB file'}, ...
+                           'Select NWB file', 'Select SpikeGLX .bin or .meta file', ...
+                           'Select Blackrock .ns1-.ns6 file', 'Select Neuralynx session folder (.ncs files)', ...
+                           'Select Plexon .plx file', 'Select Multi Channel Systems HDF5 file', ...
+                           'Select Intan .rhs file', 'Select Open Ephys legacy folder (.continuous files)', ...
+                           'Select Axon .abf file'}, ...
                 'hint',   {'Choose a TDT tank/block folder (needs Whis and xRAW streams)', ...
                            'Choose an Intan RHD2000 .rhd file (amplifier channels; stimulus from a digital or analog input)', ...
                            'Choose an Open Ephys binary recording folder, or a parent folder (stimulus from TTL lines or ADC channels)', ...
-                           'Choose an NWB 2.x file (ElectricalSeries; stimulus from a stimulus TimeSeries or the trials table)'});
+                           'Choose an NWB 2.x file (ElectricalSeries; stimulus from a stimulus TimeSeries or the trials table)', ...
+                           'Choose a SpikeGLX imec (.ap / .lf) or nidq .bin with its .meta (stimulus from the sync or digital lines, or an analog input)', ...
+                           'Choose a Blackrock .ns1-.ns6 file (electrodes; stimulus from analog inputs or the .nev digital input)', ...
+                           'Choose a Neuralynx folder with .ncs channels (stimulus from the TTL bits in Events.nev)', ...
+                           'Choose a Plexon .plx file (continuous channels; stimulus from AI channels or events)', ...
+                           'Choose a Multi Channel Systems HDF5 file exported by Multi Channel DataManager (stimulus from auxiliary, digital or event streams)', ...
+                           'Choose an Intan RHS2000 .rhs file (stimulus from a digital input, an analog input or the stimulation current)', ...
+                           'Choose an Open Ephys folder of .continuous files (stimulus from ADC channels or TTL events)', ...
+                           'Choose an Axon ABF 2 file (sweeps put one after the other; stimulus from a current or TTL channel)'});
         end
 
         %% label - Display label of a format key
@@ -64,6 +91,10 @@ classdef EphysSource
                 elseif EphysSource.isDemoTank(p) || ~isempty(dir(fullfile(p, '*.tsq'))) ...
                         || ~isempty(dir(fullfile(p, '*.tev'))) || ~isempty(dir(fullfile(p, '*.sev')))
                     fmt = 'tdt';
+                elseif ~isempty(dir(fullfile(p, '*.continuous')))
+                    fmt = 'openephyslegacy';
+                elseif ~isempty(dir(fullfile(p, '*.ncs')))
+                    fmt = 'neuralynx';
                 elseif ~isempty(EphysSource.findFile(p, 'structure.oebin', 4))
                     fmt = 'openephys';
                 else
@@ -77,23 +108,57 @@ classdef EphysSource
             [~, ~, ext] = fileparts(p);
             switch lower(ext)
                 case '.rhd',                  fmt = 'intan'; return;
+                case '.rhs',                  fmt = 'intanrhs'; return;
                 case '.oebin',                fmt = 'openephys'; return;
-                case {'.nwb', '.h5', '.hdf5'}, fmt = 'nwb'; return;
+                case '.continuous',           fmt = 'openephyslegacy'; return;
+                case '.ncs',                  fmt = 'neuralynx'; return;
+                case '.abf',                  fmt = 'abf'; return;
+                case '.plx',                  fmt = 'plexon'; return;
+                case {'.ns1', '.ns2', '.ns3', '.ns4', '.ns5', '.ns6'}, fmt = 'blackrock'; return;
+                case {'.nwb', '.h5', '.hdf5'}, fmt = EphysSource.hdf5Kind(p); return;
+                case '.meta',                 fmt = 'spikeglx'; return;
+                case '.bin'
+                    [d, b] = fileparts(p);
+                    if exist(fullfile(d, [b '.meta']), 'file') == 2, fmt = 'spikeglx'; return; end
             end
-            % Unknown extension: look at the first bytes
+            % Unknown extension (or .nev: Blackrock or Neuralynx): look at the first bytes
             fid = fopen(p, 'r', 'ieee-le');
             if fid < 0
                 error('NeuroAnalyzer:io:fileNotFound', 'Cannot open %s', p);
             end
-            b = fread(fid, 8, 'uint8=>double')';
+            b = fread(fid, 18, 'uint8=>double')';
             fclose(fid);
+            head = char(b(1:min(8, end)));
             if numel(b) >= 4 && isequal(b(1:4), [2 39 145 198])        % 0xC6912702, little-endian
                 fmt = 'intan';
-            elseif numel(b) >= 8 && isequal(b, [137 72 68 70 13 10 26 10])   % HDF5 signature
-                fmt = 'nwb';
+            elseif numel(b) >= 4 && isequal(b(1:4), [172 39 145 214])  % 0xD69127AC: RHS2000
+                fmt = 'intanrhs';
+            elseif numel(b) >= 8 && isequal(b(1:8), [137 72 68 70 13 10 26 10])   % HDF5 signature
+                fmt = EphysSource.hdf5Kind(p);
+            elseif strncmp(head, 'ABF', 3)
+                fmt = 'abf';
+            elseif strncmp(head, 'PLEX', 4)
+                fmt = 'plexon';
+            elseif any(strcmp(head, {'NEURALCD', 'NEURALSG', 'BRSMPGRP', 'NEURALEV', 'BREVENTS'}))
+                fmt = 'blackrock';
+            elseif strncmp(char(b), '######## Neuralynx', 18)
+                fmt = 'neuralynx';
+            elseif strncmp(head, 'header.', 7)
+                fmt = 'openephyslegacy';
             else
                 error('NeuroAnalyzer:io:unknownFormat', ['Cannot tell the recording format of %s. ' ...
-                    'Supported: TDT tank folder, Intan .rhd, Open Ephys folder, NWB file.'], p);
+                    'Supported: TDT tank folder, Intan .rhd / .rhs, Open Ephys folder (binary or legacy), ' ...
+                    'NWB, SpikeGLX, Blackrock, Neuralynx, Plexon .plx, Multi Channel Systems HDF5, Axon ABF.'], p);
+            end
+        end
+
+        %% hdf5Kind - 'mcs' for a Multi Channel Systems HDF5 file, else 'nwb'
+        function fmt = hdf5Kind(p)
+            fmt = 'nwb';
+            try
+                I = h5info(p, '/');
+                if any(strcmp({I.Attributes.Name}, 'McsHdf5ProtocolType')), fmt = 'mcs'; end
+            catch
             end
         end
 
@@ -103,13 +168,22 @@ classdef EphysSource
                 fmt = EphysSource.detect(p);
             end
             switch lower(fmt)
-                case 'tdt',       rec = EphysSource.openTDT(p);
-                case 'intan',     rec = readIntanRHD(p);
-                case 'openephys', rec = readOpenEphysBinary(p);
-                case 'nwb',       rec = readNWB(p);
+                case 'tdt',             rec = EphysSource.openTDT(p);
+                case 'intan',           rec = readIntanRHD(p);
+                case 'openephys',       rec = readOpenEphysBinary(p);
+                case 'nwb',             rec = readNWB(p);
+                case 'spikeglx',        rec = readSpikeGLX(p);
+                case 'blackrock',       rec = readBlackrock(p);
+                case 'neuralynx',       rec = readNeuralynx(p);
+                case 'plexon',          rec = readPlexon(p);
+                case 'mcs',             rec = readMCS(p);
+                case 'intanrhs',        rec = readIntanRHS(p);
+                case 'openephyslegacy', rec = readOpenEphysLegacy(p);
+                case 'abf',             rec = readABF(p);
                 otherwise
+                    list = EphysSource.formats();
                     error('NeuroAnalyzer:io:unknownFormat', ...
-                        'Unknown format ''%s'' (use tdt, intan, openephys or nwb).', fmt);
+                        'Unknown format ''%s'' (use %s).', fmt, strjoin({list.key}, ', '));
             end
         end
 

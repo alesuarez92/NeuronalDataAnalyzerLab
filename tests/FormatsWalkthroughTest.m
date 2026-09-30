@@ -7,8 +7,11 @@
 % NWB file), processes the LFP and exports it as NWB, all through the
 % window's public methods (no dialogs). A frame is saved after every step
 % to test-artifacts/screens/walkthrough/ExtractEphysApp_xNN_<step>.png.
-% The exported NWB file is reopened in the window to close the loop.
-% Skipped when no display is available.
+% The exported NWB file is reopened in the window to close the loop. The
+% demo in the other formats (SpikeGLX, Blackrock, Neuralynx, Plexon, Multi
+% Channel Systems HDF5, Intan .rhs, Open Ephys legacy, ABF) is loaded
+% through the Source dropdown and its LFP processed. Skipped when no
+% display is available.
 % =========================================================================
 
 function tests = FormatsWalkthroughTest
@@ -80,7 +83,8 @@ end
 
 function testSourceDropdown(tests)
     app = ExtractEphysApp(); c = onCleanup(@() delete(app.UIFig));
-    tests.verifyEqual(app.SourceMenu.ItemsData, {'tdt', 'intan', 'openephys', 'nwb'});
+    tests.verifyEqual(app.SourceMenu.ItemsData, {'tdt', 'intan', 'openephys', 'nwb', 'spikeglx', 'blackrock', ...
+        'neuralynx', 'plexon', 'mcs', 'intanrhs', 'openephyslegacy', 'abf'});
     tests.verifyEqual(app.SourceMenu.Value, 'tdt');
     app.SourceMenu.Value = 'openephys';
     app.onSourceChanged();
@@ -114,6 +118,26 @@ function testNWBRecording(tests)
     app = ExtractEphysApp(); c = onCleanup(@() delete(app.UIFig));
     runFormat(tests, app, 'nwb', 10, DemoData.FsRaw, DemoData.FsRaw / 24, 'whisker_stimulus');
     tests.verifyEqual(app.WhisChannelMenu.Items, {'whisker_stimulus', 'trials (intervals)'});
+end
+
+function testMoreFormatsDemo(tests)
+    % Try demo data in each of the other formats: channels, rate, stimulus, LFP
+    app = ExtractEphysApp(); c = onCleanup(@() delete(app.UIFig));
+    fmts = {'spikeglx', 'blackrock', 'neuralynx', 'plexon', 'mcs', 'intanrhs', 'openephyslegacy', 'abf'};
+    for k = 1:numel(fmts)
+        f = fmts{k};
+        app.SourceMenu.Value = f;
+        app.onSourceChanged();
+        app.loadDemo();
+        tests.verifyEqual(app.SourceFormat, f, f);
+        tests.verifyEqual(size(app.Data.streams.xRAW.data, 1), 4, f);
+        tr = app.Data.truth.(f);
+        tests.verifyEqual(app.Data.streams.xRAW.fs, tr.fs, 'AbsTol', 1e-6, f);
+        tests.verifyEqual(app.WhisChannelMenu.Items{1}, tr.stimName, f);
+        app.processLFPData(struct());
+        tests.verifyNotEmpty(app.LastProcessedLFP, f);
+    end
+    shot(tests, app, 'ExtractEphysApp_x14_abf_lfp');
 end
 
 function testOpenRecordingAutoDetect(tests)

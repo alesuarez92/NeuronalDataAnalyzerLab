@@ -122,8 +122,9 @@ classdef ExtractEphysApp < handle
             sg = uigridlayout(g, [1 2], 'ColumnWidth', {56, '1x'}, 'Padding', [0 0 0 0], ...
                 'ColumnSpacing', 8, 'BackgroundColor', T.cardBg);
             app.SourceMenu = UIKit.field(sg, 'Source', 'dropdown', {{src.label}, src(1).label}, ...
-                ['Acquisition system / file format of the recording: TDT tank folder, Intan .rhd file, ' ...
-                'Open Ephys binary folder or NWB 2.x file']);
+                ['Acquisition system / file format of the recording: TDT tank, Intan .rhd / .rhs, ' ...
+                'Open Ephys (binary or legacy), NWB 2.x, SpikeGLX, Blackrock, Neuralynx, Plexon, ' ...
+                'Multi Channel Systems HDF5 or Axon ABF']);
             app.SourceMenu.ItemsData = {src.key};
             app.SourceMenu.Value = 'tdt';
             app.SourceMenu.ValueChangedFcn = @(~,~)app.onSourceChanged();
@@ -1383,6 +1384,22 @@ function s = loadHint(fmt)
                 'with structure.oebin) or a folder above it; the recording must be in binary format.'];
         case 'nwb'
             s = 'Choose an NWB 2.x (.nwb) file with an ElectricalSeries in /acquisition or /processing.';
+        case 'spikeglx'
+            s = 'Choose a SpikeGLX .bin (or .meta); the .meta file must be next to the .bin with the same name.';
+        case 'blackrock'
+            s = 'Choose a Blackrock .ns1-.ns6 file (NSx 2.1-3.0); the .nev with the same name adds the digital input.';
+        case 'neuralynx'
+            s = 'Choose the Neuralynx session folder (or one .ncs file in it); all .ncs files need the same sample rate.';
+        case 'plexon'
+            s = 'Choose a Plexon .plx file with continuous (WB, SPKC, FP or AD) channels; .pl2 files: export to .plx first.';
+        case 'mcs'
+            s = 'Choose the HDF5 (.h5) file that Multi Channel DataManager exports from the .msrd / .mcd recording.';
+        case 'intanrhs'
+            s = 'Choose an Intan RHS2000 .rhs file saved in the traditional single-file format.';
+        case 'openephyslegacy'
+            s = 'Choose the folder with the <processor>_CH<n>.continuous files (Open Ephys format of GUI versions before 0.6).';
+        case 'abf'
+            s = 'Choose an ABF 2 file (pCLAMP 10+); open older ABF 1 files in Clampfit and save them again.';
         otherwise
             s = 'Check that you selected the right file or folder for this source.';
     end

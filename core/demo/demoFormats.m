@@ -1,14 +1,14 @@
 %% demoFormats.m
 % =========================================================================
-% DEMO FORMATS - THE DEMO TANK AS INTAN, OPEN EPHYS AND NWB RECORDINGS
+% DEMO FORMATS - THE DEMO TANK IN EVERY ELECTROPHYSIOLOGY RECORDING FORMAT
 % =========================================================================
 % files = demoFormats()                    cached copy in <DemoData.folder>/formats
 % files = demoFormats(folder)              (re)write the files into folder
 % files = demoFormats(folder, Name, Value) options below
 %
 % Writes the first 6 s of 4 channels (3-6, around the evoked sink at
-% channel 4 and the units at channels 4-5) of DemoData.tdtTank in three
-% acquisition formats, so the readers in core/io can be round-trip tested
+% channel 4 and the units at channels 4-5) of DemoData.tdtTank in each
+% acquisition format, so the readers in core/io can be round-trip tested
 % and Extract Ephys can demonstrate every source:
 %   files.intan      demo_intan.rhd: RHD file format v3.0, 20 kHz
 %                    (resampled), stimulus on DIGITAL-IN-01 and as a 1 V
@@ -20,25 +20,45 @@
 %                    int16 x 0.195 uV in /acquisition, the tank's whisker
 %                    stimulus (1017.25 Hz) in /stimulus/presentation and
 %                    the stimuli as /intervals/trials (written by writeNWB)
+%   files.spikeglx   demo_spikeglx_g0_t0.imec0.ap.bin (+ .meta): Neuropixels
+%                    1.0 AP, gain 500, 30 kHz; stimulus on sync bit 6
+%   files.blackrock  demo_blackrock.ns6 (+ .nev): NSx 2.3, 30 kHz;
+%                    stimulus on the NEV digital input (bit 0)
+%   files.neuralynx  demo_neuralynx/ CSC1-CSC4.ncs, 32 kHz; TTL bit 0 in
+%                    Events.nev
+%   files.plexon     demo_plexon.plx: WB01-WB04 at 40 kHz, AI01 (1 V
+%                    pulses) and event channel 1
+%   files.mcs        demo_mcs.h5: Multi Channel Systems HDF5, 25 kHz,
+%                    stimulus on the digital stream bit 0 (MATLAB only:
+%                    left out where the HDF5 functions are missing)
+%   files.intanrhs   demo_intan.rhs: 30 kHz, DIGITAL-IN-01
+%   files.openephyslegacy  demo_openephys_legacy/ 100_CH1-4.continuous,
+%                    30 kHz, TTL channel 1 events
+%   files.abf        demo_abf.abf: ABF 2 gap-free, 20 kHz, 4 channels in
+%                    mV and a TTL channel (V)
 %   files.truth      onsets (s), stimDuration (0.02 s), duration (6 s),
 %                    channels (tank channels 3:6), sinkIndex (2 = tank
 %                    channel 4), and per format: fs, nSamples, lsb (volts
-%                    per bit) and data (channels x samples, volts, before
-%                    quantization; only when freshly written, not in the cache)
+%                    per bit), stimName (first stimulus candidate) and
+%                    data (channels x samples, volts, before quantization;
+%                    only when freshly written, not in the cache)
 %   files.folder
 %
 % Options (Name, Value):
-%   'Formats'  subset of {'intan', 'openephys', 'nwb'} (default: all)
+%   'Formats'  subset of the keys above (default: all)
 %   'Tank'     a TDTbin2mat-like struct to convert instead of the demo tank
 %              (streams.xRAW, streams.Whis, truth.onsets)
 %   'Force'    true regenerates the cache (demoFormats() only)
 % Deterministic: no random numbers beyond DemoData's fixed seed.
 % Requires core/io on the path (writeIntanRHD, writeOpenEphysBinary,
-% writeNWB). Toolboxes: none.
+% writeNWB and the other write* functions). Toolboxes: none.
 % =========================================================================
 
 function files = demoFormats(folder, varargin)
-    o = struct('Formats', {{'intan', 'openephys', 'nwb'}}, 'Tank', [], 'Force', false);
+    every = {'intan', 'openephys', 'nwb', 'spikeglx', 'blackrock', 'neuralynx', 'plexon', 'mcs', ...
+        'intanrhs', 'openephyslegacy', 'abf'};
+    if isempty(which('h5create')), every = every(~strcmp(every, 'mcs')); end
+    o = struct('Formats', {every}, 'Tank', [], 'Force', false);
     for k = 1:2:numel(varargin)
         o.(varargin{k}) = varargin{k+1};
     end
@@ -82,7 +102,7 @@ function files = demoFormats(folder, varargin)
     if ~isempty(prev)
         % Keep the cached formats; the common truth fields are recomputed identically
         files = prev;
-        for f = {'intan', 'openephys', 'nwb'}
+        for f = every
             if isfield(prev.truth, f{1}), truth.(f{1}) = prev.truth.(f{1}); end
         end
     end
@@ -146,10 +166,111 @@ function files = demoFormats(folder, varargin)
             'stimFs', fsS, 'stim', stim);
     end
 
+    % ---- SpikeGLX imec, Neuropixels 1.0 AP (30 kHz) ----
+    if any(strcmp(o.Formats, 'spikeglx'))
+        fs = 30000;
+        [x, t] = resampleTo(raw, tT, fs, T);
+        pulse = pulses(t, onsets, dur);
+        lsb = 0.6 / 512 / 500;
+        f = fullfile(folder, 'demo_spikeglx_g0_t0.imec0.ap.bin');
+        writeSpikeGLX(f, [int16(round(x / lsb)); int16(64 * pulse)], 'imec1', 'Gain', 500);
+        files.spikeglx = f;
+        truth.spikeglx = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', lsb, 'data', x, 'stimName', 'SY bit 6');
+    end
+
+    % ---- Blackrock NSx 2.3 (30 kHz) + NEV digital input ----
+    if any(strcmp(o.Formats, 'blackrock'))
+        fs = 30000;
+        [x, t] = resampleTo(raw, tT, fs, T);
+        pulse = pulses(t, onsets, dur);
+        dig = edges(pulse);
+        b = fullfile(folder, 'demo_blackrock');
+        writeBlackrock(b, x, fs, 'Digital', dig);
+        files.blackrock = [b '.ns6'];
+        truth.blackrock = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', 0.25e-6, 'data', x, ...
+            'stimName', 'Digital in bit 0');
+    end
+
+    % ---- Neuralynx .ncs folder (32 kHz) + Events.nev ----
+    if any(strcmp(o.Formats, 'neuralynx'))
+        fs = 32000;
+        [x, t] = resampleTo(raw, tT, fs, T);
+        pulse = pulses(t, onsets, dur);
+        d = fullfile(folder, 'demo_neuralynx');
+        if exist(d, 'dir') == 7, rmdir(d, 's'); end
+        writeNeuralynx(d, x, fs, 'TTL', edges(pulse));
+        files.neuralynx = d;
+        truth.neuralynx = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', 1e-3 / 32768, 'data', x, ...
+            'stimName', 'TTL bit 0');
+    end
+
+    % ---- Plexon .plx (40 kHz WB, AI pulses, event channel 1) ----
+    if any(strcmp(o.Formats, 'plexon'))
+        fs = 40000;
+        [x, t] = resampleTo(raw, tT, fs, T);
+        pulse = pulses(t, onsets, dur);
+        f = fullfile(folder, 'demo_plexon.plx');
+        writePlexon(f, x, fs, 'AI', double(pulse), 'Events', struct('channel', 1, 'sample', find(diff([0 pulse]) == 1)));
+        files.plexon = f;
+        truth.plexon = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', 5000 / (0.5 * 2^16 * 1000) * 1e-3, ...
+            'data', x, 'stimName', 'AI01');
+    end
+
+    % ---- Multi Channel Systems HDF5 (25 kHz, digital stream) ----
+    if any(strcmp(o.Formats, 'mcs'))
+        fs = 25000;
+        [x, t] = resampleTo(raw, tT, fs, T);
+        pulse = pulses(t, onsets, dur);
+        f = fullfile(folder, 'demo_mcs.h5');
+        writeMCS(f, x, fs, 'Digital', double(pulse));
+        files.mcs = f;
+        truth.mcs = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', 59605e-12, 'data', x, ...
+            'stimName', 'Digital Data1 bit 0');
+    end
+
+    % ---- Intan RHS2000 (30 kHz) ----
+    if any(strcmp(o.Formats, 'intanrhs'))
+        fs = 30000;
+        [x, t] = resampleTo(raw, tT, fs, T);
+        pulse = pulses(t, onsets, dur);
+        f = fullfile(folder, 'demo_intan.rhs');
+        writeIntanRHS(f, x, fs, 'DigitalIn', double(pulse), 'Names', names);
+        files.intanrhs = f;
+        truth.intanrhs = struct('fs', fs, 'nSamples', 128 * ceil(size(x, 2) / 128), 'lsb', 0.195e-6, ...
+            'data', x, 'stimName', 'DIGITAL-IN-01');
+    end
+
+    % ---- Open Ephys legacy .continuous (30 kHz) ----
+    if any(strcmp(o.Formats, 'openephyslegacy'))
+        fs = 30000;
+        [x, t] = resampleTo(raw, tT, fs, T);
+        pulse = pulses(t, onsets, dur);
+        d = fullfile(folder, 'demo_openephys_legacy');
+        if exist(d, 'dir') == 7, rmdir(d, 's'); end
+        writeOpenEphysLegacy(d, x, fs, 'TTL', struct('channel', 0, 'on', find(diff([0 pulse]) == 1), ...
+            'off', find(diff([0 pulse]) == -1)));
+        files.openephyslegacy = d;
+        truth.openephyslegacy = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', 0.195e-6, ...
+            'data', x, 'stimName', 'TTL 1');
+    end
+
+    % ---- Axon ABF 2 (20 kHz, gap-free) ----
+    if any(strcmp(o.Formats, 'abf'))
+        fs = 20000;
+        [x, t] = resampleTo(raw, tT, fs, T);
+        pulse = pulses(t, onsets, dur);
+        f = fullfile(folder, 'demo_abf.abf');
+        writeABF(f, [x * 1e3; 5 * double(pulse)], fs, 'Names', [names, {'TTL'}], ...
+            'Units', {'mV', 'mV', 'mV', 'mV', 'V'});
+        files.abf = f;
+        truth.abf = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', 1.05 * max(abs(x(:))) / 32768, ...
+            'data', x, 'stimName', 'TTL');
+    end
+
     files.truth = truth;
     if cached
         slim = files;
-        for fmt = {'intan', 'openephys', 'nwb'}
+        for fmt = every
             if isfield(slim.truth, fmt{1}) && isfield(slim.truth.(fmt{1}), 'data')
                 slim.truth.(fmt{1}) = rmfield(slim.truth.(fmt{1}), 'data');
             end
@@ -173,6 +294,15 @@ function p = pulses(t, onsets, dur)
     for k = 1:numel(onsets)
         p(t >= onsets(k) & t < onsets(k) + dur) = true;
     end
+end
+
+%% edges - struct(sample, value) of the rising (1) and falling (0) edges, in time order
+function e = edges(pulse)
+    on = find(diff([0 pulse]) == 1);
+    off = find(diff([0 pulse]) == -1);
+    [t, i] = sort([on off]);
+    v = [ones(size(on)) zeros(size(off))];
+    e = struct('sample', num2cell(t), 'value', num2cell(v(i)));
 end
 
 %% allExist - Cached files present for every requested format
