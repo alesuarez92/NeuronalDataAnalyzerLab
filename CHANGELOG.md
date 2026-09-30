@@ -76,6 +76,11 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   pixel) and UCLA Miniscope folders (numbered videos, timeStamps.csv /
   timestamp.dat, metaData.json). ROI analysis now also reads the frame
   interval of TIFFs.
+- **Histology: Import regions** (`core/io/readRegions.m`,
+  `writeImageJRoi.m`): regions drawn in ImageJ / Fiji (.roi and the ROI
+  Manager's RoiSet.zip: polygon, freehand, traced, rectangle and oval, with
+  their names) or QuPath (GeoJSON annotations, Polygon and MultiPolygon,
+  names or classifications) become Histology regions.
 
 ### Changed
 

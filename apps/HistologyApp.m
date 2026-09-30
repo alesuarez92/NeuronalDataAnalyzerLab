@@ -24,7 +24,8 @@
 % Scriptable (CI walkthroughs, no dialogs): openFiles(paths), loadDemo(),
 % setPixelSize(um), setAlignment(method, channel, alignChannels),
 % setLandmarks(k, movingXY, fixedXY), align(), setCountOptions(o),
-% countCells(), addRegion(name, xy), removeRegion(k), setView(k, mode),
+% countCells(), addRegion(name, xy), removeRegion(k), importRegions(file)
+% (ImageJ .roi / RoiSet.zip, QuPath GeoJSON), setView(k, mode),
 % exportResultsTo(path). Sessions: saveSessionTo(path, notes),
 % openSession(path), makeReport(pdfPath), sessionState(), restoreSession(s).
 % =========================================================================
@@ -65,6 +66,7 @@ classdef HistologyApp < handle
         AddRegionBtn
         FinishRegionBtn
         RemoveRegionBtn
+        ImportRegionsBtn
         RegionInfo
         % Step 5
         ExportBtn
@@ -227,7 +229,11 @@ classdef HistologyApp < handle
             app.FinishRegionBtn.Layout.Row = 4; app.FinishRegionBtn.Layout.Column = 2;
             app.RemoveRegionBtn = UIKit.button(g, 'Remove last region', @(~,~)app.removeRegion(numel(app.Regions)), 'secondary', ...
                 'Delete the most recently added region');
-            app.RemoveRegionBtn.Layout.Row = 5; app.RemoveRegionBtn.Layout.Column = [1 2];
+            app.RemoveRegionBtn.Layout.Row = 5; app.RemoveRegionBtn.Layout.Column = 1;
+            app.ImportRegionsBtn = UIKit.button(g, ['Import regions' char(8230)], @(~,~)app.importRegionsDialog(), 'secondary', ...
+                ['Add the regions drawn in ImageJ / Fiji (.roi, RoiSet.zip from the ROI Manager) or QuPath (annotations ' ...
+                 'exported as GeoJSON), in the pixels of image 1']);
+            app.ImportRegionsBtn.Layout.Row = 5; app.ImportRegionsBtn.Layout.Column = 2;
             app.RegionInfo = infoLabel(g, 'No regions: counts are for the whole image', 'Regions');
             app.RegionInfo.Layout.Row = 6; app.RegionInfo.Layout.Column = [1 2];
 
@@ -517,6 +523,43 @@ classdef HistologyApp < handle
             app.updateRegionStats();
             app.showImage();
             app.updateControls();
+        end
+
+        %% importRegionsDialog - Pick an ImageJ / QuPath region file, then importRegions
+        function importRegionsDialog(app)
+            startDir = ProjectManager.getImportDir();
+            if isempty(startDir), startDir = pwd; end
+            [f, p] = uigetfile({'*.roi;*.zip;*.geojson;*.json', 'Regions (ImageJ .roi / RoiSet.zip, QuPath GeoJSON)'}, ...
+                'Import regions', startDir);
+            figure(app.UIFig);
+            if isequal(f, 0), return; end
+            app.importRegions(fullfile(p, f));
+        end
+
+        %% importRegions - Add the regions of an ImageJ .roi / RoiSet.zip or QuPath GeoJSON file
+        % Returns the number of regions added (0 on an error, shown in the status bar).
+        function n = importRegions(app, file)
+            n = 0;
+            if isempty(which('readRegions'))
+                addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'core', 'io'));
+            end
+            [~, b, e] = fileparts(file);
+            try
+                [R, notes] = readRegions(file);
+            catch ME
+                UIKit.setStatus(app.StatusLabel, sprintf('Could not read regions from %s%s: %s', b, e, ME.message), 'error');
+                return;
+            end
+            for k = 1:numel(R)
+                app.Regions(end + 1) = struct('name', R(k).name, 'xy', R(k).xy);
+            end
+            n = numel(R);
+            app.updateRegionStats();
+            app.showImage();
+            app.updateControls();
+            msg = sprintf('%d region(s) imported from %s%s.', n, b, e);
+            if ~isempty(notes), msg = [msg ' ' strjoin(notes, ' ')]; end
+            UIKit.setStatus(app.StatusLabel, msg, ifelse(n > 0 && isempty(notes), 'success', 'warning'));
         end
 
         %% removeRegion - Delete region k
@@ -1145,6 +1188,7 @@ classdef HistologyApp < handle
             app.AddRegionBtn.Enable = onoff(has && ~clicking);
             app.FinishRegionBtn.Enable = onoff(clicking);
             app.RemoveRegionBtn.Enable = onoff(~isempty(app.Regions) && ~clicking);
+            app.ImportRegionsBtn.Enable = onoff(has && ~clicking);
             app.ExportBtn.Enable = onoff(counted);
             app.ImageDrop.Enable = onoff(has);
             app.ViewDrop.Enable = onoff(has);

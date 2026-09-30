@@ -179,3 +179,41 @@ function testHistologyLandmarks(tests)
     tests.verifyEqual([S.nCells], [tr.counts.nCells]);
     shot(tests, app, 'HistologyApp_08_landmarks', 'Checks');
 end
+
+function testHistologyImportedRegions(tests)
+    % The demo regions drawn in ImageJ (RoiSet.zip) or QuPath (GeoJSON) give the same counts
+    app = HistologyApp(); c = onCleanup(@() delete(app.UIFig));
+    tests.verifyTrue(logical(app.loadDemo()));
+    tr = app.DemoTruth;
+    tests.verifyTrue(logical(app.align()));
+    tests.verifyTrue(logical(app.countCells()));
+    d = tests.TestData.tmp;
+    names = cell(1, numel(tr.regions));
+    feats = cell(1, numel(tr.regions));
+    for r = 1:numel(tr.regions)
+        names{r} = sprintf('%04d.roi', r);
+        xy = tr.regions(r).xy - 0.5;                       % ImageJ / QuPath put the pixel corner at 0
+        writeImageJRoi(fullfile(d, names{r}), xy, tr.regions(r).name, 'polygon', true);
+        ring = [xy; xy(1, :)];
+        pts = strjoin(arrayfun(@(i) sprintf('[%.4f,%.4f]', ring(i, 1), ring(i, 2)), 1:size(ring, 1), ...
+            'UniformOutput', false), ',');
+        feats{r} = sprintf(['{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[%s]]},' ...
+            '"properties":{"objectType":"annotation","name":"%s"}}'], pts, tr.regions(r).name);
+    end
+    z = fullfile(d, 'RoiSet.zip');
+    zip(z, names, d);
+    tests.verifyEqual(app.importRegions(z), numel(tr.regions));
+    tests.verifyEqual({app.Regions.name}, {tr.regions.name});
+    S = app.RegionStats{2};
+    tests.verifyEqual([S.nCells], [tr.counts.nCells]);
+    for r = numel(app.Regions):-1:1, app.removeRegion(r); end
+    g = fullfile(d, 'annotations.geojson');
+    fid = fopen(g, 'w');
+    fprintf(fid, '{"type":"FeatureCollection","features":[%s]}', strjoin(feats, ','));
+    fclose(fid);
+    tests.verifyEqual(app.importRegions(g), numel(tr.regions));
+    S = app.RegionStats{2};
+    tests.verifyEqual([S.nCells], [tr.counts.nCells]);
+    tests.verifyEqual(app.importRegions(fullfile(d, 'missing.roi')), 0);
+    shot(tests, app, 'HistologyApp_09_imported_regions', 'Counts');
+end
