@@ -10,6 +10,44 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+### Added
+
+- **Laser speckle flowmetry** (launcher → Blood flow → *Laser speckle*,
+  `apps/LSCIAnalysisApp.m`, `core/LaserSpeckle.m`): blood-flow maps from
+  laser speckle images. Loads raw speckle images from the camera, speckle
+  contrast images, or the perfusion / flux images a commercial system
+  exports (.mat, multi-frame TIFF or video; the type is judged from the
+  images when the file does not say). Spatial (N × N window) or temporal
+  (N frames) speckle contrast after the camera dark level, a flow index
+  (1/K², or 1/τc from the exposure model with β), the flow of each ROI
+  over time (K² averaged over the ROI before conversion), trials around
+  each stimulus (from the stimulus trace in the file or a regular
+  protocol) as % change from each trial's baseline, the average response
+  (mean ± SD, with the mean change in a response window) and a response
+  map. A *Checks* tab says in plain words what to look at: saturated
+  pixels, a missing dark level, a small window, an unusual contrast,
+  trials left out, too few trials. Export as .csv / .mat; *Save trials*
+  writes the LDF trial format, so LDF Average and Response features open
+  it. Sessions, report and methods text (citing Briers & Webster 1996,
+  Boas & Dunn 2010, Bandyopadhyay et al. 2005, Cheng et al. 2003) as in
+  every window. New demo `demo_lsci.mat` (`core/demo/demoLSCI.m`): raw
+  speckle with known contrast in cortex, a vessel and static tissue, and
+  a +25% flow response of an activated area after four stimuli; new Help
+  topic *Laser Speckle* with the answers.
+- `core/io/readImageStack.m`: one reader for image stacks over time
+  (.mat, multi-page TIFF with the ImageJ frame interval, channels and
+  pixel size, and video).
+
+### Changed
+
+- **Launcher:** *Laser speckle* joins LDF under Blood flow, so the tiles
+  now take four rows at the default width (Blood flow and EEG, then
+  Electrophysiology, Imaging and Across techniques).
+
+### Fixed
+
+- README: the version badge said 0.5.1 in the 0.5.2 release.
+
 ## [0.5.2] - 2026-09-29
 
 ### Changed
