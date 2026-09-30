@@ -128,33 +128,17 @@ classdef Histology
         end
 
         %% pixelSizeFromTiff - Micrometres per pixel from TIFF tags ([] if unknown)
-        % ImageJ writes 'unit=micron' (or um / µm / mm / nm) in ImageDescription
-        % and pixels per unit in XResolution; standard TIFFs give pixels per
-        % centimetre or inch in XResolution / ResolutionUnit.
+        % tiffMeta: ImageJ ('unit=' in ImageDescription, including the
+        % escaped \u00B5m, and pixels per unit in XResolution), OME-TIFF,
+        % ScanImage, Aperio MPP, or pixels per centimetre / inch in
+        % XResolution / ResolutionUnit.
         function um = pixelSizeFromTiff(fi)
-            um = [];
-            if ~isfield(fi, 'XResolution') || isempty(fi.XResolution) || fi.XResolution <= 0
-                return;
+            if isempty(which('tiffMeta'))           % core/io
+                addpath(fullfile(fileparts(mfilename('fullpath')), 'io'));
             end
-            res = double(fi.XResolution);
-            desc = '';
-            if isfield(fi, 'ImageDescription') && ischar(fi.ImageDescription), desc = fi.ImageDescription; end
-            tok = regexp(desc, 'unit=([^\s]+)', 'tokens', 'once');
-            if ~isempty(tok)
-                u = lower(strrep(tok{1}, '\', ''));
-                scale = struct('micron', 1, 'um', 1, 'mm', 1000, 'nm', 1e-3, 'cm', 1e4);
-                u = strrep(strrep(u, char(181), 'u'), 'microns', 'micron');
-                if isfield(scale, u), um = scale.(u) / res; end
-                return;
-            end
-            unit = '';
-            if isfield(fi, 'ResolutionUnit'), unit = lower(char(fi.ResolutionUnit)); end
-            switch unit
-                case 'centimeter', um = 1e4 / res;
-                case 'inch'
-                    um = 25400 / res;
-                    if res == 72 || res == 96 || res == 300, um = []; end   % screen / print defaults, not a scale
-            end
+            M = tiffMeta(fi);
+            um = M.pixelSizeUm;
+            if ~isfinite(um), um = []; end
         end
 
         %% ----------------------------------------------------------------

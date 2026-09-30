@@ -25,6 +25,7 @@ function setupOnce(tests)
     addpath(fullfile(root, 'apps'));
     addpath(fullfile(root, 'core'));
     addpath(fullfile(root, 'core', 'imaging'));
+    addpath(fullfile(root, 'core', 'io'));
     tests.TestData.dir = tempname;
     mkdir(tests.TestData.dir);
 end

@@ -19,9 +19,10 @@ function S = readImageStack(p, opts)
 %            roiMasks / roiMask (+ roiNames), pixelSizeUm, kind ('raw
 %            speckle' | 'contrast' | 'flow'), truth.
 %   .tif / .tiff - every page is a frame (RGB pages averaged to grey).
-%            ImageJ files: frame interval (finterval), channels / slices /
-%            frames (hyperstacks: one channel is kept, opts.Channel) and
-%            the pixel size (XResolution with unit=micron or cm / inch).
+%            tiffMeta reads ImageJ, OME-TIFF, ScanImage and Aperio headers:
+%            frame interval or frame times, the pixel size, channels and
+%            slices (hyperstacks: one channel is kept, opts.Channel, and
+%            the first slice).
 %   .avi / .mp4 / .mov / .mj2 - video (VideoReader): grey frames and the
 %            frame rate.
 %   .dat   - Perimed PeriCam PSI / PIMSoft recording (readPerimedDat):
@@ -145,23 +146,27 @@ end
 %% ------------------------------------------------------------------------
 function S = readTiff(p, S, opts)
 info = imfinfo(p);
-n = numel(info);
 S.info.format = 'tiff';
-desc = '';
-if isfield(info, 'ImageDescription') && ischar(info(1).ImageDescription)
-    desc = info(1).ImageDescription;
-end
-ij = parseImageJ(desc);
-% Hyperstack: pages are channel-fastest (ImageJ order CZT); keep one channel
-nC = max(1, ij.channels);
+M = tiffMeta(info);
+% Hyperstacks (ImageJ, OME-TIFF, ScanImage): one channel and the first slice are kept
+nC = M.nChannels;
 ch = 1;
 if isfield(opts, 'Channel') && ~isempty(opts.Channel), ch = opts.Channel; end
 ch = min(max(1, round(ch)), nC);
-pages = ch:nC:n;
+pages = reshape(M.pageMap(ch, 1, :), 1, []);
+if isempty(pages)
+    error('NeuroAnalyzer:io:noStack', 'The TIFF holds no complete frame: %s', p);
+end
 S.info.nChannels = nC;
 S.info.channel = ch;
+S.info.tiff = rmfield(M, 'pageMap');
 if nC > 1
-    S.info.notes{end+1} = sprintf('ImageJ hyperstack with %d channels: channel %d is used.', nC, ch);
+    nm = M.channelNames{ch};
+    if isempty(nm), nm = sprintf('channel %d', ch); end
+    S.info.notes{end+1} = sprintf('%d channels in the file: %s is used.', nC, nm);
+end
+if M.nSlices > 1
+    S.info.notes{end+1} = sprintf('%d slices per time point: the first slice is used.', M.nSlices);
 end
 first = imread(p, pages(1));
 if ndims(first) == 3
@@ -180,14 +185,10 @@ end
 if ndims(first) == 3
     S.info.notes{end+1} = 'Colour pages were averaged to grey.';
 end
-if isfinite(ij.finterval) && ij.finterval > 0
-    S.fps = 1 / ij.finterval;
-    S.info.notes{end+1} = sprintf('Frame interval %g s read from the ImageJ header (%g Hz).', ij.finterval, S.fps);
-end
-S.pixelSizeUm = tiffPixelSize(info(1), ij);
-if isfinite(S.pixelSizeUm)
-    S.info.notes{end+1} = sprintf('Pixel size %g um read from the file.', S.pixelSizeUm);
-end
+S.fps = M.fps;
+if ~isempty(M.t), S.t = M.t - M.t(1); end
+S.pixelSizeUm = M.pixelSizeUm;
+S.info.notes = [S.info.notes, M.notes];
 end
 
 %% readPerimed - PIMSoft .dat: contrast (default) or perfusion images
@@ -214,47 +215,6 @@ end
 if isfinite(P.resolutionMm) && P.resolutionMm > 0, S.pixelSizeUm = 1000 * P.resolutionMm; end
 S.info.notes = [S.info.notes, P.notes];
 S.info.perimed = rmfield(P, {'variance', 'intensity', 'contrast', 'perfusion'});
-end
-
-%% parseImageJ - key=value lines of an ImageJ ImageDescription
-function ij = parseImageJ(desc)
-ij = struct('isImageJ', false, 'channels', 1, 'slices', 1, 'frames', NaN, 'finterval', NaN, 'unit', '');
-if isempty(desc) || isempty(strfind(desc, 'ImageJ=')), return; end %#ok<STREMP>
-ij.isImageJ = true;
-ij.channels = keyNum(desc, 'channels', 1);
-ij.slices = keyNum(desc, 'slices', 1);
-ij.frames = keyNum(desc, 'frames', NaN);
-ij.finterval = keyNum(desc, 'finterval', NaN);
-tok = regexp(desc, '(?m)^unit=(.*)$', 'tokens', 'once');
-if ~isempty(tok), ij.unit = strtrim(tok{1}); end
-end
-
-function v = keyNum(desc, key, default)
-tok = regexp(desc, ['(?m)^' key '=([-+0-9.eE]+)'], 'tokens', 'once');
-if isempty(tok), v = default; else, v = str2double(tok{1}); end
-end
-
-%% tiffPixelSize - um per pixel from XResolution (pixels per unit) and the unit
-function um = tiffPixelSize(info, ij)
-um = NaN;
-if ~isfield(info, 'XResolution') || isempty(info.XResolution) || ~(info.XResolution > 0), return; end
-px = 1 / info.XResolution;                      % units per pixel
-u = lower(ij.unit);
-if any(strcmp(u, {'micron', 'um', 'µm', 'µm'}))
-    um = px;
-elseif strcmp(u, 'nm')
-    um = px / 1000;
-elseif strcmp(u, 'mm')
-    um = px * 1000;
-elseif isfield(info, 'ResolutionUnit') && ~ij.isImageJ
-    switch lower(char(info.ResolutionUnit))
-        case 'centimeter', um = px * 1e4;
-        case 'inch'
-            if info.XResolution ~= 72 && info.XResolution ~= 96 && info.XResolution ~= 300
-                um = px * 25400;               % screen / print defaults say nothing about the sample
-            end
-    end
-end
 end
 
 %% ------------------------------------------------------------------------

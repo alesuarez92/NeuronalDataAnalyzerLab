@@ -58,6 +58,15 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   (gain × (1/C − 1), 0–3000 PU) is available as well. Other laser speckle
   systems (moorFLPI, RWD, SIM, Omegawave) keep their undocumented files:
   open their TIFF, video or MATLAB exports.
+- **TIFF metadata** (`core/io/tiffMeta.m`, `unitScale.m`): one reading of
+  what microscope and slide software writes into TIFFs, used by Histology,
+  ROI analysis and Laser speckle: ImageJ hyperstacks (channels, slices,
+  frames, frame interval, z spacing), OME-TIFF (DimensionOrder, sizes,
+  physical pixel size with units, time increment, plane times, channel
+  names), ScanImage (saved channels, frame rate, field of view in µm,
+  slices with flyback frames, frame timestamps) and Aperio .svs (MPP,
+  magnification). Multi-channel TIFFs open on one channel and the first
+  slice.
 
 ### Changed
 
@@ -79,6 +88,9 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 ### Fixed
 
 - README: the version badge said 0.5.1 in the 0.5.2 release.
+- Histology: the pixel size of ImageJ TIFFs saved with the unit µm was not
+  read (ImageJ writes it as `\u00B5m`); the Greek mu is accepted too, and
+  an unknown unit falls back to the TIFF resolution tags.
 
 ## [0.5.2] - 2026-09-29
 

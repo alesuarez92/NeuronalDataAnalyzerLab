@@ -72,6 +72,9 @@ classdef ExtractLDFApp < handle
         %% Constructor - Initialize AppData and build UI
         % -------------------------------------------------------------
         function app = ExtractLDFApp()
+            if isempty(which('SignalSource'))       % core/io (the readers)
+                addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'core', 'io'));
+            end
             app.AppData = struct('RawStim', [], 'RawLDF', [], ...
                                  'ProcessedStim', [], 'ProcessedLDF', [], ...
                                  'TimeVector', [], 'SamplingRate', 1000, ...

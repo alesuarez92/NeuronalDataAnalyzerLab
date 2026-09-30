@@ -22,6 +22,7 @@ function setupOnce(tests)
     addpath(fullfile(root, 'apps'));
     addpath(fullfile(root, 'core'));
     addpath(fullfile(root, 'core', 'imaging'));
+    addpath(fullfile(root, 'core', 'io'));
     addpath(fullfile(root, 'core', 'demo'));
     tests.TestData.outDir = fullfile(root, 'test-artifacts', 'screens', 'walkthrough');
     if ~exist(tests.TestData.outDir, 'dir'), mkdir(tests.TestData.outDir); end

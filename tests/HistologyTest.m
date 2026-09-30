@@ -29,6 +29,7 @@ function setupOnce(tests)
     addpath(root);
     addpath(fullfile(root, 'core'));
     addpath(fullfile(root, 'core', 'imaging'));
+    addpath(fullfile(root, 'core', 'io'));
     addpath(fullfile(root, 'core', 'demo'));
     s = demoHistology();
     tests.TestData.demo = s;
