@@ -1,6 +1,6 @@
 %% EEGSource.m
 % =========================================================================
-% EEG SOURCE - ONE DATA SHAPE FOR EEG FROM EEGLAB, FIELDTRIP, BRAINVISION, EDF AND .MAT
+% EEG SOURCE - ONE DATA SHAPE FOR EEG FROM EEGLAB, FIELDTRIP, BRAINVISION, EDF, EEG-BIDS AND .MAT
 % =========================================================================
 % Every EEG file is read into one struct, so the EEG window (and anything
 % after it) does not care where the data came from:
@@ -23,7 +23,9 @@
 %   eeg.source, eeg.format, eeg.file
 %
 %   list  = EEGSource.formats()           struct array: key, label, filter, hint
-%   fmt   = EEGSource.detect(path)        'eeglab' | 'fieldtrip' | 'brainvision' | 'edf' | 'matrix'
+%   fmt   = EEGSource.detect(path)        'eeglab' | 'fieldtrip' | 'brainvision' | 'edf' |
+%                                          'bids' (a sub-*_eeg.* file with BIDS sidecar
+%                                          files, or a folder) | 'matrix'
 %   eeg   = EEGSource.open(path, fmt, map) read (fmt 'auto'/omitted: detect;
 %                                          map only for 'matrix', see readEEGMatrix)
 %   eeg   = EEGSource.fromEDF(path)       EDF / EDF+ / BDF via readEDF: the voltage
@@ -52,18 +54,20 @@ classdef EEGSource
         %% formats - Supported sources, in dropdown order
         function list = formats()
             list = struct( ...
-                'key',    {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'matrix'}, ...
+                'key',    {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'bids', 'matrix'}, ...
                 'label',  {'EEGLAB dataset (.set)', 'FieldTrip data (.mat)', 'BrainVision (.vhdr)', ...
-                           'EDF / BDF (.edf, .bdf)', 'MATLAB matrix (.mat)'}, ...
+                           'EDF / BDF (.edf, .bdf)', 'EEG-BIDS recording', 'MATLAB matrix (.mat)'}, ...
                 'filter', {{'*.set;*.mat', 'EEGLAB dataset (*.set, *.mat)'}, ...
                            {'*.mat', 'FieldTrip data (*.mat)'}, ...
                            {'*.vhdr', 'BrainVision header (*.vhdr)'}, ...
                            {'*.edf;*.bdf', 'EDF / EDF+ / BDF (*.edf, *.bdf)'}, ...
+                           {'*_eeg.edf;*_eeg.bdf;*_eeg.vhdr;*_eeg.set', 'EEG-BIDS data file (sub-*_eeg.*)'}, ...
                            {'*.mat', 'MATLAB file (*.mat)'}}, ...
                 'hint',   {'An EEGLAB .set file (with its .fdt file in the same folder, if there is one), or a .mat file holding an EEG variable', ...
                            'A .mat file holding a FieldTrip structure (label, trial, time) or an average (label, avg, time)', ...
                            'Brain Products BrainVision Recorder or Analyzer: the .vhdr file, with its .vmrk and .eeg files in the same folder', ...
                            'European Data Format (EDF, EDF+) or BioSemi BDF: continuous recordings; annotations and BDF trigger codes become events', ...
+                           'The sub-*_eeg data file of a BIDS dataset (OpenNeuro): its channels.tsv, events.tsv, electrodes.tsv and eeg.json are read with it', ...
                            'Any .mat file with the EEG as a number array: you say which variable holds what'});
         end
 
@@ -76,10 +80,22 @@ classdef EEGSource
 
         %% detect - Guess the format of a file
         function fmt = detect(p)
+            if exist(p, 'dir') == 7
+                fmt = 'bids';
+                return;
+            end
             if ~(exist(p, 'file') == 2)
                 error('NeuroAnalyzer:io:fileNotFound', 'File not found: %s', p);
             end
-            [~, ~, ext] = fileparts(p);
+            [folder, name, ext] = fileparts(p);
+            if ~isempty(regexp(name, '^sub-[^_]+_.*_eeg$', 'once')) && any(strcmpi(ext, {'.edf', '.bdf', '.vhdr', '.set'}))
+                prefix = regexprep(name, '_eeg$', '');
+                if exist(fullfile(folder, [prefix '_channels.tsv']), 'file') == 2 ...
+                        || exist(fullfile(folder, [prefix '_events.tsv']), 'file') == 2
+                    fmt = 'bids';
+                    return;
+                end
+            end
             switch lower(ext)
                 case '.set', fmt = 'eeglab'; return;
                 case '.vhdr', fmt = 'brainvision'; return;
@@ -115,6 +131,7 @@ classdef EEGSource
                 case 'fieldtrip', eeg = readFieldTrip(p);
                 case 'brainvision', eeg = readBrainVision(p);
                 case 'edf',       eeg = EEGSource.fromEDF(p);
+                case 'bids',      eeg = readEEGBIDS(p);
                 case 'matrix'
                     if nargin < 3 || isempty(map)
                         g = EEGSource.guessMatrixMap(p);
@@ -129,7 +146,7 @@ classdef EEGSource
                     eeg = readEEGMatrix(p, map);
                 otherwise
                     error('NeuroAnalyzer:io:unknownFormat', ...
-                        'Unknown format ''%s'' (use eeglab, fieldtrip, brainvision, edf or matrix).', fmt);
+                        'Unknown format ''%s'' (use eeglab, fieldtrip, brainvision, edf, bids or matrix).', fmt);
             end
         end
 

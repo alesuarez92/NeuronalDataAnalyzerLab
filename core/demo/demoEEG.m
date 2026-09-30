@@ -44,6 +44,9 @@
 %              (16 bits), 'flash' annotations, 1 s records
 %   bdf        rodent only: BioSemi BDF (24 bits) with a Status channel,
 %              trigger code 1 for 10 ms at each flash
+%   bids       rodent only: an EEG-BIDS dataset (writeEEGBIDS) in bids/:
+%              sub-rat01/ses-1/eeg/*_task-flash_eeg.edf with channels,
+%              events (flash), electrodes (bregma, mm) and eeg.json
 %   matrix     plain .mat. Scalp: eeg (trials x channels x samples, in
 %              volts), srate, chanNames, times (s), condition. Rodent:
 %              data (channels x samples, uV), fs, labels, flashTimes (s)
@@ -58,16 +61,17 @@
 %   'Participants'  number of scalp participants (default 8)
 %   'Kinds'         subset of {'scalp', 'rodent'} (default both)
 %   'Formats'       subset of {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision',
-%                   'matrix', 'edf', 'bdf'} to write (default all; edf and bdf
-%                   are written for the rodent only)
+%                   'matrix', 'edf', 'bdf', 'bids'} to write (default all; edf,
+%                   bdf and bids are written for the rodent only)
 %   'Force'         true regenerates the cache (demoEEG() only)
 % Deterministic: RandStream('mt19937ar', 'Seed', 20260926 + participant;
 % rodent 20260926 + 100). Requires core/io on the path (EEGSource,
-% writeEEGLAB, writeFieldTrip, writeBrainVision, writeEDF). Toolboxes: none.
+% writeEEGLAB, writeFieldTrip, writeBrainVision, writeEDF, writeEEGBIDS).
+% Toolboxes: none.
 % =========================================================================
 
 function files = demoEEG(folder, varargin)
-    allFormats = {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision', 'matrix', 'edf', 'bdf'};
+    allFormats = {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision', 'matrix', 'edf', 'bdf', 'bids'};
     o = struct('Participants', 8, 'Kinds', {{'scalp', 'rodent'}}, 'Formats', {allFormats}, 'Force', false);
     for k = 1:2:numel(varargin)
         o.(varargin{k}) = varargin{k + 1};
@@ -270,7 +274,7 @@ function [out, truth] = writeRodent(folder, formats)
     out = struct('eeglab', fullfile(folder, 'rat01_eeglab.set'), 'eeglabfdt', fullfile(folder, 'rat01_fdt.set'), ...
         'fieldtrip', fullfile(folder, 'rat01_fieldtrip.mat'), 'brainvision', fullfile(folder, 'rat01_brainvision.vhdr'), ...
         'matrix', fullfile(folder, 'rat01_matrix.mat'), 'edf', fullfile(folder, 'rat01_edf.edf'), ...
-        'bdf', fullfile(folder, 'rat01_biosemi.bdf'));
+        'bdf', fullfile(folder, 'rat01_biosemi.bdf'), 'bids', '');
     has = @(f) any(strcmp(formats, f));
     if has('eeglab'), writeEEGLAB(out.eeglab, eeg, 'History', hist, 'CoordSys', 'bregma, mm'); end
     if has('eeglabfdt')
@@ -321,6 +325,15 @@ function [out, truth] = writeRodent(folder, formats)
         sigB = [struct('label', labels, 'units', 'uV', 'fs', fs, 'data', num2cell(double(data), 2)'), ...
             struct('label', 'Status', 'units', '', 'fs', fs, 'data', status)];
         writeEDF(out.bdf, sigB, 'Format', 'BDF');
+    end
+    % EEG-BIDS: positions as ML (x, right) and AP (y, anterior) in mm from bregma
+    if has('bids')
+        eegB = eeg;
+        eegB.chanlocs = struct('label', labels, 'x', num2cell(ml), 'y', num2cell(ap), 'z', 0, ...
+            'theta', NaN, 'radius', NaN);
+        out.bids = writeEEGBIDS(fullfile(folder, 'bids'), eegB, 'Subject', 'rat01', 'Session', '1', ...
+            'Task', 'flash', 'CoordSystem', 'Other', 'CoordUnits', 'mm', 'Description', ...
+            'Neuronal Data Analyzer Lab rodent EEG demo (synthetic)');
     end
     for f = setdiff(fieldnames(out)', formats)
         out.(f{1}) = '';                                         % not written

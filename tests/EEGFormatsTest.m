@@ -1,7 +1,7 @@
 %% EEGFormatsTest.m
 % =========================================================================
 % UNIT TESTS FOR THE EEG DATA MODEL AND IMPORTERS (EEGLAB, FIELDTRIP,
-% BRAINVISION, EDF / BDF, .mat)
+% BRAINVISION, EDF / BDF, EEG-BIDS, .mat)
 % =========================================================================
 % The synthetic study written by core/demo/demoEEG (oddball scalp EEG and
 % a continuous rodent recording) is read back from every format: each
@@ -178,7 +178,7 @@ function testDetect(tests)
     verifyError(tests, @() EEGSource.detect(fdt), 'NeuroAnalyzer:io:unknownFormat');
     verifyError(tests, @() EEGSource.detect(fullfile(tests.TestData.tmp, 'none.set')), 'NeuroAnalyzer:io:fileNotFound');
     list = EEGSource.formats();
-    verifyEqual(tests, {list.key}, {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'matrix'});
+    verifyEqual(tests, {list.key}, {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'bids', 'matrix'});
     verifyEqual(tests, EEGSource.detect(d.rodent.edf), 'edf');
     verifyEqual(tests, EEGSource.detect(d.rodent.bdf), 'edf');
 end
@@ -206,6 +206,62 @@ function testRodentEDFAndBDF(tests)
     end
     eeg = EEGSource.open(d.rodent.bdf);
     verifyTrue(tests, any(contains(eeg.notes, 'Status')), 'Status is not EEG');
+end
+
+function testRodentBIDS(tests)
+    % The demo's EEG-BIDS dataset: the data file, its folder, the sidecars
+    d = tests.TestData.demo;
+    tr = d.truth.rodent;
+    f = d.rodent.bids;
+    [folder, name] = fileparts(f);
+    verifyEqual(tests, name, 'sub-rat01_ses-1_task-flash_eeg');
+    verifyEqual(tests, EEGSource.detect(f), 'bids');
+    verifyEqual(tests, EEGSource.detect(folder), 'bids');
+    for p = {f, folder}
+        eeg = EEGSource.open(p{1});
+        verifyEqual(tests, eeg.format, 'bids');
+        verifyEqual(tests, eeg.labels, tr.labels);
+        verifyEqual(tests, double(eeg.data), double(tr.data), 'AbsTol', 2e-3);
+        verifyEqual(tests, numel(eeg.events), 30);
+        verifyEqual(tests, [eeg.events.latency], tr.onsets, 'AbsTol', 1e-6);
+        verifyEqual(tests, unique({eeg.events.type}), {'flash'});
+        verifyEqual(tests, [eeg.chanlocs.x], tr.ml, 'AbsTol', 1e-9);
+        verifyEqual(tests, [eeg.chanlocs.y], tr.ap, 'AbsTol', 1e-9);
+        verifyEqual(tests, eeg.coordSystem, 'BIDS Other (mm)');
+        verifyEqual(tests, eeg.reference, tr.reference);
+        verifyTrue(tests, any(contains(eeg.notes, 'Task: flash')));
+    end
+    % Sidecars written by hand: a MISC channel, a bad channel, events with
+    % only a value column and n/a durations, electrodes of another space
+    b = fullfile(tests.TestData.tmp, 'bids_hand');
+    mkdir(b);
+    copyfile(fileparts(folder), fullfile(b, 'ses-1'));
+    e = fullfile(b, 'ses-1', 'eeg');
+    pre = fullfile(e, 'sub-rat01_ses-1_task-flash');
+    writeText(tests, [pre '_channels.tsv'], sprintf(['name\ttype\tunits\tstatus\n' ...
+        'M1-L\tEEG\tuV\tgood\nM1-R\tEEG\tuV\tbad\nV1-L\tEEG\tuV\tn/a\nV1-R\tMISC\tuV\tgood\n']));
+    writeText(tests, [pre '_events.tsv'], sprintf('onset\tduration\tvalue\n1.5\tn/a\t7\n4.25\t0.5\t8\n'));
+    movefile(fullfile(e, 'sub-rat01_ses-1_electrodes.tsv'), fullfile(e, 'sub-rat01_ses-1_space-Other_electrodes.tsv'));
+    movefile(fullfile(e, 'sub-rat01_ses-1_coordsystem.json'), fullfile(e, 'sub-rat01_ses-1_space-Other_coordsystem.json'));
+    eeg = EEGSource.open([pre '_eeg.edf']);
+    verifyEqual(tests, eeg.labels, tr.labels(1:3));
+    verifyTrue(tests, any(contains(eeg.notes, 'left out): V1-R')));
+    verifyTrue(tests, any(contains(eeg.notes, 'Marked bad in channels.tsv: M1-R')));
+    verifyEqual(tests, {eeg.events.type}, {'7', '8'});
+    verifyEqual(tests, [eeg.events.latency], [1.5 4.25]);
+    verifyEqual(tests, [eeg.events.duration], [0 0.5]);
+    verifyEqual(tests, [eeg.chanlocs.x], tr.ml(1:3), 'AbsTol', 1e-9);
+    % Written again from the EEG struct: the same numbers back
+    out = writeEEGBIDS(fullfile(tests.TestData.tmp, 'bids_again'), eeg, 'Subject', '02', 'Task', 'flash', 'Format', 'bdf');
+    eeg2 = EEGSource.open(out);
+    verifyEqual(tests, double(eeg2.data), double(eeg.data), 'AbsTol', 1e-4);
+    verifyEqual(tests, [eeg2.events.latency], [1.5 4.25], 'AbsTol', 1e-6);
+end
+
+function writeText(~, f, s)
+    fid = fopen(f, 'w');
+    fwrite(fid, s, 'char');
+    fclose(fid);
 end
 
 function testRodentContinuous(tests)

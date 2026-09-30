@@ -107,6 +107,13 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   continuous EEG (the channels in volts, annotations and BioSemi trigger
   codes as events); the LDF demo and the rodent EEG demo are also written
   as EDF+ (and BDF).
+- **EEG-BIDS** (`core/io/readEEGBIDS.m`, `writeEEGBIDS.m`): EEG analysis
+  opens the `sub-…_eeg` file of a BIDS dataset (OpenNeuro) with its
+  sidecar files: only the EEG channels of `channels.tsv` (bad channels
+  noted), the events of `events.tsv`, the positions of `electrodes.tsv`
+  with `coordsystem.json`, and the reference and line frequency of
+  `eeg.json`. The rodent demo is also written as a BIDS dataset. Checked
+  during development both ways with MNE-BIDS.
   Values and annotations were checked during development against pyedflib
   and MNE-Python.
 
