@@ -4,8 +4,12 @@
 % =========================================================================
 % Sub-app launched from Main. Built with UIKit.window: numbered step cards
 % on the left (1 Load, 2 Time range, 3 Crop, 4 Save), stimulus and LDF
-% plots on the right. Loads .mat files in LDF export format (via
-% DataLoader), lets the user choose a time range (typed Start/End in
+% plots on the right. Loads any recording SignalSource reads (LabChart
+% .mat / text export, AcqKnowledge .acq / .mat / text, Spike2 .mat,
+% delimited text, a cropped LDF .mat); step 1 then offers the flow
+% channel, the stimulus (a channel, the comments / markers, or none) and
+% the block, guessed from the channel names (SignalSource.guessChannels).
+% Lets the user choose a time range (typed Start/End in
 % seconds, or two clicks on either plot via "Pick on plot"), shows the
 % range as a shaded region, crops with Processor.crop() after
 % Validation.cropRange(), shows the cropped signals in the same axes and
@@ -13,12 +17,15 @@
 % each action from the data state and makes the next step the primary
 % button. Header "? Help" opens HelpApp on the "LDF Extract" tab.
 % "Try demo data" (loadDemo) opens DemoData's synthetic export and
-% pre-fills the range 20-280 s. Programmatic use (no dialogs): openFile(path),
-% setRange(start, end), processData(), saveCroppedTo(path).
+% pre-fills the range 20-280 s. Programmatic use (no dialogs): openFile(path)
+% (openFile(path, fs) for a text file without a time column),
+% selectSignals(flow, stim, block), setRange(start, end), processData(),
+% saveCroppedTo(path).
 % Sessions (step 4 buttons; core/Session.m, core/Report.m):
 % saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
-% sessionState(), restoreSession(s). A session stores the export file
-% (with MD5), the Start/End range, the crop and the view.
+% sessionState(), restoreSession(s). A session stores the recording
+% (with MD5), its format, the flow channel, the stimulus, the block, the
+% Start/End range, the crop and the view.
 % =========================================================================
 
 classdef ExtractLDFApp < handle
@@ -32,9 +39,12 @@ classdef ExtractLDFApp < handle
         HeaderPanel     % Header bar (title, subtitle, Help)
         HelpBtn         % Opens HelpApp('LDF Extract')
         StatusLabel     % Status bar label (UIKit.setStatus)
-        LoadBtn         % Step 1: load LDF export .mat
+        LoadBtn         % Step 1: load a recording (SignalSource formats)
         DemoBtn         % Step 1: load synthetic demo export (DemoData)
-        FileInfoLabel   % Step 1: file name, Fs, duration, samples
+        FileInfoLabel   % Step 1: file name, format, rate, duration, channels
+        FlowDropDown    % Step 1: flow (LDF) channel (ItemsData = channel number)
+        StimDropDown    % Step 1: stimulus (ItemsData = index into StimValues)
+        BlockDropDown   % Step 1: block / recording period (ItemsData = block)
         StartInput      % Step 2: numeric start time (s)
         EndInput        % Step 2: numeric end time (s)
         SelectRangeBtn  % Step 2: pick start/end by clicking a plot
@@ -53,6 +63,9 @@ classdef ExtractLDFApp < handle
         RangeGfx        % Shaded range patches on both axes
         PickGfx         % Start marker lines shown while picking
         SessionBtns     % Step 4: Save session / Open session / Report (UIKit.sessionButtons)
+        Rec = []        % SignalSource recording of the loaded file
+        StimValues = {} % SignalSource.stimItems values (channel number, 'events...', 0)
+        Selection = struct('flow', [], 'stim', [], 'block', 1)  % signals shown now
     end
 
     methods
@@ -62,7 +75,8 @@ classdef ExtractLDFApp < handle
             app.AppData = struct('RawStim', [], 'RawLDF', [], ...
                                  'ProcessedStim', [], 'ProcessedLDF', [], ...
                                  'TimeVector', [], 'SamplingRate', 1000, ...
-                                 'FilePath', '', 'Metadata', struct());
+                                 'FilePath', '', 'Metadata', struct(), ...
+                                 'FlowName', '', 'FlowUnits', '', 'StimName', '', 'Format', '');
             app.RangeGfx = gobjects(0);
             app.PickGfx  = gobjects(0);
             app.buildUI();
@@ -77,7 +91,7 @@ classdef ExtractLDFApp < handle
         function buildUI(app)
             T = UITheme;
             W = UIKit.window('Extract LDF Data', ...
-                'Load an LDF export, choose a time window, crop it and save it', ...
+                'Load a recording, choose the LDF and stimulus, a time window, crop it and save it', ...
                 'LDF Extract', [1150 740]);
             app.UIFig = W.Fig;
             app.HeaderPanel = W.Header;
@@ -92,18 +106,30 @@ classdef ExtractLDFApp < handle
             heights = cell(1, 5);
 
             % --- 1 Load file ---
-            [p, g, heights{1}] = stepCard(left, 1, 'Load LDF export', {T.buttonHeight, T.buttonHeight, 56});
+            [p, g, heights{1}] = stepCard(left, 1, 'Load recording', {T.buttonHeight, T.buttonHeight, 60, ...
+                T.controlHeight, T.controlHeight, T.controlHeight});
             p.Layout.Row = 1;
             app.LoadBtn = UIKit.button(g, 'Load file...', @(~,~)app.loadFile(), 'primary', ...
-                'Load a .mat file in LDF export format (data, datastart, dataend); stimulus = channel 6, LDF = channel 8');
+                ['Load a recording: LabChart .mat or text export, AcqKnowledge .acq / .mat / text, Spike2 .mat ' ...
+                'export, a .txt / .csv table or a cropped LDF .mat']);
             app.LoadBtn.Layout.Row = 2; app.LoadBtn.Layout.Column = [1 2];
             app.DemoBtn = UIKit.button(g, 'Try demo data', @(~,~)app.loadDemo(), 'secondary', ...
                 ['Load a synthetic 300 s LabChart export with known answers (9 stimuli of 5 s every 30 s ' ...
                 'on channel 6, LDF with a +30 PU response peaking 4 s after each onset on channel 8)']);
             app.DemoBtn.Layout.Row = 3; app.DemoBtn.Layout.Column = [1 2];
             app.FileInfoLabel = infoLabel(g, 'No file loaded', ...
-                'File name, sampling rate, duration and number of samples');
+                'File name, format, sampling rate, duration and channels');
             app.FileInfoLabel.Layout.Row = 4; app.FileInfoLabel.Layout.Column = [1 2];
+            app.FlowDropDown = addField(g, 5, 'LDF', 'dropdown', {{'(load a file)'}, '(load a file)'}, ...
+                'Channel with the laser Doppler flow (perfusion) signal; guessed from the channel names');
+            app.StimDropDown = addField(g, 6, 'Stimulus', 'dropdown', {{'(load a file)'}, '(load a file)'}, ...
+                ['Stimulus trigger: a channel, the comments / event markers of the file (each one becomes ' ...
+                'a 0.5 s pulse), or None']);
+            app.BlockDropDown = addField(g, 7, 'Block', 'dropdown', {{'(load a file)'}, '(load a file)'}, ...
+                'Recording period (LabChart block) to use when the file has several');
+            app.FlowDropDown.ValueChangedFcn = @(~,~)app.signalsChanged();
+            app.StimDropDown.ValueChangedFcn = @(~,~)app.signalsChanged();
+            app.BlockDropDown.ValueChangedFcn = @(~,~)app.signalsChanged();
 
             % --- 2 Time range ---
             [p, g, heights{2}] = stepCard(left, 2, 'Choose time range', ...
@@ -162,12 +188,12 @@ classdef ExtractLDFApp < handle
             app.AxStim = uiaxes(axGrid);
             app.AxLDF  = uiaxes(axGrid);
             % styleAxes first: it removes emptyAxes placeholders
-            UIKit.styleAxes(app.AxStim, 'Stimulus (channel 6)');
-            UIKit.styleAxes(app.AxLDF, 'LDF (channel 8)');
+            UIKit.styleAxes(app.AxStim, 'Stimulus');
+            UIKit.styleAxes(app.AxLDF, 'LDF');
             UIKit.emptyAxes(app.AxStim, 'Load a file (or Try demo data) to begin');
             UIKit.emptyAxes(app.AxLDF, 'LDF signal appears here');
 
-            UIKit.setStatus(app.StatusLabel, 'Step 1: load an LDF export file.', 'info');
+            UIKit.setStatus(app.StatusLabel, 'Step 1: load a recording (LabChart, AcqKnowledge, Spike2 or a table).', 'info');
             app.updateButtonStates();
         end
 
@@ -191,6 +217,10 @@ classdef ExtractLDFApp < handle
             app.ViewDropDown.Enable   = onoff(hasCropped && ~picking);
             app.SaveCroppedBtn.Enable = onoff(cropCurrent && ~picking);
             app.LoadBtn.Enable        = onoff(~picking);
+            hasRec = ~isempty(app.Rec);
+            app.FlowDropDown.Enable   = onoff(hasRec && ~picking);
+            app.StimDropDown.Enable   = onoff(hasRec && ~picking);
+            app.BlockDropDown.Enable  = onoff(hasRec && ~picking && app.Rec.nBlocks > 1);
             app.DemoBtn.Enable        = onoff(~picking);
             UIKit.setSessionEnable(app.SessionBtns, hasRaw && ~picking);
 
@@ -220,90 +250,231 @@ classdef ExtractLDFApp < handle
             end
         end
 
-        %% loadFile - Pick an LDF export .mat, then openFile(path)
+        %% loadFile - Pick a recording, then openFile(path, 'ask')
         % -------------------------------------------------------------
         % On cancel nothing changes (previous data and crop are kept).
+        % A text file without a time column asks for its sampling rate.
         % -------------------------------------------------------------
         function loadFile(app)
             app.cancelPick('');
-            UIKit.setStatus(app.StatusLabel, 'Choose an LDF export file...', 'busy');
+            UIKit.setStatus(app.StatusLabel, 'Choose a recording...', 'busy');
             initPath = ProjectManager.getImportDir();
             if isempty(initPath), initPath = pwd; end
-            [file, path] = uigetfile(fullfile(initPath, '*.mat'));
+            filter = {'*.mat;*.acq;*.txt;*.csv;*.tsv', 'Recordings (.mat, .acq, .txt, .csv, .tsv)'; ...
+                      '*.mat', 'LabChart / AcqKnowledge / Spike2 .mat export, cropped LDF (.mat)'; ...
+                      '*.acq', 'AcqKnowledge (.acq)'; ...
+                      '*.txt;*.csv;*.tsv', 'Text export or table (.txt, .csv, .tsv)'; ...
+                      '*.*', 'All files'};
+            [file, path] = uigetfile(filter, 'Load a recording', [initPath filesep]);
             figure(app.UIFig);  % Bring app back to front
             if isequal(file, 0)
                 if isempty(app.AppData.RawStim)
-                    UIKit.setStatus(app.StatusLabel, 'No file loaded. Click "Load file..." to choose an LDF export.', 'info');
+                    UIKit.setStatus(app.StatusLabel, 'No file loaded. Click "Load file..." to choose a recording.', 'info');
                 else
                     UIKit.setStatus(app.StatusLabel, 'No new file loaded; previous data kept.', 'info');
                 end
                 return;
             end
-            app.openFile(fullfile(path, file));
+            app.openFile(fullfile(path, file), 'ask');
         end
 
-        %% openFile - Load an LDF export .mat by path (no dialog) and display it
+        %% openFile - Load a recording by path (no dialog) and display it
         % -------------------------------------------------------------
-        % load(path) -> DataLoader.load(AppData, 'FromStruct', d). If the
-        % file cannot be read or is not a valid export (DataLoader explains
-        % why), previous data and crop are kept and ok = false. For a new
-        % file: drop the previous crop so Save cannot write stale data,
-        % reset Start/End to the full recording, store the folder as last
-        % used path, show file info and plot.
+        % SignalSource.open reads any supported format; the flow channel
+        % and the stimulus are guessed from the channel names. fs (Hz,
+        % optional): the rate of a text file without a time column;
+        % 'ask' asks for it (loadFile). If the file cannot be read,
+        % previous data and crop are kept and ok = false. For a new file:
+        % drop the previous crop so Save cannot write stale data, reset
+        % Start/End to the full recording, store the folder as last used
+        % path, show file info and plot.
         % -------------------------------------------------------------
-        function ok = openFile(app, filePath)
+        function ok = openFile(app, filePath, fs)
+            if nargin < 3, fs = []; end
+            ask = ischar(fs) && strcmp(fs, 'ask');
+            if ask, fs = []; end
             ok = false;
             app.cancelPick('');
             [~, name, ext] = fileparts(filePath);
             try
-                d = load(filePath);
+                rec = SignalSource.open(filePath, '', struct('Fs', fs));
             catch ME
-                UIKit.setStatus(app.StatusLabel, sprintf('Could not load %s%s; previous data kept.', name, ext), 'error');
-                UIKit.alert(app.UIFig, sprintf('Could not load %s%s:\n%s', name, ext, ME.message), 'Load error', 'error');
+                if strcmp(ME.identifier, 'NeuroAnalyzer:io:noRate') && ask
+                    fs = app.askRate([name ext]);
+                    if isempty(fs)
+                        UIKit.setStatus(app.StatusLabel, sprintf('%s%s not opened (no sampling rate given); previous data kept.', ...
+                            name, ext), 'info');
+                        return;
+                    end
+                    ok = app.openFile(filePath, fs);
+                    return;
+                end
+                UIKit.setStatus(app.StatusLabel, sprintf('Could not read %s%s; previous data kept.', name, ext), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not read %s%s:\n%s', name, ext, ME.message), 'Load error', 'error');
                 return;
             end
-            fresh = app.AppData;
-            fresh.RawStim = []; fresh.RawLDF = [];
-            loaded = DataLoader.load(fresh, 'FromStruct', d);
-            if isempty(loaded.RawStim)
-                % Invalid export (DataLoader showed why): previous data (and crop) unchanged
-                UIKit.setStatus(app.StatusLabel, sprintf('%s%s is not a valid LDF export; previous data kept.', ...
-                    name, ext), 'error');
-                return;
+            [iFlow, iStim] = SignalSource.guessChannels(rec);
+            [~, stimValues] = SignalSource.stimItems(rec);
+            if iStim == 0 && ~isempty(rec.events)
+                stim = 'events';                  % no trigger channel: the comments / markers
+            else
+                stim = iStim;
             end
-            loaded.FilePath = filePath;
-            app.AppData = loaded;
-            % New file: drop the previous crop so Save cannot write stale data
-            app.AppData.ProcessedStim = [];
-            app.AppData.ProcessedLDF  = [];
-            app.AppData.TimeVector    = [];
-            app.CropRange = [];
-            Exporter.setLastUsedPath(fileparts(app.AppData.FilePath));
-
+            if ~any(cellfun(@(v) isequal(v, stim), stimValues)), stim = 0; end
+            % First block where the flow channel has data; drop a stimulus channel empty there
+            block = 1;
+            for bk = 1:rec.nBlocks
+                if ~isempty(SignalSource.channel(rec, iFlow, bk)), block = bk; break; end
+            end
+            if isnumeric(stim) && stim > 0 && isempty(SignalSource.channel(rec, stim, block)), stim = 0; end
+            if ~app.useSignals(rec, filePath, iFlow, stim, block, true), return; end
+            ok = true;
+            Exporter.setLastUsedPath(fileparts(filePath));
             Fs = app.AppData.SamplingRate;
-            N = length(app.AppData.RawStim);
-            dur = N / Fs;
-            % Reset the range to the whole recording (limits follow the file)
+            dur = numel(app.AppData.RawLDF) / Fs;
+            if rec.info.rateAssumed
+                UIKit.setStatus(app.StatusLabel, sprintf('Loaded %s%s, but the file has no sampling rate: assumed %g Hz.', ...
+                    name, ext, Fs), 'warning');
+            else
+                UIKit.setStatus(app.StatusLabel, sprintf(['Loaded %s%s (%g Hz, %s; LDF = %s, stimulus = %s). ' ...
+                    'Check the channels, then choose the time range and click "Crop to range".'], ...
+                    name, ext, Fs, formatDuration(dur), app.AppData.FlowName, app.AppData.StimName), 'success');
+            end
+        end
+
+        %% selectSignals - Choose the flow channel, stimulus and block (as in the dropdowns)
+        % flow: channel number; stim: channel number, 'events',
+        % 'events:<text>' or 0 (none); block (default 1). Keeps the
+        % Start/End range when it still fits. Returns true when shown.
+        function ok = selectSignals(app, flow, stim, block)
+            ok = false;
+            if isempty(app.Rec), return; end
+            if nargin < 4 || isempty(block), block = app.Selection.block; end
+            ok = app.useSignals(app.Rec, app.AppData.FilePath, flow, stim, block, false);
+        end
+
+        %% signalsChanged - A step 1 dropdown changed
+        function signalsChanged(app)
+            if isempty(app.Rec), return; end
+            flow = app.FlowDropDown.Value;
+            stim = app.StimValues{app.StimDropDown.Value};
+            block = app.BlockDropDown.Value;
+            if app.selectSignals(flow, stim, block)
+                UIKit.setStatus(app.StatusLabel, sprintf('LDF = %s, stimulus = %s. Next: choose the time range and click "Crop to range".', ...
+                    app.AppData.FlowName, app.AppData.StimName), 'info');
+            end
+        end
+
+        %% useSignals - Put the chosen flow channel and stimulus of rec in the window
+        % -------------------------------------------------------------
+        % SignalSource.toLDF puts the stimulus on the flow channel's time
+        % base. On an error nothing changes (ok = false). The previous
+        % crop is dropped (it was of other signals); a new file resets
+        % Start/End to the whole recording, a new choice keeps them when
+        % they still fit.
+        % -------------------------------------------------------------
+        function ok = useSignals(app, rec, filePath, flow, stim, block, isNew)
+            ok = false;
+            [~, name, ext] = fileparts(filePath);
+            try
+                L = SignalSource.toLDF(rec, flow, stim, block);
+            catch ME
+                UIKit.setStatus(app.StatusLabel, sprintf('Could not use these signals of %s%s: %s', name, ext, ...
+                    ME.message), 'error');
+                UIKit.alert(app.UIFig, sprintf('Could not use these signals of %s%s:\n%s', name, ext, ME.message), ...
+                    'Signals', 'error');
+                app.fillSignalLists();          % dropdowns back to what is shown
+                return;
+            end
+            oldRange = app.currentRange();
+            app.Rec = rec;
+            app.Selection = struct('flow', flow, 'stim', stim, 'block', block);
+            app.fillSignalLists();
+            d = app.AppData;
+            d.RawStim = L.stim;
+            d.RawLDF = L.LDF;
+            d.SamplingRate = L.Fs;
+            d.FilePath = filePath;
+            d.FlowName = L.flowName;
+            d.FlowUnits = L.flowUnits;
+            d.StimName = L.stimName;
+            d.Format = rec.info.format;
+            d.Metadata = struct('Format', rec.info.format, 'FormatLabel', rec.info.label, ...
+                'ChannelTitles', {rec.names}, 'Units', {rec.units}, 'Notes', {rec.info.notes}, ...
+                'Onsets', L.onsets, 'Block', block);
+            % Drop the previous crop so Save cannot write stale data
+            d.ProcessedStim = [];
+            d.ProcessedLDF  = [];
+            d.TimeVector    = [];
+            app.AppData = d;
+            app.CropRange = [];
+
+            dur = numel(L.LDF) / L.Fs;
+            lim = [0 max(dur, 1 / L.Fs)];
+            keep = ~isNew && oldRange(2) > oldRange(1) && oldRange(2) <= lim(2);
             app.StartInput.Value = 0;
             app.EndInput.Value = 0;
-            lim = [0 max(dur, 1 / Fs)];
             app.StartInput.Limits = lim;
             app.EndInput.Limits = lim;
-            app.EndInput.Value = dur;
+            if keep
+                app.StartInput.Value = oldRange(1);
+                app.EndInput.Value = oldRange(2);
+            else
+                app.EndInput.Value = dur;
+            end
             app.ViewDropDown.Value = 'Full recording';
-
-            app.FileInfoLabel.Text = sprintf('%s%s\n%g Hz  ·  %s  ·  %d samples\nStimulus = ch 6, LDF = ch 8', ...
-                name, ext, Fs, formatDuration(dur), N);
+            app.FileInfoLabel.Text = app.fileInfoText([name ext]);
             app.FileInfoLabel.FontColor = UITheme.sectionTitleColor;
             app.plotSignals();
             app.updateButtonStates();
             ok = true;
-            if isfield(app.AppData.Metadata, 'SampleRateRaw')
-                UIKit.setStatus(app.StatusLabel, sprintf('Loaded %s%s (%g Hz, %s). Next: choose the time range and click "Crop to range".', ...
-                    name, ext, Fs, formatDuration(dur)), 'success');
+        end
+
+        %% fillSignalLists - Step 1 dropdowns from Rec, showing Selection
+        function fillSignalLists(app)
+            rec = app.Rec;
+            if isempty(rec), return; end
+            sel = app.Selection;
+            setItems(app.FlowDropDown, SignalSource.channelItems(rec), sel.flow);
+            [items, values] = SignalSource.stimItems(rec);
+            app.StimValues = values;
+            k = find(cellfun(@(v) isequal(v, sel.stim), values), 1);
+            if isempty(k), k = numel(items); end            % None
+            setItems(app.StimDropDown, items, k);
+            b = cell(1, rec.nBlocks);
+            for i = 1:rec.nBlocks
+                b{i} = sprintf('Block %d', i);
+                if i <= numel(rec.info.blockStart) && ~isempty(rec.info.blockStart{i})
+                    b{i} = sprintf('Block %d (%s)', i, strrep(rec.info.blockStart{i}, 'T', ' '));
+                end
+            end
+            setItems(app.BlockDropDown, b, min(max(1, sel.block), rec.nBlocks));
+        end
+
+        %% fileInfoText - File name, format, rate, duration, channels
+        function txt = fileInfoText(app, fileName)
+            rec = app.Rec;
+            Fs = app.AppData.SamplingRate;
+            N = numel(app.AppData.RawLDF);
+            blocks = '';
+            if rec.nBlocks > 1, blocks = sprintf(', %d blocks', rec.nBlocks); end
+            txt = sprintf('%s\n%s\n%g Hz  ·  %s  ·  %d channels%s', fileName, rec.info.label, Fs, ...
+                formatDuration(N / Fs), rec.nChannels, blocks);
+        end
+
+        %% askRate - Ask for the sampling rate of a file without a time column ([] if cancelled)
+        function fs = askRate(app, fileName)
+            fs = [];
+            txt = UIKit.askText('Sampling rate', sprintf(['%s has no time column. Type the sampling rate ' ...
+                'of its rows in Hz (samples per second):'], fileName), 'LDF Extract', '1000', 'Open');
+            figure(app.UIFig);
+            if isnumeric(txt) && isempty(txt), return; end
+            v = str2double(strrep(strtrim(char(txt)), ',', '.'));
+            if isfinite(v) && v > 0
+                fs = v;
             else
-                UIKit.setStatus(app.StatusLabel, sprintf('Loaded %s%s, but the file has no sampling rate: assumed %g Hz.', ...
-                    name, ext, Fs), 'warning');
+                UIKit.alert(app.UIFig, sprintf('"%s" is not a sampling rate. Load the file again and type a positive number, e.g. 1000.', ...
+                    strtrim(char(txt))), 'Sampling rate', 'warning');
             end
         end
 
@@ -511,19 +682,21 @@ classdef ExtractLDFApp < handle
                 t = app.AppData.TimeVector;
                 stim = app.AppData.ProcessedStim; ldf = app.AppData.ProcessedLDF;
                 tStim = t; tLDF = t;
-                ttl = {'Cropped stimulus', 'Cropped LDF'};
+                ttl = {plotTitle('Cropped stimulus', app.AppData.StimName), plotTitle('Cropped LDF', app.AppData.FlowName)};
                 xl = 'Time from crop start (s)';
             else
                 stim = app.AppData.RawStim; ldf = app.AppData.RawLDF;
                 tStim = (0:length(stim)-1) / Fs;
                 tLDF  = (0:length(ldf)-1) / Fs;
-                ttl = {'Stimulus (channel 6)', 'LDF (channel 8)'};
+                ttl = {plotTitle('Stimulus', app.AppData.StimName), plotTitle('LDF', app.AppData.FlowName)};
                 xl = 'Time (s)';
             end
             plot(app.AxStim, tStim, stim, 'Color', T.stimColor, 'HitTest', 'off');
             plot(app.AxLDF, tLDF, ldf, 'Color', T.plotColors(1, :), 'HitTest', 'off');
+            ldfUnits = 'Amplitude';
+            if ~isempty(app.AppData.FlowUnits), ldfUnits = app.AppData.FlowUnits; end
             UIKit.styleAxes(app.AxStim, ttl{1}, xl, 'Amplitude');
-            UIKit.styleAxes(app.AxLDF, ttl{2}, xl, 'Amplitude');
+            UIKit.styleAxes(app.AxLDF, ttl{2}, xl, ldfUnits);
             tEnd = max([tStim(end), tLDF(end)]);
             if tEnd > 0, xlim(app.AxStim, [0 tEnd]); xlim(app.AxLDF, [0 tEnd]); end
             try linkaxes(axs, 'x'); catch, end
@@ -580,7 +753,7 @@ classdef ExtractLDFApp < handle
             [saved, pathUsed] = Exporter.saveCropped(...
                 app.AppData.ProcessedStim, app.AppData.ProcessedLDF, ...
                 app.AppData.TimeVector, app.AppData.SamplingRate, ...
-                defPath);
+                defPath, app.signalNames());
             figure(app.UIFig);
             if saved && ~isempty(pathUsed)
                 Exporter.setLastUsedPath(pathUsed);
@@ -592,21 +765,29 @@ classdef ExtractLDFApp < handle
             end
         end
 
+        %% signalNames - flowName, flowUnits, stimName saved next to the crop
+        function S = signalNames(app)
+            S = struct('flowName', app.AppData.FlowName, 'flowUnits', app.AppData.FlowUnits, ...
+                'stimName', app.AppData.StimName);
+        end
+
         %% saveCroppedTo - Save the crop to filePath without a dialog
-        % Same variables as Exporter.saveCropped (stim, LDF, t, Fs); the
-        % file opens in LDF Processing. Returns true on success.
+        % Same variables as Exporter.saveCropped (stim, LDF, t, Fs, and
+        % flowName, flowUnits, stimName); the file opens in LDF
+        % Processing. Returns true on success.
         function ok = saveCroppedTo(app, filePath)
             ok = false;
             if isempty(app.AppData.ProcessedStim)
                 UIKit.alert(app.UIFig, 'Crop the data first (step 3).', 'Nothing to save', 'warning');
                 return;
             end
-            stim = app.AppData.ProcessedStim; %#ok<NASGU>
-            LDF = app.AppData.ProcessedLDF; %#ok<NASGU>
-            t = app.AppData.TimeVector; %#ok<NASGU>
-            Fs = app.AppData.SamplingRate; %#ok<NASGU>
+            S = app.signalNames();
+            S.stim = app.AppData.ProcessedStim;
+            S.LDF = app.AppData.ProcessedLDF;
+            S.t = app.AppData.TimeVector;
+            S.Fs = app.AppData.SamplingRate;
             try
-                save(filePath, 'stim', 'LDF', 't', 'Fs');
+                save(filePath, '-struct', 'S');
             catch ME
                 UIKit.setStatus(app.StatusLabel, sprintf('Save failed: %s', ME.message), 'error');
                 UIKit.alert(app.UIFig, sprintf('Save failed:\n%s', ME.message), 'Save error', 'error');
@@ -646,10 +827,17 @@ classdef ExtractLDFApp < handle
         function st = sessionState(app)
             st.inputs = [];
             if ~isempty(app.AppData.FilePath)
-                st.inputs = Session.fileInfo(app.AppData.FilePath, 'LDF export');
+                st.inputs = Session.fileInfo(app.AppData.FilePath, 'Recording');
             end
+            sel = app.Selection;
+            stimCh = 0;
+            if isnumeric(sel.stim) && ~isempty(sel.stim), stimCh = sel.stim; end
             st.settings = struct('range', app.currentRange(), 'view', app.ViewDropDown.Value, ...
-                'stimulusChannel', 6, 'ldfChannel', 8);
+                'format', app.AppData.Format, 'formatLabel', '', 'flowChannel', sel.flow, ...
+                'flowName', app.AppData.FlowName, 'flowUnits', app.AppData.FlowUnits, ...
+                'stimulus', sel.stim, 'stimName', app.AppData.StimName, 'block', sel.block, ...
+                'stimulusChannel', stimCh, 'ldfChannel', sel.flow, 'rate', app.AppData.SamplingRate);
+            if ~isempty(app.Rec), st.settings.formatLabel = app.Rec.info.label; end
             st.results = struct();
             st.summary = {};
             if ~isempty(app.AppData.RawStim)
@@ -670,8 +858,20 @@ classdef ExtractLDFApp < handle
         function ok = restoreSession(app, s)
             ok = false;
             if isempty(s.inputs), ok = true; return; end
-            if ~app.openFile(s.inputs(1).path), return; end
             cfg = s.settings;
+            fs = [];
+            if strcmp(getOr(cfg, 'format', ''), 'text'), fs = getOr(cfg, 'rate', []); end
+            if ~app.openFile(s.inputs(1).path, fs), return; end
+            % Signals: the saved choice (older sessions: stimulusChannel / ldfChannel)
+            flow = getOr(cfg, 'flowChannel', getOr(cfg, 'ldfChannel', []));
+            stim = getOr(cfg, 'stimulus', getOr(cfg, 'stimulusChannel', []));
+            block = getOr(cfg, 'block', 1);
+            if ~isempty(flow) && ~isempty(stim) && ~isequal(app.Selection, struct('flow', flow, 'stim', stim, 'block', block))
+                if flow > app.Rec.nChannels || block > app.Rec.nBlocks || ...
+                        (isnumeric(stim) && stim > app.Rec.nChannels) || ~app.selectSignals(flow, stim, block)
+                    return;
+                end
+            end
             if isfield(s.results, 'cropRange') && numel(s.results.cropRange) == 2
                 app.setRange(s.results.cropRange(1), s.results.cropRange(2));
                 app.processData();
@@ -764,6 +964,29 @@ function restoreLastPath(prev)
     else
         Exporter.setLastUsedPath(prev);
     end
+end
+
+%% plotTitle - 'LDF: Flux (ch 3)' style title; the bare prefix when the name adds nothing
+function t = plotTitle(prefix, name)
+    last = regexp(prefix, '\w+$', 'match', 'once');
+    if isempty(name) || strcmpi(name, last) || strcmpi(name, prefix)
+        t = prefix;
+    else
+        t = [prefix ': ' name];
+    end
+end
+
+%% setItems - Dropdown items with ItemsData 1..n and the selected index
+function setItems(dd, items, value)
+    dd.ItemsData = [];
+    dd.Items = items;
+    dd.ItemsData = 1:numel(items);
+    dd.Value = value;
+end
+
+%% getOr - s.(name) when present, else default
+function v = getOr(s, name, default)
+    if isstruct(s) && isfield(s, name), v = s.(name); else, v = default; end
 end
 
 %% onoff - 'on'/'off' from a logical

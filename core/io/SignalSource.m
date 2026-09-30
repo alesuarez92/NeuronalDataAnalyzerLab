@@ -28,6 +28,8 @@
 %   list = SignalSource.formats()     key, label, extensions (for dialogs, Help)
 %   fmt  = SignalSource.detect(path)  one of the keys
 %   rec  = SignalSource.open(path)    read with the matching reader
+%   rec  = SignalSource.open(path, '', struct('Fs', 40))   rate of a text
+%          file without a time column (readSignalText options)
 %   rec  = SignalSource.fromStruct(d, file)   a loaded .mat struct
 %   [iFlow, iStim] = SignalSource.guessChannels(rec)
 %          channel numbers of the flow signal and the stimulus, from the
@@ -108,8 +110,9 @@ classdef SignalSource
         end
 
         %% open - Read a recording (any supported format)
-        function rec = open(p, fmt)
+        function rec = open(p, fmt, opts)
             if nargin < 2 || isempty(fmt), fmt = SignalSource.detect(p); end
+            if nargin < 3, opts = struct(); end
             switch fmt
                 case 'acq'
                     rec = SignalSource.fromAcq(readBiopacACQ(p), p);
@@ -120,7 +123,7 @@ classdef SignalSource
                     end
                     rec = SignalSource.fromEDF(readEDF(p), p);
                 case 'text'
-                    rec = readSignalText(p);
+                    rec = readSignalText(p, opts);
                 otherwise
                     rec = SignalSource.fromStruct(load(p), p);
             end
@@ -150,11 +153,17 @@ classdef SignalSource
             names = lower(rec.names);
             units = lower(rec.units);
             n = rec.nChannels;
-            isFlow = ~cellfun(@isempty, regexp(names, 'ldf|doppler|flux|perfusion|flow|blood|cbf', 'once')) | ...
+            % Strong: LDF names or perfusion units; weak: 'flow', 'blood', 'CBF' (not a pressure)
+            strong = ~cellfun(@isempty, regexp(names, 'ldf|doppler|flux|perfusion', 'once')) | ...
                 ~cellfun(@isempty, regexp(units, '^(b|t)?pu$|perfusion|flux', 'once'));
+            weak = ~cellfun(@isempty, regexp(names, 'flow|blood|cbf', 'once')) & ...
+                cellfun(@isempty, regexp(names, 'press|mmhg|(^|\W)bp(\W|$)', 'once')) & ...
+                cellfun(@isempty, regexp(units, 'mmhg|kpa', 'once'));
+            isFlow = strong | weak;
             isStim = ~cellfun(@isempty, regexp(names, 'stim|trig|ttl|pulse|whisk|shock|sync|marker|light|tone', 'once'));
             isStim = isStim & ~isFlow;
-            iFlow = find(isFlow, 1);
+            iFlow = find(strong, 1);
+            if isempty(iFlow), iFlow = find(weak, 1); end
             iStim = find(isStim, 1);
             if isempty(iFlow) && strcmp(rec.info.format, 'labchart') && n >= 8
                 iFlow = 8;                             % the long-standing LabChart convention
@@ -299,7 +308,8 @@ classdef SignalSource
             nCh = size(ds, 1); nB = size(ds, 2);
             titles = SignalSource.rows(SignalSource.field(d, 'titles', ''), nCh, 'Channel %d');
             fsAll = double(SignalSource.field(d, 'samplerate', []));
-            if isempty(fsAll)
+            noRate = isempty(fsAll);
+            if noRate
                 fsAll = 1000 * ones(nCh, nB);
             elseif isvector(fsAll)
                 if nCh == 1, fsAll = fsAll(:)'; else, fsAll = fsAll(:); end
@@ -359,6 +369,10 @@ classdef SignalSource
             if nB > 1
                 rec.info.notes{end+1} = sprintf('%d blocks (recording periods): choose one.', nB);
             end
+            if noRate
+                rec.info.notes{end+1} = 'The file has no sampling rate (samplerate): 1000 Hz assumed.';
+            end
+            rec.info.rateAssumed = noRate;
         end
 
         %% fromAcq - readBiopacACQ struct
@@ -482,7 +496,7 @@ classdef SignalSource
             rec.names = names(1:rec.nChannels);
             rec.units = units(1:rec.nChannels);
             rec.info = struct('format', fmt, 'label', SignalSource.label(fmt), 'file', p, ...
-                'notes', {{}}, 'blockStart', {{}});
+                'notes', {{}}, 'blockStart', {{}}, 'rateAssumed', false);
         end
 
         %% finish - Checks common to every format

@@ -39,7 +39,7 @@ if exist(p, 'file') ~= 2
 end
 txt = readText(p);
 if ~isempty(regexp(txt, '(?m)^\s*(Interval|ChannelTitle)=', 'once'))
-    rec = labChartText(txt, p);
+    rec = labChartText(txt, p, opts);
 elseif ~isempty(regexp(txt, '(?im)^\s*[\d.]+\s*m?sec/sample', 'once'))
     rec = acqText(txt, p, opts);
 else
@@ -70,7 +70,7 @@ txt = strrep(txt, char(13), char(10));
 end
 
 %% labChartText - Header blocks (key=value) then rows; each header starts a block
-function rec = labChartText(txt, p)
+function rec = labChartText(txt, p, opts)
 starts = regexp(txt, '(?m)^\s*Interval=', 'start');
 if isempty(starts), starts = regexp(txt, '(?m)^\s*ChannelTitle=', 'start'); end
 starts(end+1) = numel(txt) + 1;
@@ -97,6 +97,7 @@ for b = 1:numel(starts) - 1
         if ~isfinite(dt) && numel(t) > 1, dt = median(diff(t)); end
     else
         vals = cols;
+        if ~isfinite(dt) && isfield(opts, 'Fs') && ~isempty(opts.Fs) && opts.Fs > 0, dt = 1 / opts.Fs; end
         t = (0:size(cols, 1) - 1) * dt;
     end
     if ~(isfinite(dt) && dt > 0)

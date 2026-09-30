@@ -16,13 +16,15 @@ classdef Exporter
         % -----------------------------------------------------------------
         % INPUT:  stim, LDF - vectors; t - time vector; Fs - sampling rate
         %         defaultPath - optional initial folder for uiputfile (or [])
+        %         extra - optional struct of more variables to save (e.g.
+        %                 flowName, flowUnits, stimName)
         % OUTPUT: saved - true if save succeeded
         %         pathUsed - folder where file was saved (for setting last path)
         % If stim or LDF is empty, shows errordlg and returns. If user
         % cancels uiputfile, returns without saving. On save success shows
         % msgbox; on save error shows errordlg.
         % -----------------------------------------------------------------
-        function [saved, pathUsed] = saveCropped(stim, LDF, t, Fs, defaultPath)
+        function [saved, pathUsed] = saveCropped(stim, LDF, t, Fs, defaultPath, extra)
             saved = false;
             pathUsed = '';
             if isempty(stim) || isempty(LDF)
@@ -31,6 +33,9 @@ classdef Exporter
             end
             if nargin < 5
                 defaultPath = '';
+            end
+            if nargin < 6 || isempty(extra)
+                extra = struct();
             end
             if isempty(defaultPath)
                 [file, path] = uiputfile('*.mat', 'Save Cropped Data As');
@@ -42,7 +47,9 @@ classdef Exporter
             end
             filename = fullfile(path, file);
             try
-                save(filename, 'stim', 'LDF', 't', 'Fs');
+                S = extra;
+                S.stim = stim; S.LDF = LDF; S.t = t; S.Fs = Fs;
+                save(filename, '-struct', 'S');
                 saved = true;
                 pathUsed = path;
                 msgbox('Cropped data saved successfully.');

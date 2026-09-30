@@ -153,6 +153,37 @@ function testCombinedPipelineOrder(tests)
     tests.verifyEqual(MethodsWriter.fromSessions({f2, f1}), MethodsWriter.fromSessions({e, p}));
 end
 
+function testExtractLDFFormats(tests)
+    % Sessions with the recording format and channel names
+    e = Session.new('ExtractLDFApp');
+    e.settings = struct('range', [0 60], 'view', 'Cropped segment', 'format', 'acq', ...
+        'flowChannel', 2, 'flowName', 'LDF100C', 'flowUnits', 'BPU', 'stimulus', 1, ...
+        'stimName', 'Trigger', 'block', 1, 'stimulusChannel', 1, 'ldfChannel', 2, 'rate', 500);
+    e.results = struct('cropRange', [0 60], 'fs', 500, 'nSamples', 30001, 'ldfMean', 120, 'ldfSD', 4);
+    [txt, refs] = MethodsWriter.fromSession(e);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, 'probe] with AcqKnowledge (BIOPAC; .acq file) (LDF on');
+    verifyHas(tests, txt, 'LDF on channel 2 ("LDF100C", BPU) and stimulus trigger on channel 1 ("Trigger"), both sampled at 500 Hz');
+    tests.verifyFalse(contains(txt, 'LabChart'));
+    % Comments as the stimulus, block 2 of a LabChart file
+    e.settings.format = 'labchart';
+    e.settings.stimulus = 'events:Puff';
+    e.settings.block = 2;
+    e.settings.flowUnits = '';
+    txt = MethodsWriter.fromSession(e);
+    verifyHas(tests, txt, 'with LabChart (ADInstruments) and exported as a .mat file');
+    verifyHas(tests, txt, 'LDF on channel 2 ("LDF100C"), stimulus onsets from the comments "Puff" and block 2 of the recording, LDF sampled at 500 Hz');
+    % No stimulus, text table
+    e.settings.format = 'text';
+    e.settings.stimulus = 0;
+    e.settings.block = 1;
+    txt = MethodsWriter.fromSession(e);
+    verifyHas(tests, txt, 'exported as a text table (LDF on channel 2 ("LDF100C") and no stimulus channel, LDF sampled at 500 Hz)');
+    e.settings.formatLabel = 'LabChart text export';
+    txt = MethodsWriter.fromSession(e);
+    verifyHas(tests, txt, 'with LabChart (ADInstruments) and exported as a text file (LDF on');
+end
+
 function testHistology(tests)
     s = histologySession();
     [txt, refs] = MethodsWriter.fromSession(s);

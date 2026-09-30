@@ -559,31 +559,37 @@ classdef HelpApp < handle
         %% topicLDFExtract - Extract LDF Data
         function t = topicLDFExtract()
             t = mkTopic('LDF Extract', 'LDF pipeline · step 1 of 3', ...
-                'Load a LabChart LDF export, keep the time range of the experiment and save it.');
+                'Load a recording (LabChart, AcqKnowledge, Spike2 or a table), choose the LDF and stimulus, keep the time range of the experiment and save it.');
             t.quick = {
-                '**1 Load LDF export**: click **Load file...** and choose the LabChart .mat export. Stimulus (channel 6) and LDF (channel 8) are plotted; file name, sampling rate and duration are shown.'
+                '**1 Load recording**: click **Load file...** and choose the recording. Check **LDF** (the flow channel) and **Stimulus** (a trigger channel, the comments / event markers of the file, or None); both are guessed from the channel names. With several LabChart blocks, choose the **Block**. The file label shows the format, rate, duration and number of channels.'
                 '**2 Choose time range**: type **Start** and **End** (s), click **Pick on plot** and click twice (start, end) on either plot, or click **Full range**.'
                 '**3 Crop**: click **Crop to range**. The cropped signals replace the full recording in the plots.'
                 '**4 Save**: click **Save cropped data...** and choose a file name. Open this file next in **LDF Process**.'
-                '**Session / report (optional)**: in step 4, **Save session…** stores the export file (with checksum), the range and the crop; **Open session…** redoes them; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
+                '**Session / report (optional)**: in step 4, **Save session…** stores the recording (with checksum), the channels, the range and the crop; **Open session…** redoes them; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: LabChart-style export, 8 channels, 300 s at 1000 Hz. Channel 6 = stimulus: 9 pulses of 5 s every 30 s from t = 30 s. Channel 8 = LDF: ~120 PU baseline with slow drift, vasomotion (0.13 Hz), a cardiac ripple (6 Hz) and noise.'
                 '* **What you should see**: after each stimulus pulse the LDF rises by about **+30 PU**, peaking about **4 s after the onset**, and returns to baseline within ~12 s.'
                 '* **Try**: crop **20 to 280 s** (this is exactly what the LDF Process demo file contains) and save; the cropped plots start at t = 0 with the first pulse at 10 s.'};
             t.inputs = {
-                'LabChart export `.mat` with `data` (all channels, concatenated), `datastart` and `dataend` (start / end index of each channel)'
-                'Optional: `samplerate` (Hz; 1000 Hz is assumed when missing), `titles`, `unittext`, comments'
-                'Stimulus = channel 6, LDF = channel 8'};
+                '**LabChart** (ADInstruments): MATLAB export `.mat` (`data`, `datastart`, `dataend`, `samplerate`, `titles`, `unittext`, comments; every block) or text export (`.txt`)'
+                '**AcqKnowledge** (BIOPAC): the native `.acq` file (versions 3 to 5, compressed or not), its MATLAB export `.mat` (`data`, `isi`, `labels`, `units`) or its text export'
+                '**Spike2** (CED): MATLAB export `.mat` (one struct per channel with `title`, `interval`, `values`; event channels with `times`)'
+                '**Tables** (`.txt`, `.csv`, `.tsv`; PeriSoft, moorVMS-PC, spreadsheets): a header row with the channel names (and optionally a units row), a time column in s, ms or clock time; comma, semicolon or tab separated, decimal point or comma. Without a time column the window asks for the sampling rate.'
+                'A cropped LDF `.mat` (`stim`, `LDF`, `t`, `Fs`) opens as well'
+                'The flow channel is found by its name or units (LDF, flux, perfusion, flow, PU, BPU); the stimulus by its name (stim, trigger, TTL, pulse...) or because it only has two levels. A LabChart file with 8 or more unnamed channels keeps the old convention: stimulus = channel 6, LDF = channel 8.'};
             t.outputs = {
-                'Cropped `.mat` with `stim` (stimulus), `LDF` (flow), `t` (time in s, 0 at the crop start) and `Fs` (Hz)'};
+                'Cropped `.mat` with `stim` (stimulus), `LDF` (flow), `t` (time in s, 0 at the crop start) and `Fs` (Hz), and the names `flowName`, `flowUnits`, `stimName`'};
             t.details = {
-                'The stimulus and LDF channels are cut out of `data` using `datastart` / `dataend`. Sample k is at time (k − 1) / Fs.'
+                'The chosen LDF channel sets the time base. A stimulus channel recorded faster is reduced to the LDF rate by taking the maximum over each LDF sample (short pulses are kept); a slower one is held. Sample k is at time (k − 1) / Fs.'
+                'Comments / event markers as the stimulus: each one becomes a pulse of height 1 lasting 0.5 s, so LDF Process finds it with a threshold of 0.5. Choose one comment text to use only those comments.'
                 'The range must satisfy 0 ≤ Start < End ≤ duration. Cropping keeps samples round(Start·Fs)+1 to round(End·Fs)+1.'
-                'Loading a new file discards the previous crop, so a stale crop can never be saved by mistake.'};
+                'Loading a new file, or choosing other channels, discards the previous crop, so a stale crop can never be saved by mistake.'};
             t.trouble = {
-                '"Not a valid LDF export: file must contain data, datastart, and dataend"', 'The file is not a LabChart export. Export the recording from LabChart as a MATLAB .mat file.'
-                '"Channel indices out of range"', 'The file has fewer than 8 channels. The stimulus must be on channel 6 and the LDF on channel 8.'
-                'Sampling rate shows 1000 Hz but the recording used another rate', '`samplerate` is missing from the export; re-export with it, otherwise every time axis is wrong.'
+                '"Cannot tell what kind of recording …" / "is not a recording this window knows"', 'Export the recording as a LabChart or AcqKnowledge .mat, a Spike2 MATLAB export, or a text table with a header row.'
+                'The LDF or Stimulus dropdown shows the wrong channel', 'The guess comes from the channel names; choose the right channel in step 1 (name your channels in the acquisition software to make the guess right next time).'
+                'No stimulus pulses are plotted', 'Choose the trigger channel, or **Comments / markers** when the stimuli were marked with comments or event markers.'
+                '"has no time column"', 'Type the sampling rate of the rows when asked, or add a first column named Time (s).'
+                'Sampling rate shows 1000 Hz but the recording used another rate', 'A LabChart .mat export without `samplerate` (the status bar warns); re-export with it, otherwise every time axis is wrong.'
                 '"Start time must be less than End time" / "Range must be within …"', 'Check the Start and End values (seconds, inside the recording).'};
             t.images = {'LDFExtractWorkflow.png', 'LDFExtractPrinciple.png'};
         end

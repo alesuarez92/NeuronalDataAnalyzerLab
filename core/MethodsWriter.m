@@ -310,7 +310,9 @@ classdef MethodsWriter
             end
         end
 
-        %% extractLDF - Export, channels, sampling rate and crop
+        %% extractLDF - Recording format, channels, sampling rate and crop
+        % Sessions before the format / channel names were stored keep the
+        % LabChart wording.
         function paras = extractLDF(s)
             fs = MethodsWriter.getf(s, 'results.fs', []);
             if ~MethodsWriter.isNum(fs)
@@ -318,17 +320,74 @@ classdef MethodsWriter
             end
             ldfCh = MethodsWriter.getf(s, 'settings.ldfChannel', []);
             stimCh = MethodsWriter.getf(s, 'settings.stimulusChannel', []);
-            txt = ['Laser Doppler flowmetry (LDF) and the stimulus trigger were recorded [please add: LDF ' ...
-                'monitor, probe and acquisition system] and exported as a LabChart-format .mat file'];
-            det = {};
-            if MethodsWriter.isNum(ldfCh), det{end+1} = sprintf('LDF on channel %s', MethodsWriter.num(ldfCh)); end
-            if MethodsWriter.isNum(stimCh), det{end+1} = sprintf('stimulus trigger on channel %s', MethodsWriter.num(stimCh)); end
+            fmt = MethodsWriter.getf(s, 'settings.format', '');
+            if isempty(fmt)
+                txt = ['Laser Doppler flowmetry (LDF) and the stimulus trigger were recorded [please add: LDF ' ...
+                    'monitor, probe and acquisition system] and exported as a LabChart-format .mat file'];
+                det = {};
+                if MethodsWriter.isNum(ldfCh), det{end+1} = sprintf('LDF on channel %s', MethodsWriter.num(ldfCh)); end
+                if MethodsWriter.isNum(stimCh), det{end+1} = sprintf('stimulus trigger on channel %s', MethodsWriter.num(stimCh)); end
+                twoChannels = true;
+            else
+                switch fmt
+                    case 'labchart',   how = ' with LabChart (ADInstruments) and exported as a .mat file';
+                    case 'acq',        how = ' with AcqKnowledge (BIOPAC; .acq file)';
+                    case 'acqmat',     how = ' with AcqKnowledge (BIOPAC) and exported as a .mat file';
+                    case 'spike2',     how = ' with Spike2 (CED) and exported as a .mat file';
+                    case 'edf',        how = ' [please add: acquisition system] and stored as an EDF / BDF file';
+                    case 'text'
+                        lbl = MethodsWriter.getf(s, 'settings.formatLabel', '');
+                        if strncmp(lbl, 'LabChart', 8)
+                            how = ' with LabChart (ADInstruments) and exported as a text file';
+                        elseif strncmp(lbl, 'AcqKnowledge', 12)
+                            how = ' with AcqKnowledge (BIOPAC) and exported as a text file';
+                        else
+                            how = ' [please add: acquisition system] and exported as a text table';
+                        end
+                    case 'ldfcropped', how = ' [please add: acquisition system] and saved as a cropped LDF .mat file';
+                    otherwise,         how = sprintf(' [please add: acquisition system] and read from a %s file', fmt);
+                end
+                txt = ['Laser Doppler flowmetry (LDF) and the stimulus were recorded [please add: LDF monitor ' ...
+                    'and probe]' how];
+                det = {};
+                flowName = MethodsWriter.getf(s, 'settings.flowName', '');
+                flowUnits = MethodsWriter.getf(s, 'settings.flowUnits', '');
+                stimName = MethodsWriter.getf(s, 'settings.stimName', '');
+                stim = MethodsWriter.getf(s, 'settings.stimulus', stimCh);
+                twoChannels = MethodsWriter.isNum(stim) && stim > 0;
+                if MethodsWriter.isNum(ldfCh)
+                    nm = '';
+                    if ~isempty(flowName) && ~isempty(flowUnits)
+                        nm = sprintf(' ("%s", %s)', flowName, flowUnits);
+                    elseif ~isempty(flowName)
+                        nm = sprintf(' ("%s")', flowName);
+                    end
+                    det{end+1} = sprintf('LDF on channel %s%s', MethodsWriter.num(ldfCh), nm);
+                end
+                if ischar(stim) && strncmp(stim, 'events:', 7)
+                    det{end+1} = sprintf('stimulus onsets from the comments "%s"', stim(8:end));
+                elseif ischar(stim)
+                    det{end+1} = 'stimulus onsets from the comments / event markers of the recording';
+                elseif MethodsWriter.isNum(stim) && stim > 0
+                    nm = '';
+                    if ~isempty(stimName), nm = sprintf(' ("%s")', stimName); end
+                    det{end+1} = sprintf('stimulus trigger on channel %s%s', MethodsWriter.num(stim), nm);
+                elseif MethodsWriter.isNum(stim)
+                    det{end+1} = 'no stimulus channel';
+                end
+                block = MethodsWriter.getf(s, 'settings.block', 1);
+                if MethodsWriter.isNum(block) && block > 1
+                    det{end+1} = sprintf('block %s of the recording', MethodsWriter.num(block));
+                end
+            end
             det = MethodsWriter.listText(det);
             if MethodsWriter.isNum(fs)
                 if isempty(det)
                     det = sprintf('sampled at %s Hz', MethodsWriter.num(fs));
-                else
+                elseif twoChannels
                     det = sprintf('%s, both sampled at %s Hz', det, MethodsWriter.num(fs));
+                else
+                    det = sprintf('%s, LDF sampled at %s Hz', det, MethodsWriter.num(fs));
                 end
             end
             if ~isempty(det), txt = sprintf('%s (%s)', txt, det); end

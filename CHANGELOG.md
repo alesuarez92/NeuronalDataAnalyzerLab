@@ -43,14 +43,27 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   bioread project); AcqKnowledge and Spike2 .mat exports; any delimited
   table (PeriSoft, moorVMS-PC, spreadsheets: decimal comma, clock times,
   units rows). The flow and stimulus channels are found from their names,
-  and comments / markers can be the stimulus. (Not yet in the Extract LDF
-  window.)
+  and comments / markers can be the stimulus. New demo files
+  (`core/demo/demoLDFFormats.m`): the LDF demo as a LabChart text export,
+  an AcqKnowledge .acq, a PeriSoft-style table, a Spike2 export and a table
+  without a time column.
 - `core/io/readImageStack.m`: one reader for image stacks over time
   (.mat, multi-page TIFF with the ImageJ frame interval, channels and
   pixel size, and video).
 
 ### Changed
 
+- **Extract LDF** opens every recording above, not only the LabChart .mat
+  export. Step 1 now has *LDF*, *Stimulus* and *Block* choices, guessed from
+  the channel names (the old convention, stimulus on channel 6 and LDF on
+  channel 8, stays for LabChart files with 8 or more unnamed channels);
+  the stimulus can also be the comments / event markers of the file, or
+  none. The plots are titled with the channel names, the file label shows
+  the format, rate, duration and channels, and a table without a time
+  column asks for its sampling rate. The cropped .mat also keeps
+  `flowName`, `flowUnits` and `stimName`; sessions store the format and
+  the channel choice (older sessions still open), and the methods text
+  names the acquisition software and the channels.
 - **Launcher:** *Laser speckle* joins LDF under Blood flow, so the tiles
   now take four rows at the default width (Blood flow and EEG, then
   Electrophysiology, Imaging and Across techniques).

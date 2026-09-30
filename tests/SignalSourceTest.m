@@ -11,7 +11,9 @@
 % AcqKnowledge and Spike2 .mat exports), then read back: names, units,
 % rates, values, comments / markers and their times, the flow and
 % stimulus channels guessed from the names, and the stimulus put on the
-% flow channel's time base. No display needed.
+% flow channel's time base; the LDF demo written in the other formats
+% (core/demo/demoLDFFormats.m) gives the same flow and stimuli in each.
+% No display needed.
 % =========================================================================
 
 function tests = SignalSourceTest
@@ -23,6 +25,7 @@ function setupOnce(tests)
     addpath(root);
     addpath(fullfile(root, 'core'));
     addpath(fullfile(root, 'core', 'io'));
+    addpath(fullfile(root, 'core', 'demo'));
     tests.TestData.dir = tempname;
     mkdir(tests.TestData.dir);
 end
@@ -293,4 +296,47 @@ function testCroppedAndErrors(tests)
     tests.verifyError(@() SignalSource.open(g), 'NeuroAnalyzer:io:unknownFormat');
     tests.verifyError(@() SignalSource.open(tmp(tests, 'missing.acq')), 'NeuroAnalyzer:io:fileNotFound');
     tests.verifyError(@() SignalSource.detect(tmp(tests, 'x.xyz')), 'NeuroAnalyzer:io:fileNotFound');
+end
+
+function testDemoLDFFormats(tests)
+    f = demoLDFFormats(tmp(tests, 'ldf_formats'));
+    tr = f.truth;
+    kinds = {'labchartText', 'acq', 'table', 'spike2'};
+    flows = {'LDF', 'LDF100C', 'Perfusion', 'LDF'};
+    for k = 1:numel(kinds)
+        rec = SignalSource.open(f.(kinds{k}));
+        [iFlow, iStim] = SignalSource.guessChannels(rec);
+        stim = iStim;
+        if iStim == 0, stim = 'events'; end
+        L = SignalSource.toLDF(rec, iFlow, stim, 1);
+        tests.verifyEqual(L.flowName, flows{k}, kinds{k});
+        tests.verifyEqual(L.Fs, tr.fs, 'AbsTol', 1e-9, kinds{k});
+        tests.verifyEqual(L.LDF, tr.ldf, 'AbsTol', 1e-4, kinds{k});
+        on = L.t(diff([0 L.stim > 0.5]) == 1);
+        tests.verifyEqual(on, tr.onsets, 'AbsTol', 0.011, kinds{k});
+    end
+    % Comments / markers are the onsets as well
+    rec = SignalSource.open(f.labchartText);
+    tests.verifyEqual(sort([rec.events.time]), tr.onsets, 'AbsTol', 1e-9);
+    rec = SignalSource.open(f.acq);
+    tests.verifyEqual(sort([rec.events.time]), tr.onsets, 'AbsTol', 1e-9);
+    tests.verifyEqual(rec.channels(1).fs, 1000, 'AbsTol', 1e-9, 'trigger at the base rate');
+    % No time column: the rate is given
+    tests.verifyError(@() SignalSource.open(f.noTime), 'NeuroAnalyzer:io:noRate');
+    rec = SignalSource.open(f.noTime, '', struct('Fs', 100));
+    [iFlow, iStim] = SignalSource.guessChannels(rec);
+    tests.verifyEqual([iFlow iStim], [1 2]);
+    tests.verifyEqual(rec.channels(1).data, tr.ldf, 'AbsTol', 1e-4);
+end
+
+function testGuessSkipsPressure(tests)
+    % 'Blood pressure' is not the flow channel; a strong name wins over 'flow'
+    ch = struct('chan', {1, 2, 3}, 'block', 1, 'name', {'Blood pressure', 'Cortical flow', 'TTL'}, ...
+        'units', {'mmHg', '', 'V'}, 'fs', 100, 'data', {ones(1, 20), ones(1, 20), [zeros(1, 15) ones(1, 5)]}, 't0', 0);
+    rec = SignalSource.makeRec(ch, SignalSource.emptyEvents(), {ch.name}, {ch.units}, 'text', '');
+    [iFlow, iStim] = SignalSource.guessChannels(rec);
+    tests.verifyEqual([iFlow iStim], [2 3]);
+    rec.names{1} = 'Laser Doppler'; rec.units{1} = 'PU';
+    [iFlow, ~] = SignalSource.guessChannels(rec);
+    tests.verifyEqual(iFlow, 1);
 end
