@@ -9,8 +9,12 @@
 % sync word) and nidq (MN / XA / digital word), Blackrock NSx 2.1 / 2.3 /
 % 3.0 (scaling, analog inputs, several data blocks) with NEV digital
 % events, Neuralynx .ncs folders (ADBitVolts, inverted input, natural
-% channel order) with Events.nev TTLs. Values in volts, rates, channel
-% names and the stimulus lines are checked. No display needed.
+% channel order) with Events.nev TTLs, Axon ABF 2 (gap-free, episodic
+% with sweep start times, float32), Open Ephys legacy .continuous folders
+% (CH, ADC, TTL events, first timestamp) and Intan RHS2000 (digital and
+% analog inputs, stimulation current, DC amplifier data saved). Values in
+% volts, rates, channel names and the stimulus lines are checked. No
+% display needed.
 % =========================================================================
 
 function tests = EphysFormatsTest
@@ -127,4 +131,93 @@ function testNeuralynx(tests)
     tests.verifyEqual(rec.info.stimNames, {'(no stimulus channel)'});
     e = tmp(tests, 'empty'); mkdir(e);
     tests.verifyError(@() readNeuralynx(e), 'NeuroAnalyzer:io:neuralynx');
+end
+
+function testABF(tests)
+    % Gap-free int16: mV channels become volts, a pA channel is a stimulus
+    x = [ramp(2, 1000); 50 * double(mod(0:999, 250) < 25)];
+    f = tmp(tests, 'gapfree.abf');
+    writeABF(f, x, 20000, 'Names', {'Vm', 'Vm2', 'Icmd'}, 'Units', {'mV', 'mV', 'pA'});
+    rec = readABF(f);
+    tests.verifyEqual(rec.info.format, 'abf');
+    tests.verifyEqual(rec.streams.xRAW.fs, 20000, 'AbsTol', 1e-6);
+    tests.verifyEqual(rec.info.channelNames, {'Vm', 'Vm2'});
+    tests.verifyEqual(double(rec.streams.xRAW.data), x(1:2, :) * 1e-3, 'AbsTol', 1e-7);
+    tests.verifyEqual(rec.info.stimNames, {'Icmd'});
+    tests.verifyEqual(double(rec.streams.Whis.data), x(3, :), 'AbsTol', 0.01);
+    tests.verifyEqual(rec.info.nSweeps, 1);
+    % Episodic: 3 sweeps of 400 samples, started 1 s apart
+    e = reshape(ramp(1, 1200), 1, 400, 3);
+    f = tmp(tests, 'episodic.abf');
+    writeABF(f, e, 10000, 'SweepStarts', [0 1 2]);
+    rec = readABF(f);
+    tests.verifyEqual(rec.info.nSweeps, 3);
+    tests.verifyEqual(rec.info.sweepStarts, [0 1 2], 'AbsTol', 1e-6);
+    tests.verifyEqual(double(rec.streams.xRAW.data), reshape(e, 1, []) * 1e-3, 'AbsTol', 1e-7);
+    tests.verifyEqual(rec.info.stimNames, {'(no stimulus channel)'});
+    % float32 samples are used as they are
+    f = tmp(tests, 'float.abf');
+    writeABF(f, x(1, :), 20000, 'Float', true, 'Units', {'V'});
+    rec = readABF(f);
+    tests.verifyEqual(double(rec.streams.xRAW.data), x(1, :), 'AbsTol', 1e-6);
+    % ABF 1 is refused
+    f = tmp(tests, 'old.abf');
+    fid = fopen(f, 'w'); fwrite(fid, uint8('ABF '), 'uint8'); fwrite(fid, zeros(1, 2044), 'uint8'); fclose(fid);
+    tests.verifyError(@() readABF(f), 'NeuroAnalyzer:io:abf');
+end
+
+function testOpenEphysLegacy(tests)
+    x = 100e-6 * ramp(3, 2500);
+    a = 2 * double(mod(0:2499, 1000) < 100);
+    d = tmp(tests, 'oe_legacy');
+    ttl = struct('channel', {0, 2}, 'on', {[301 1301], 2001}, 'off', {[401 1401], 2101});
+    writeOpenEphysLegacy(d, x, 30000, 'ADC', a, 'TTL', ttl, 'FirstTimestamp', 5000);
+    rec = readOpenEphysLegacy(d);
+    tests.verifyEqual(rec.info.format, 'openephyslegacy');
+    tests.verifyEqual(rec.streams.xRAW.fs, 30000);
+    tests.verifyEqual(rec.info.channelNames, {'CH1', 'CH2', 'CH3'});
+    tests.verifyEqual(size(rec.streams.xRAW.data), [3 2500]);
+    tests.verifyEqual(double(rec.streams.xRAW.data), x, 'AbsTol', 2e-7);
+    tests.verifyEqual(rec.info.firstTimestamp, 5000);
+    tests.verifyEqual(rec.info.stimNames, {'ADC1', 'TTL 1', 'TTL 3'});
+    s = double(rec.streams.Whis.data);
+    tests.verifyEqual(s(1, :), a, 'AbsTol', 1e-3);
+    tests.verifyEqual(find(diff([0 s(2, :)]) == 1), [301 1301]);
+    tests.verifyEqual(find(s(3, :)), 2001:2100);
+    % A .continuous opens its folder
+    rec2 = readOpenEphysLegacy(fullfile(d, '100_CH2.continuous'));
+    tests.verifyEqual(rec2.streams.xRAW.data, rec.streams.xRAW.data);
+    e = tmp(tests, 'oe_empty'); mkdir(e);
+    tests.verifyError(@() readOpenEphysLegacy(e), 'NeuroAnalyzer:io:openephys');
+end
+
+function testIntanRHS(tests)
+    n = 1000;                                           % padded to 1024
+    x = 200e-6 * ramp(2, n);
+    din = zeros(2, n); din(1, 101:200) = 1; din(2, 601:700) = 1;
+    adc = 1.5 * double(mod(0:n-1, 500) < 50);
+    st = zeros(2, n); st(2, 301:310) = -20e-6; st(2, 311:320) = 20e-6;
+    f = tmp(tests, 'stim.rhs');
+    writeIntanRHS(f, x, 30000, 'DigitalIn', din, 'ADC', adc, 'Stim', st, 'DC', true, 'Names', {'A-000', 'A-001'});
+    rec = readIntanRHS(f);
+    tests.verifyEqual(rec.info.format, 'intanrhs');
+    tests.verifyEqual(rec.streams.xRAW.fs, 30000);
+    tests.verifyEqual(rec.info.channelNames, {'A-000', 'A-001'});
+    tests.verifyEqual(size(rec.streams.xRAW.data, 2), 1024);
+    tests.verifyEqual(double(rec.streams.xRAW.data(:, 1:n)), x, 'AbsTol', 2e-7);
+    tests.verifyEqual(rec.info.nGaps, 0);
+    tests.verifyEqual(rec.info.stimNames, {'DIGITAL-IN-01', 'DIGITAL-IN-02', 'ANALOG-IN-1', 'Stim current A-001'});
+    s = double(rec.streams.Whis.data(:, 1:n));
+    tests.verifyEqual(s(1:2, :), din);
+    tests.verifyEqual(s(3, :), adc, 'AbsTol', 4e-4);
+    tests.verifyEqual(s(4, :), st(2, :), 'AbsTol', 1e-9);
+    % Without DC data, inputs or stimulation
+    f2 = tmp(tests, 'plain.rhs');
+    writeIntanRHS(f2, x, 20000);
+    rec = readIntanRHS(f2);
+    tests.verifyEqual(double(rec.streams.xRAW.data(:, 1:n)), x, 'AbsTol', 2e-7);
+    tests.verifyEqual(rec.info.stimNames, {'(no stimulus channel)'});
+    f3 = tmp(tests, 'bad.rhs');
+    fid = fopen(f3, 'w'); fwrite(fid, zeros(1, 200), 'uint8'); fclose(fid);
+    tests.verifyError(@() readIntanRHS(f3), 'NeuroAnalyzer:io:intan');
 end
