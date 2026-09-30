@@ -107,6 +107,12 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   continuous EEG (the channels in volts, annotations and BioSemi trigger
   codes as events); the LDF demo and the rodent EEG demo are also written
   as EDF+ (and BDF).
+- **EGI .mff** (`core/io/readMFF.m`, `writeMFF.m`): Net Station
+  recordings (the `.mff` folder or its `info.xml`): float32 blocks,
+  channel gains, pauses placed at their times, events, sensor positions
+  and the vertex reference. mffpy and MNE-Python read the files written
+  here with the same values, gains, pause and events, and readMFF reads
+  mffpy's files. The rodent EEG demo is also written as `.mff`.
 - **EEG-BIDS** (`core/io/readEEGBIDS.m`, `writeEEGBIDS.m`): EEG analysis
   opens the `sub-…_eeg` file of a BIDS dataset (OpenNeuro) with its
   sidecar files: only the EEG channels of `channels.tsv` (bad channels

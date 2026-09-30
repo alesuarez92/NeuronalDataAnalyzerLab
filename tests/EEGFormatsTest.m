@@ -1,7 +1,7 @@
 %% EEGFormatsTest.m
 % =========================================================================
 % UNIT TESTS FOR THE EEG DATA MODEL AND IMPORTERS (EEGLAB, FIELDTRIP,
-% BRAINVISION, EDF / BDF, EEG-BIDS, .mat)
+% BRAINVISION, EDF / BDF, EGI .mff, EEG-BIDS, .mat)
 % =========================================================================
 % The synthetic study written by core/demo/demoEEG (oddball scalp EEG and
 % a continuous rodent recording) is read back from every format: each
@@ -178,7 +178,7 @@ function testDetect(tests)
     verifyError(tests, @() EEGSource.detect(fdt), 'NeuroAnalyzer:io:unknownFormat');
     verifyError(tests, @() EEGSource.detect(fullfile(tests.TestData.tmp, 'none.set')), 'NeuroAnalyzer:io:fileNotFound');
     list = EEGSource.formats();
-    verifyEqual(tests, {list.key}, {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'bids', 'matrix'});
+    verifyEqual(tests, {list.key}, {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'mff', 'bids', 'matrix'});
     verifyEqual(tests, EEGSource.detect(d.rodent.edf), 'edf');
     verifyEqual(tests, EEGSource.detect(d.rodent.bdf), 'edf');
 end
@@ -206,6 +206,43 @@ function testRodentEDFAndBDF(tests)
     end
     eeg = EEGSource.open(d.rodent.bdf);
     verifyTrue(tests, any(contains(eeg.notes, 'Status')), 'Status is not EEG');
+end
+
+function testRodentMFF(tests)
+    % The demo as an EGI .mff folder: float32 samples, E1-E4, events, positions (cm)
+    d = tests.TestData.demo;
+    tr = d.truth.rodent;
+    verifyEqual(tests, EEGSource.detect(d.rodent.mff), 'mff');
+    verifyEqual(tests, EEGSource.detect(fullfile(d.rodent.mff, 'info.xml')), 'mff');
+    for p = {d.rodent.mff, fullfile(d.rodent.mff, 'info.xml')}
+        eeg = EEGSource.open(p{1});
+        verifyEqual(tests, eeg.format, 'mff');
+        verifyEqual(tests, eeg.fs, 1000);
+        verifyEqual(tests, eeg.labels, {'E1', 'E2', 'E3', 'E4'});
+        verifyEqual(tests, double(eeg.data), double(tr.data), 'AbsTol', 1e-4);
+        verifyEqual(tests, [eeg.events.latency], tr.onsets, 'AbsTol', 1e-6);
+        verifyEqual(tests, unique({eeg.events.type}), {'flash'});
+        verifyEqual(tests, [eeg.chanlocs.x], tr.ml / 10, 'AbsTol', 1e-9);
+    end
+    % A pause, channel gains (GCAL) and a vertex reference
+    fs = 500; t = (0:4999) / fs;
+    X = [20 * sin(2 * pi * 5 * t); 10 * cos(2 * pi * 7 * t); 5 * sin(2 * pi * 11 * t); zeros(1, 5000)];
+    ev = struct('type', {'DIN1', 'TRSP'}, 'latency', {1, 8.2}, 'duration', {0.001, 0});
+    e = EEGSource.make(X, fs, 'Labels', {'E1', 'E2', 'E3', 'VREF'}, 'Events', ev, 'Unit', 'uV');
+    f = fullfile(tests.TestData.tmp, 'paused.mff');
+    writeMFF(f, e, 'BlockSize', 700, 'Pause', [3000 250], 'Gains', [1 2 0.5 1], 'Reference', 4);
+    eeg = readMFF(f);
+    verifyEqual(tests, size(eeg.data), [4 5250]);
+    verifyEqual(tests, double(eeg.data(:, [1:3000 3251:5250])), X, 'AbsTol', 1e-4);
+    verifyEqual(tests, double(eeg.data(:, 3001:3250)), zeros(4, 250), 'pause filled with zeros');
+    verifyEqual(tests, eeg.labels{4}, 'VREF');
+    verifyEqual(tests, eeg.reference, 'vertex reference (VREF)');
+    verifyEqual(tests, [eeg.events.latency], [1 8.2], 'AbsTol', 1e-6);
+    verifyEqual(tests, [eeg.events.duration], [0.001 0], 'AbsTol', 1e-12);
+    verifyTrue(tests, any(contains(eeg.notes, 'GCAL')));
+    verifyTrue(tests, any(contains(eeg.notes, 'paused 1 time')));
+    bad = fullfile(tests.TestData.tmp, 'empty.mff'); mkdir(bad);
+    verifyError(tests, @() readMFF(bad), 'NeuroAnalyzer:io:mff');
 end
 
 function testRodentBIDS(tests)
