@@ -98,6 +98,14 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   pyABF) on files from its synthetic writer (`write*.m`, used by the tests
   and the demo); for Multi Channel Systems, the file layout was checked
   with McsPyDataTools.
+- **EDF, EDF+ and BDF files** (`core/io/readEDF.m`, `writeEDF.m`): the
+  European Data Format that LabChart, clinical systems and many others
+  export, with EDF+ annotations (onset, duration, text), discontinuous
+  EDF+D recordings (records placed at their times) and BioSemi's 24-bit
+  BDF with its Status trigger word. Extract LDF opens them again (the
+  annotations can be the stimulus); the LDF demo is also written as EDF+.
+  Values and annotations were checked during development against pyedflib
+  and MNE-Python.
 
 ### Changed
 

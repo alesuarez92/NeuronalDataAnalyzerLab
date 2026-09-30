@@ -19,8 +19,8 @@
 %                           export
 %   CED Spike2              MATLAB export .mat (one struct per channel:
 %                           title, interval, values / times, start, codes)
-%   EDF / EDF+ / BDF        via readEDF when it is on the path (LabChart,
-%                           clinical and many other systems export EDF)
+%   EDF / EDF+ / BDF        readEDF (LabChart, clinical and many other
+%                           systems export EDF); annotations as events
 %   Any delimited text      .txt / .csv / .tsv with a header row (PeriSoft,
 %                           moorVMS-PC and spreadsheet exports; readSignalText)
 %   Cropped LDF .mat        stim, LDF, t, Fs (as Extract LDF saves it)
@@ -117,10 +117,6 @@ classdef SignalSource
                 case 'acq'
                     rec = SignalSource.fromAcq(readBiopacACQ(p), p);
                 case 'edf'
-                    if exist('readEDF', 'file') ~= 2
-                        error('NeuroAnalyzer:io:unknownFormat', ['Reading EDF / BDF files needs readEDF ' ...
-                            '(core/io); update Neuronal Data Analyzer Lab.']);
-                    end
                     rec = SignalSource.fromEDF(readEDF(p), p);
                 case 'text'
                     rec = readSignalText(p, opts);
@@ -470,6 +466,7 @@ classdef SignalSource
                 end
             end
             rec = SignalSource.makeRec(ch, ev, {ch.name}, {ch.units}, 'edf', p);
+            if isfield(E, 'notes'), rec.info.notes = E.notes; end
         end
 
         %% fromCropped - stim, LDF, t, Fs (Extract LDF's own output)

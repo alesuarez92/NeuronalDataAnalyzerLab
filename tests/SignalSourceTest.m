@@ -301,8 +301,9 @@ end
 function testDemoLDFFormats(tests)
     f = demoLDFFormats(tmp(tests, 'ldf_formats'));
     tr = f.truth;
-    kinds = {'labchartText', 'acq', 'table', 'spike2'};
-    flows = {'LDF', 'LDF100C', 'Perfusion', 'LDF'};
+    kinds = {'labchartText', 'acq', 'table', 'spike2', 'edf'};
+    flows = {'LDF', 'LDF100C', 'Perfusion', 'LDF', 'LDF'};
+    tol = [1e-4 1e-4 1e-4 1e-4 5e-3];                   % EDF: 16-bit samples
     for k = 1:numel(kinds)
         rec = SignalSource.open(f.(kinds{k}));
         [iFlow, iStim] = SignalSource.guessChannels(rec);
@@ -311,7 +312,7 @@ function testDemoLDFFormats(tests)
         L = SignalSource.toLDF(rec, iFlow, stim, 1);
         tests.verifyEqual(L.flowName, flows{k}, kinds{k});
         tests.verifyEqual(L.Fs, tr.fs, 'AbsTol', 1e-9, kinds{k});
-        tests.verifyEqual(L.LDF, tr.ldf, 'AbsTol', 1e-4, kinds{k});
+        tests.verifyEqual(L.LDF, tr.ldf, 'AbsTol', tol(k), kinds{k});
         on = L.t(diff([0 L.stim > 0.5]) == 1);
         tests.verifyEqual(on, tr.onsets, 'AbsTol', 0.011, kinds{k});
     end
@@ -321,6 +322,8 @@ function testDemoLDFFormats(tests)
     rec = SignalSource.open(f.acq);
     tests.verifyEqual(sort([rec.events.time]), tr.onsets, 'AbsTol', 1e-9);
     tests.verifyEqual(rec.channels(1).fs, 1000, 'AbsTol', 1e-9, 'trigger at the base rate');
+    rec = SignalSource.open(f.edf);
+    tests.verifyEqual(sort([rec.events.time]), tr.onsets, 'AbsTol', 1e-9, 'EDF+ annotations');
     % No time column: the rate is given
     tests.verifyError(@() SignalSource.open(f.noTime), 'NeuroAnalyzer:io:noRate');
     rec = SignalSource.open(f.noTime, '', struct('Fs', 100));

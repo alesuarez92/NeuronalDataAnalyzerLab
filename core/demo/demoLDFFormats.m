@@ -24,15 +24,18 @@
 %                       must be given)
 %   files.spike2        demo_ldf_spike2.mat: Spike2 MATLAB export, an LDF
 %                       waveform channel and a "Stim" event channel
+%   files.edf           demo_ldf.edf: EDF+C (writeEDF), LDF (PU) and
+%                       Stimulus (V) in 10 ms records, a "Stim" annotation
+%                       at every onset
 %   files.truth         fs (100), onsets (s), t, ldf and stim at 100 Hz,
 %                       and DemoData's ground truth (responses)
 %   files.folder
 % Deterministic (DemoData's fixed seed). Requires core/io on the path
-% (writeBiopacACQ). Toolboxes: none; also runs in GNU Octave.
+% (writeBiopacACQ, writeEDF). Toolboxes: none; also runs in GNU Octave.
 % =========================================================================
 
 function files = demoLDFFormats(folder)
-    cacheVersion = 1;
+    cacheVersion = 2;
     cached = nargin < 1 || isempty(folder);
     if cached
         folder = fullfile(DemoData.folder(), 'ldf_formats');
@@ -107,6 +110,12 @@ function files = demoLDFFormats(folder)
     files.spike2 = fullfile(folder, 'demo_ldf_spike2.mat');
     save(files.spike2, '-struct', 'S');
 
+    % EDF+C: 10 ms records (one sample each), so the length is not padded
+    sig = struct('label', {'LDF', 'Stimulus'}, 'units', {'PU', 'V'}, 'fs', fs, 'data', {ldf, stim});
+    files.edf = fullfile(folder, 'demo_ldf.edf');
+    writeEDF(files.edf, sig, 'Format', 'EDF+C', 'RecordDuration', 1 / fs, ...
+        'Annotations', struct('onset', num2cell(onsets), 'duration', NaN, 'text', 'Stim'));
+
     files.truth = d.truth;
     files.truth.fs = fs;
     files.truth.onsets = onsets;
@@ -129,7 +138,7 @@ end
 
 function tf = allExist(files, folder)
     tf = true;
-    for k = {'labchartText', 'acq', 'table', 'noTime', 'spike2'}
+    for k = {'labchartText', 'acq', 'table', 'noTime', 'spike2', 'edf'}
         if ~isfield(files, k{1}) || exist(fullfile(folder, fname(files.(k{1}))), 'file') ~= 2
             tf = false; return;
         end

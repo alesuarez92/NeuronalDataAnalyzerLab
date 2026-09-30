@@ -559,7 +559,7 @@ classdef HelpApp < handle
         %% topicLDFExtract - Extract LDF Data
         function t = topicLDFExtract()
             t = mkTopic('LDF Extract', 'LDF pipeline · step 1 of 3', ...
-                'Load a recording (LabChart, AcqKnowledge, Spike2 or a table), choose the LDF and stimulus, keep the time range of the experiment and save it.');
+                'Load a recording (LabChart, AcqKnowledge, Spike2, EDF or a table), choose the LDF and stimulus, keep the time range of the experiment and save it.');
             t.quick = {
                 '**1 Load recording**: click **Load file...** and choose the recording. Check **LDF** (the flow channel) and **Stimulus** (a trigger channel, the comments / event markers of the file, or None); both are guessed from the channel names. With several LabChart blocks, choose the **Block**. The file label shows the format, rate, duration and number of channels.'
                 '**2 Choose time range**: type **Start** and **End** (s), click **Pick on plot** and click twice (start, end) on either plot, or click **Full range**.'
@@ -574,6 +574,7 @@ classdef HelpApp < handle
                 '**LabChart** (ADInstruments): MATLAB export `.mat` (`data`, `datastart`, `dataend`, `samplerate`, `titles`, `unittext`, comments; every block) or text export (`.txt`)'
                 '**AcqKnowledge** (BIOPAC): the native `.acq` file (versions 3 to 5, compressed or not), its MATLAB export `.mat` (`data`, `isi`, `labels`, `units`) or its text export'
                 '**Spike2** (CED): MATLAB export `.mat` (one struct per channel with `title`, `interval`, `values`; event channels with `times`)'
+                '**EDF / EDF+ / BDF** (`.edf`, `.bdf`; LabChart, clinical and many other systems export it): the channels in their physical units; EDF+ annotations can be the stimulus'
                 '**Tables** (`.txt`, `.csv`, `.tsv`; PeriSoft, moorVMS-PC, spreadsheets): a header row with the channel names (and optionally a units row), a time column in s, ms or clock time; comma, semicolon or tab separated, decimal point or comma. Without a time column the window asks for the sampling rate.'
                 'A cropped LDF `.mat` (`stim`, `LDF`, `t`, `Fs`) opens as well'
                 'The flow channel is found by its name or units (LDF, flux, perfusion, flow, PU, BPU); the stimulus by its name (stim, trigger, TTL, pulse...) or because it only has two levels. A LabChart file with 8 or more unnamed channels keeps the old convention: stimulus = channel 6, LDF = channel 8.'};
@@ -585,7 +586,7 @@ classdef HelpApp < handle
                 'The range must satisfy 0 ≤ Start < End ≤ duration. Cropping keeps samples round(Start·Fs)+1 to round(End·Fs)+1.'
                 'Loading a new file, or choosing other channels, discards the previous crop, so a stale crop can never be saved by mistake.'};
             t.trouble = {
-                '"Cannot tell what kind of recording …" / "is not a recording this window knows"', 'Export the recording as a LabChart or AcqKnowledge .mat, a Spike2 MATLAB export, or a text table with a header row.'
+                '"Cannot tell what kind of recording …" / "is not a recording this window knows"', 'Export the recording as a LabChart or AcqKnowledge .mat, a Spike2 MATLAB export, an EDF file, or a text table with a header row.'
                 'The LDF or Stimulus dropdown shows the wrong channel', 'The guess comes from the channel names; choose the right channel in step 1 (name your channels in the acquisition software to make the guess right next time).'
                 'No stimulus pulses are plotted', 'Choose the trigger channel, or **Comments / markers** when the stimuli were marked with comments or event markers.'
                 '"has no time column"', 'Type the sampling rate of the rows when asked, or add a first column named Time (s).'

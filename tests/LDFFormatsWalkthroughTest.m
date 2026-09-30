@@ -4,8 +4,8 @@
 % =========================================================================
 % Drives ExtractLDFApp through its public methods (no dialogs) on the LDF
 % demo written as a LabChart text export, an AcqKnowledge .acq, a
-% PeriSoft-style table (semicolons, decimal commas), a Spike2 export and a
-% table without a time column (core/demo/demoLDFFormats.m): the flow
+% PeriSoft-style table (semicolons, decimal commas), a Spike2 export, an
+% EDF+ file and a table without a time column (core/demo/demoLDFFormats.m): the flow
 % channel and stimulus guessed from the names, the plots titled with the
 % channel names, comments / markers as the stimulus, block choice on a
 % LabChart .mat with two blocks, crop and save (with the channel names),
@@ -50,15 +50,16 @@ function testEveryFormat(tests)
     f = tests.TestData.files;
     tr = f.truth;
     app = ExtractLDFApp(); c = onCleanup(@() delete(app.UIFig));
-    kinds = {'labchartText', 'acq', 'table', 'spike2'};
-    flows = {'LDF', 'LDF100C', 'Perfusion', 'LDF'};
-    stims = {'Stimulus', 'Trigger', 'Stimulus', 'Comments / markers'};
+    kinds = {'labchartText', 'acq', 'table', 'spike2', 'edf'};
+    flows = {'LDF', 'LDF100C', 'Perfusion', 'LDF', 'LDF'};
+    stims = {'Stimulus', 'Trigger', 'Stimulus', 'Comments / markers', 'Stimulus'};
+    tol = [1e-4 1e-4 1e-4 1e-4 5e-3];                   % EDF: 16-bit samples
     for k = 1:numel(kinds)
         tests.verifyTrue(logical(app.openFile(f.(kinds{k}))), kinds{k});
         tests.verifyEqual(app.AppData.FlowName, flows{k}, kinds{k});
         tests.verifyEqual(app.AppData.StimName, stims{k}, kinds{k});
         tests.verifyEqual(app.AppData.SamplingRate, tr.fs, 'AbsTol', 1e-9, kinds{k});
-        tests.verifyEqual(app.AppData.RawLDF, tr.ldf, 'AbsTol', 1e-4, kinds{k});
+        tests.verifyEqual(app.AppData.RawLDF, tr.ldf, 'AbsTol', tol(k), kinds{k});
         tests.verifyEqual(countOnsets(app.AppData.RawStim), numel(tr.onsets), kinds{k});
         tests.verifyTrue(contains(app.AxLDF.Title.String, flows{k}), app.AxLDF.Title.String);
         tests.verifyTrue(contains(app.FileInfoLabel.Text, '100 Hz'), app.FileInfoLabel.Text);
