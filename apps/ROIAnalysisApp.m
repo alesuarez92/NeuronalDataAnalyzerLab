@@ -366,14 +366,16 @@ classdef ROIAnalysisApp < handle
         function loadStack(app)
             startDir = ProjectManager.getImportDir();
             if isempty(startDir), startDir = pwd; end
-            [file, path] = uigetfile({'*.mat;*.tif;*.tiff', 'Stack or MAT'; '*.mat', 'MAT'; '*.tif;*.tiff', 'TIFF'}, ...
+            [file, path] = uigetfile({'*.mat;*.tif;*.tiff;*.isxd;*.xml;*.raw;*.avi', 'Stack or MAT (also .isxd, ThorImage / Prairie View .xml, Miniscope .avi)'; ...
+                '*.mat', 'MAT'; '*.tif;*.tiff', 'TIFF'; '*.isxd', 'Inscopix (*.isxd)'; ...
+                '*.xml;*.raw', 'ThorImageLS Experiment.xml / .raw, Prairie View .xml'; '*.avi', 'Miniscope video (*.avi)'}, ...
                 'Load image stack', startDir);
             figure(app.UIFig);
             if isequal(file, 0), return; end
             app.openFile(fullfile(path, file));
         end
 
-        %% openFile - Load a stack (.mat or TIFF) without dialogs and show it
+        %% openFile - Load a stack (.mat, TIFF or a microscope's files) without dialogs and show it
         % A .mat may hold roiMask (H x W) or roiMasks (H x W x K, optional
         % roiNames); they become the ROIs. Returns true on success.
         function ok = openFile(app, fullPath)
@@ -417,21 +419,28 @@ classdef ROIAnalysisApp < handle
                     if ismember('truth', fn) && isstruct(s.truth), truth = s.truth; end
                     timeFromFile = ~isempty(timeVec);
                 else
-                    info = imfinfo(fullPath);
-                    n = numel(info);
-                    first = imread(fullPath, 1);
-                    % Preallocate double; RGB(A) frames are collapsed to the
-                    % grayscale mean of the colour channels
-                    stack = zeros(size(first, 1), size(first, 2), n);
-                    for k = 1:n
-                        fr = double(imread(fullPath, k));
-                        if ndims(fr) == 3
-                            fr = mean(fr(:, :, 1:min(3, size(fr, 3))), 3);
-                        end
-                        stack(:, :, k) = fr;
+                    % TIFF (ImageJ, OME, ScanImage metadata), video, Inscopix .isxd,
+                    % ThorImageLS, Prairie View or Miniscope folders (core/io/readImageStack)
+                    if isempty(which('readImageStack'))
+                        addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'core', 'io'));
                     end
-                    timeVec = 1:n;
-                    timeFromFile = false;
+                    S = readImageStack(fullPath);
+                    stack = double(S.stack);
+                    n = size(stack, 3);
+                    if ~isempty(S.t)
+                        timeVec = S.t(:)';
+                        timeFromFile = true;
+                    elseif isfinite(S.fps) && S.fps > 0
+                        timeVec = (0:n-1) / S.fps;
+                        timeFromFile = true;
+                    else
+                        timeVec = 1:n;
+                        timeFromFile = false;
+                    end
+                    if ~isempty(S.roiMasks)
+                        masks = logical(S.roiMasks);
+                        roiNames = S.roiNames;
+                    end
                 end
             catch ME
                 UIKit.done(dlg);

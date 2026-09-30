@@ -4,6 +4,7 @@ function S = readImageStack(p, opts)
 % S = readImageStack(path)
 % S = readImageStack(path, struct('Channel', 2))
 % S = readImageStack(path, struct('Perimed', 'perfusion'))
+% S = readImageStack(folder)       ThorImageLS, Prairie View or Miniscope folder
 %
 % One reader for the imaging windows (Laser speckle, ROI analysis), so a
 % file opens the same way everywhere and what the file says about itself
@@ -25,6 +26,10 @@ function S = readImageStack(p, opts)
 %            the first slice).
 %   .avi / .mp4 / .mov / .mj2 - video (VideoReader): grey frames and the
 %            frame rate.
+%   folders and vendor files (readImagingFolder): Inscopix .isxd,
+%            ThorImageLS (Experiment.xml + .raw), Bruker Prairie View (the
+%            PVScan .xml and its TIFFs), UCLA Miniscope (numbered .avi with
+%            timeStamps.csv / timestamp.dat and metaData.json)
 %   .dat   - Perimed PeriCam PSI / PIMSoft recording (readPerimedDat):
 %            speckle contrast images (kind 'contrast'), or the perfusion
 %            images PIMSoft shows with opts.Perimed = 'perfusion' (kind
@@ -47,14 +52,26 @@ function S = readImageStack(p, opts)
 % NeuroAnalyzer:io:unknownFormat. Base MATLAB only.
 %
 if nargin < 2 || isempty(opts), opts = struct(); end
-if exist(p, 'file') ~= 2
+isDir = exist(p, 'dir') == 7;
+if exist(p, 'file') ~= 2 && ~isDir
     error('NeuroAnalyzer:io:fileNotFound', 'File not found: %s', p);
 end
-[~, ~, ext] = fileparts(p);
+[folder, base, ext] = fileparts(p);
 S = struct('stack', [], 't', [], 'fps', NaN, 'exposureMs', NaN, 'pixelSizeUm', NaN, ...
     'dark', [], 'stim', [], 'roiMasks', [], 'roiNames', {{}}, 'kind', '', 'truth', [], ...
     'info', struct('format', '', 'file', p, 'variable', '', 'nChannels', 1, 'channel', 1, 'notes', {{}}));
+vendor = isDir || any(strcmpi(ext, {'.isxd', '.xml', '.raw'})) || ...
+    (strcmpi(ext, '.avi') && ~isempty(regexp(base, '^(msCam)?\d+$', 'once')) && ...
+    (exist(fullfile(folder, 'timeStamps.csv'), 'file') == 2 || exist(fullfile(folder, 'timestamp.dat'), 'file') == 2));
+if vendor
+    S = readImagingFolder(p, S, opts);
+    if ~isDir && strcmpi(ext, '.avi')
+        S.info.notes{end+1} = 'Every numbered video of the Miniscope folder was read.';
+    end
+    ext = '';
+end
 switch lower(ext)
+    case ''
     case '.mat'
         S = readMat(p, S);
     case {'.tif', '.tiff'}

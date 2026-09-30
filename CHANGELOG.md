@@ -67,6 +67,15 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   slices with flyback frames, frame timestamps) and Aperio .svs (MPP,
   magnification). Multi-channel TIFFs open on one channel and the first
   slice.
+- **Imaging files from microscope software** (`core/io/readImagingFolder.m`,
+  `writeImagingFormat.m`), in ROI analysis and every reader of image
+  stacks: Inscopix .isxd movies (uint16, float32, uint8; frame rate and
+  pixel size from the JSON footer), ThorImageLS folders (Experiment.xml +
+  .raw, channels, averaging, fast z), Bruker Prairie View T-series and
+  Z-series (PVScan .xml, one TIFF per frame, frame times, microns per
+  pixel) and UCLA Miniscope folders (numbered videos, timeStamps.csv /
+  timestamp.dat, metaData.json). ROI analysis now also reads the frame
+  interval of TIFFs.
 
 ### Changed
 

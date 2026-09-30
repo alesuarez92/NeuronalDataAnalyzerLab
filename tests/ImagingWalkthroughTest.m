@@ -21,6 +21,7 @@ function setupOnce(tests)
     addpath(fullfile(root, 'apps'));
     addpath(fullfile(root, 'core'));
     addpath(fullfile(root, 'core', 'imaging'));
+    addpath(fullfile(root, 'core', 'io'));
     addpath(fullfile(root, 'core', 'demo'));
     tests.TestData.outDir = fullfile(root, 'test-artifacts', 'screens', 'walkthrough');
     if ~exist(tests.TestData.outDir, 'dir'), mkdir(tests.TestData.outDir); end
@@ -161,4 +162,64 @@ end
 
 function deleteIfExists(f)
     if exist(f, 'file') == 2, delete(f); end
+end
+
+function testMicroscopeFiles(tests)
+    % Files from microscope software open with their frame rate and channel choice
+    d = tempname; mkdir(d); cl = onCleanup(@() rmdir(d, 's'));
+    st = uint16(repmat(reshape(1:12, 1, 1, 12), 16, 20) * 10);
+    st(4:8, 5:9, :) = st(4:8, 5:9, :) + 500;
+    app = ROIAnalysisApp(); c = onCleanup(@() delete(app.UIFig));
+    f = fullfile(d, 'movie.isxd');
+    writeImagingFormat('isxd', f, st, 'Fps', 20);
+    tests.verifyTrue(logical(app.openFile(f)));
+    tests.verifyEqual(app.nFrames(), 12);
+    tests.verifyTrue(app.TimeFromFile);
+    tests.verifyEqual(app.TimeVec(end), 11 / 20, 'AbsTol', 1e-9);
+    thor = fullfile(d, 'thor');
+    writeImagingFormat('thorimage', thor, cat(4, reshape(st, 16, 20, 1, 12), reshape(st + 1, 16, 20, 1, 12)), 'Fps', 30);
+    tests.verifyTrue(logical(app.openFile(fullfile(thor, 'Experiment.xml'))));
+    tests.verifyEqual(app.TimeVec(2), 1 / 30, 'AbsTol', 1e-9);
+    tests.verifyEqual(double(app.Stack(:, :, 3)), double(st(:, :, 3)));
+    % An ImageJ TIFF with a frame interval
+    tf = fullfile(d, 'ij.tif');
+    t = Tiff(tf, 'w');
+    for k = 1:12
+        if k > 1, t.writeDirectory(); end
+        tags = struct('ImageLength', 16, 'ImageWidth', 20, 'Photometric', Tiff.Photometric.MinIsBlack, ...
+            'BitsPerSample', 16, 'SamplesPerPixel', 1, 'PlanarConfiguration', Tiff.PlanarConfiguration.Chunky, ...
+            'Compression', Tiff.Compression.None);
+        if k == 1
+            tags.ImageDescription = sprintf('ImageJ=1.54f\nimages=12\nframes=12\nunit=\\u00B5m\nfinterval=0.25\n');
+            tags.XResolution = 2; tags.YResolution = 2; tags.ResolutionUnit = Tiff.ResolutionUnit.None;
+        end
+        t.setTag(tags);
+        t.write(st(:, :, k));
+    end
+    t.close();
+    tests.verifyTrue(logical(app.openFile(tf)));
+    tests.verifyEqual(app.TimeVec(end), 11 * 0.25, 'AbsTol', 1e-9);
+    M = tiffMeta(imfinfo(tf));
+    tests.verifyEqual(M.pixelSizeUm, 0.5, 'AbsTol', 1e-9, 'ImageJ um written as \\u00B5m');
+    % A UCLA Miniscope (V4) folder: two numbered videos, time stamps, metadata
+    ms = fullfile(d, 'Miniscope'); mkdir(ms);
+    for v = 0:1
+        w = VideoWriter(fullfile(ms, sprintf('%d.avi', v)), 'Grayscale AVI');
+        w.FrameRate = 30;
+        open(w);
+        for k = 1:6, writeVideo(w, uint8(st(:, :, v * 6 + k) / 10)); end
+        close(w);
+    end
+    ts = 1000 + (0:11) * 33.4;                              % ms, not exactly 30 Hz
+    fid = fopen(fullfile(ms, 'timeStamps.csv'), 'w');
+    fprintf(fid, 'Frame Number,Time Stamp (ms),Buffer Index\n');
+    fprintf(fid, '%d,%.1f,0\n', [0:11; ts]);
+    fclose(fid);
+    fid = fopen(fullfile(ms, 'metaData.json'), 'w');
+    fprintf(fid, '{"deviceName": "Miniscope", "deviceType": "Miniscope_V4_BNO", "frameRate": "30FPS"}');
+    fclose(fid);
+    tests.verifyTrue(logical(app.openFile(fullfile(ms, '0.avi'))));
+    tests.verifyEqual(app.nFrames(), 12, 'both videos');
+    tests.verifyEqual(app.TimeVec, (ts - ts(1)) / 1000, 'AbsTol', 1e-6, 'times from timeStamps.csv');
+    shot(tests, app, 'ROIAnalysisApp_microscope_files');
 end

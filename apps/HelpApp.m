@@ -939,7 +939,9 @@ classdef HelpApp < handle
             t.inputs = {
                 '`.mat` with `stack` or `frames` (H × W × N grayscale or H × W × 3 × N RGB; otherwise the first variable is used)'
                 'Optional in the .mat: `timeVec` or `t` (one time per frame), `roiMask` (logical H × W) or `roiMasks` (H × W × K, optional `roiNames`), used as the first ROIs'
-                'Multi-frame TIFF: RGB frames are converted to grayscale (mean of the colour channels); time = frame index'};
+                'Multi-frame TIFF: RGB frames are converted to grayscale (mean of the colour channels). The frame interval, pixel size and channels are read from ImageJ, OME-TIFF and ScanImage files (one channel and the first slice are used); otherwise time = frame index'
+                'Inscopix `.isxd` movies (processed recordings; raw nVista files with frame headers: export them from Inscopix Data Processing first)'
+                'ThorImageLS: choose `Experiment.xml` (or the `.raw`) of the folder; Bruker Prairie View: choose the T-series `.xml` (its TIFFs are read, with their frame times); UCLA Miniscope: choose `0.avi` (or `msCam1.avi`): every numbered video of the folder is read, with the times of `timeStamps.csv`'};
             t.outputs = {
                 '.csv: `Time` plus one column per measure (Intensity, Movement, DFF; with several ROIs `<measure>_<ROI name>`), or `Diameter_px` (+ `Diameter_standard_px`, `Replaced` when robust); for a kymograph, a matrix (first row = time)'
                 '.mat: struct `results` with the series (one row per ROI), `roiMasks` / `roiNames`, `roiMask` (ROI 1), `lineStart` / `lineEnd`, `motionCorrection` and `shifts`, and the preprocessing and diameter settings'};
@@ -997,7 +999,7 @@ classdef HelpApp < handle
                 '* **Regions**: add **Region A** = left half (x ≤ 200.5) and **Region B** = right half: **30 cells** each (**375 per mm²**, 0.08 mm² each). Marker-positive per region: **12 and 12 on day 1**, **18 and 21 on day 3** (after aligning). Without aligning, the Checks tab warns that the regions cover different tissue in the two images.'
                 '* **Checks tab** (aligned, default settings): pixel size read from the file; image 2 moved by about 9.2 px right and 6.4 px up; the marker channel was about 2.6 px off (corrected; listed as a row to check, so look at the composite: markers should sit on their nuclei); **20 small objects** and **1 elongated object** not counted; **6 extra cells** found by splitting the touching pairs.'};
             t.inputs = {
-                'TIFF (.tif / .tiff): every page is a channel (one RGB page: its colours); the pixel size is read from ImageJ / resolution tags when present'
+                'TIFF (.tif / .tiff): every page is a channel (one RGB page: its colours); the pixel size is read from ImageJ (also µm), OME-TIFF, Aperio .svs or the resolution tags when present'
                 'PNG, JPG, BMP: the colour channels (a grey image is one channel); type the pixel size'
                 '.mat: `images` (H × W × C × N) or `image` (H × W × C); optional `channelNames`, `imageNames`, `pixelSizeUm`'
                 'Several files at once: one image each (sections, time points, wells), all with the same channels and size'};
