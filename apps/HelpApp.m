@@ -7,7 +7,7 @@
 % Optional constructor argument topic (e.g. 'LDF Extract', 'Filtering')
 % opens the window on that topic (case-insensitive). Topic titles are the
 % keys other windows use and must not change:
-%   Welcome | LDF Extract | LDF Process | Filtering | LDF Average |
+%   Welcome | LDF Extract | LDF Process | Filtering | LDF Average | Laser Speckle |
 %   Ephys Extract | LFP Analysis | MUA Analysis | ROI Analysis |
 %   Signal Characterization
 %
@@ -476,7 +476,7 @@ classdef HelpApp < handle
         function tp = topicData()
             tp = [ ...
                 HelpApp.topicWelcome(), HelpApp.topicLDFExtract(), HelpApp.topicLDFProcess(), ...
-                HelpApp.topicFiltering(), HelpApp.topicLDFAverage(), HelpApp.topicEphysExtract(), ...
+                HelpApp.topicFiltering(), HelpApp.topicLDFAverage(), HelpApp.topicLaserSpeckle(), HelpApp.topicEphysExtract(), ...
                 HelpApp.topicLFPAnalysis(), HelpApp.topicMUAAnalysis(), HelpApp.topicROIAnalysis(), ...
                 HelpApp.topicHistology(), HelpApp.topicEEGAnalysis(), HelpApp.topicSignalCharacterization(), HelpApp.topicBatch(), HelpApp.topicSessions()];
         end
@@ -484,7 +484,7 @@ classdef HelpApp < handle
         %% topicWelcome - Overview of the launcher, project folders, help
         function t = topicWelcome()
             t = mkTopic('Welcome', 'Getting started', ...
-                'Neuronal Data Analyzer Lab: analysis of blood flow (LDF), electrophysiology, EEG and imaging, step by step.');
+                'Neuronal Data Analyzer Lab: analysis of blood flow (LDF, laser speckle), electrophysiology, EEG and imaging, step by step.');
             t.quick = {
                 'In the launcher, click **Set folders** and choose your **Import** folder (raw data) and **Export** folder (results). You can use one folder for both.'
                 'New here? Pick a window on the left and click **Try it with demo data**: it opens that window with synthetic data whose answers are known, so you can practise and check your numbers before using your own recordings. The **Course** and the **Virtual lab** are coming soon.'
@@ -499,6 +499,7 @@ classdef HelpApp < handle
                 '| demo_ldf_export.mat | LDF Extract | LabChart-style export, 300 s at 1000 Hz: stimulus on channel 6 (5 s pulses every 30 s from 30 s), LDF on channel 8 (~120 PU) with a +30 PU response peaking ~4 s after each onset |'
                 '| demo_ldf_cropped.mat | LDF Process | The same recording cropped to 20–280 s (`stim`, `LDF`, `t`, `Fs`) |'
                 '| demo_ldf_trials.mat | LDF Average, Signal Characterization | 8 trials from −5 to 20 s at 10 Hz (`segmentedLDF`, `segmentedTime`) |'
+                '| demo_lsci.mat | Laser Speckle | Raw laser speckle images, 64 × 80 px, 900 frames at 10 Hz, exposure 5 ms, dark level 100: cortex K = 0.22, a vessel K = 0.07, a static corner K = 0.70; four stimuli (10, 30, 50, 70 s) raise the flow of an activated disk by 25% (three ROIs included) |'
                 '| demo_tank/ | Ephys Extract | 30 s TDT-like block: 8 raw channels at 24414 Hz and a whisker stimulus (20 ms pulses every 2 s from 1 s) |'
                 '| demo_lfp.mat | LFP Analysis, Signal Characterization | 8-channel LFP at 1017 Hz, 100 µm spacing: ERP with N1 at 15 ms and P2 at 40 ms, largest at channel 4 |'
                 '| demo_mua.mat | MUA Analysis | Channels 3–5 at 24414 Hz with three units that fire more for 50 ms after each stimulus |'
@@ -512,6 +513,7 @@ classdef HelpApp < handle
                 'Each file also stores the ground truth in a `truth` variable. Use **Generate all demo files…** to write them to a folder (and optionally make it your Import folder), or the **Try it with demo data** button on any topic to open that window with its demo already loaded.'};
             t.inputs = {
                 'LabChart .mat export (LDF)'
+                'Laser speckle images: raw camera frames, contrast or exported perfusion images (.mat, TIFF, video)'
                 'TDT tank / block folder, Intan .rhd, Open Ephys binary folder or NWB 2.x file (electrophysiology; TDT needs the TDT MATLAB SDK)'
                 'Image stack .mat or multi-frame TIFF (imaging)'
                 'Any saved result with a time vector and signal (response features)'};
@@ -524,7 +526,7 @@ classdef HelpApp < handle
                 'The **Learn** area: the **Course** (step-by-step lessons in the real windows) and the **Virtual lab** (a simulated experiment to plan, record and analyse) are shown with a greyed-out **Coming soon** button: they are not in this release. **? Help** at the top right opens this Help; every window''s topic has **Try it with demo data**.'
                 'The **Analyses** area has one tile per technique, grouped by family in the same order as the website''s Analyses menu. Each tile has its steps as numbered buttons (hover one to see which file goes in and out) and a **?** that opens its topic here.'
                 '| Family | Tile: windows, in order | Starts from | Ends with |'
-                '| Blood flow | LDF: 1 Extract → 2 Process → 3 Average | LabChart .mat export | Trials .mat; grand average (mean ± SD) |'
+                '| Blood flow | LDF: 1 Extract → 2 Process → 3 Average; Laser speckle | LabChart .mat export; laser speckle images (raw, contrast or perfusion) | Trials .mat; grand average (mean ± SD); flow maps, flow per ROI, response map |'
                 '| Electrophysiology | LFP: 1 Extract → 2 LFP analysis; MUA: 1 Extract → 2 MUA analysis | TDT tank, Intan .rhd, Open Ephys folder or .nwb | ERP, CSD, time–frequency; spike times, clusters, rasters, rates |'
                 '| EEG | EEG analysis | Cleaned EEG: EEGLAB .set, FieldTrip .mat, BrainVision .vhdr or plain .mat, one file per participant | ERPs per condition, mean / peak amplitude, statistics |'
                 '| Imaging | ROI analysis; Histology / culture | Image stack (.mat or TIFF); still images (TIFF, PNG / JPG, .mat) | Brightness, ΔF/F, kymograph, vessel diameter; cell counts, markers, regions |'
@@ -677,6 +679,62 @@ classdef HelpApp < handle
                 'A file adds no trials', 'It does not contain segmentedLDF / segmentedTime; load the file saved by **Save trials**.'
                 '"No pre-stimulus baseline available"', 'The trials start at t = 0. Segment again with pre > 0 s.'};
             t.images = {'LDFAverageWorkflow.png', 'LDFAveragePrinciple.png'};
+        end
+
+        %% topicLaserSpeckle - Laser speckle flowmetry (LSCI): contrast, flow index, responses, maps
+        function t = topicLaserSpeckle()
+            t = mkTopic('Laser Speckle', 'Blood flow · imaging', ...
+                'Map blood flow from laser speckle images: the speckle contrast in every pixel, a flow index, the flow in regions over time, the response to each stimulus and where the flow changed.');
+            t.quick = {
+                '**1 Load images**: click **Load images…** and choose a .mat (frames H × W × N), a multi-frame TIFF or a video (or **Try demo data**). Check **Images are**: **Raw speckle images** straight from the camera, **Speckle contrast (K)** images, or **Perfusion / flux images** already computed by a commercial system (PeriCam PSI, moorFLPI, RFLSI…; used as they are). Check the **Frame rate** and, for the 1/τc model, the **Exposure** (read from the file when it says).'
+                '**2 Contrast and flow** (raw images): **Spatial** contrast in a 7 × 7 window is the usual choice; **Frames per value** averages the contrast of several frames (set to about 2 values per second when you load). Type the camera **Dark level** (an image with the laser off). **Flow index**: 1/K² (the speckle flow index), or 1/τc from the exposure model.'
+                '**3 ROIs**: click **Add ROI** and drag a rectangle over each region (the ROIs of a .mat file are loaded with it). Without ROIs the whole image is one region.'
+                '**4 Stimulus, trials and Run**: **Onsets** from the stimulus trace in the file, a **Regular** protocol (first onset, interval, count) or **None**. **Before / After** set the trial (the part before 0 s is its baseline) and **Resp. from / to** the response window. Click **Run**.'
+                '**Read the results**: **Show → Response map (%)** colours where the flow rose (red) or fell (blue); **Average response** has one curve per ROI (mean ± SD) with its mean change in the response window in the legend; **Flow over time** the whole recording; **Checks** says what to look at before using the numbers.'
+                '**5 Export**: **Export results…** writes a .csv (time, flow change % and flow index per ROI) or a .mat (maps, traces, trials, masks, settings); **Save trials…** writes the trials of the selected ROI in the LDF trial format, which **LDF Average** and **Response features** open. **Save session…**, **Report (PDF)…** and **Methods text…** keep the analysis.'};
+            t.demo = {
+                '* **Data**: `demo_lsci.mat` (or **Try demo data**): raw speckle images of a rodent cortex, **64 × 80 px, 900 frames at 10 Hz (90 s)**, exposure **5 ms**, camera dark level **100 counts** (uint16). Each pixel is an independent speckle whose contrast follows the exposure model with β = 1.'
+                '* **Tissue**: cortex (parenchyma) with τc = T/20 (**K = 0.22**), a vessel (x = 14–25 px) with τc = T/200 (**K = 0.07**, much faster flow) and a static corner (bone, **K = 0.70**, no flow).'
+                '* **Stimuli**: 5 s pulses at **10, 30, 50 and 70 s** (`stim` in the file). In an **activated disk** (centre x = 52, y = 28, radius 12 px) the flow rises by **25%** at **4 s** after each onset and returns within about 12 s; nowhere else does the flow change.'
+                '* **ROIs in the file**: **Activated area** (inside the disk), **Control cortex**, **Vessel**.'
+                '* **Run with the defaults** (spatial 7 × 7, 5 frames per value = 2 Hz, dark level 100, 1/K²): 4 trials; **Activated area about +21%** in the 2–6 s window (the true mean flow change there is +21.9%; 1/K² sees +21.3%), peak about +25% near 4 s; **Control cortex and Vessel about 0%** (within ±3%). The response map shows a red disk of about +20% at the activated area and 0 elsewhere.'
+                '* **Show → Speckle contrast K**: cortex 0.22, vessel 0.07 (dark), static corner 0.70 (bright). The vessel''s edges look wider than 12 px because the 7 × 7 window mixes vessel and cortex there.'
+                '* **Flow index → 1/τc (exposure model)**: about **4000 /s** in the cortex and **40000 /s** in the vessel; the activated area rises slightly more than with 1/K² (closer to the true flow change).'
+                '* **Dark level 0** instead of 100: the contrast drops by about 5% everywhere and **Checks** reminds you to measure the dark level; the relative responses hardly change.'};
+            t.inputs = {
+                '`.mat` with the images in `frames` or `stack` (H × W × N; any numeric type); optional `t` (s per frame) or `fps`, `exposureMs`, `dark` (counts), `stim` (one value per frame, or a faster trace over the same time), `roiMasks` (H × W × K logical) with `roiNames`, and `kind` (''raw speckle'', ''contrast'' or ''perfusion'')'
+                'Multi-frame TIFF (raw camera frames or exported perfusion / flux images; the frame interval is read from ImageJ TIFFs) or a video (.avi, .mp4: frame rate from the file; avoid compressed videos for raw speckle)'
+                'Perfusion images from commercial systems: export them as TIFF (or MATLAB) from the system''s software and choose **Perfusion / flux images**'};
+            t.outputs = {
+                '.csv: `Time_s`, then per ROI `FlowChange_pct_<ROI>` (change from the baseline window) and `FlowIndex_<ROI>`'
+                '.mat: struct `results` with the maps (`flowMean`, `K2Mean`, `responseMap`), `t`, `roiFlow`, `roiRel`, `trials` (ROI × trial × sample, %), `trialMean` / `trialSD`, `response`, `peak`, `peakTime`, `onsets`, `checks`, the ROI masks and names and every setting'
+                '**Save trials**: `segmentedLDF` (trials × samples, % change of the selected ROI), `segmentedTime` (s from onset), `Fs`, `onsetTimes`, `roiName`, `units`: the LDF trial format, for **LDF Average** and **Response features**'};
+            t.details = {
+                '## Speckle contrast'
+                'A surface lit by a laser shows a grainy **speckle** pattern. Moving red blood cells change it during the camera exposure, so the pattern is blurred: its **contrast K = σ / mean** of the intensity drops where blood flows faster (K near 1: still; near 0: fast flow).'
+                '* **Spatial**: K of the pixels in a window around each pixel (5 × 5 or 7 × 7), in every frame. It keeps the time resolution but blurs the image by the window: small vessels look wider, and a region only gives its own contrast where the window stays inside it.'
+                '* **Temporal**: K of each pixel over N frames (15–25 usual). The image stays sharp; the time resolution drops by N. Needs a still preparation.'
+                '* **Frames per value** (spatial): the K² of this many frames is averaged. Speckle is noisy; averaging frames is standard (commercial systems do it too).'
+                '* **Dark level**: the camera offset adds to the mean but not to the σ, so without subtracting it the contrast is too low.'
+                '## Flow index'
+                '* **1/K²** (speckle flow index): for exposures much longer than the decorrelation time τc, K² ≈ β τc / (2T), so 1/K² is proportional to 1/τc and to the speed of the red blood cells. Relative changes of 1/K² follow changes in flow closely; for a +25% flow change it shows about +24%.'
+                '* **1/τc (exposure model)**: solves K² = β (e^−2x − 1 + 2x) / (2x²), x = T/τc, for every value (Bandyopadhyay et al. 2005; Boas & Dunn 2010) and gives 1/τc in 1/s. It needs the exposure T; **β** (0–1) is the contrast of still speckle for your optics: it changes absolute values, not relative changes.'
+                '* **Perfusion / flux images** from a commercial system are used as they are (their own units).'
+                '## ROIs, trials and the response map'
+                '* The K² (or perfusion) of a ROI''s pixels is averaged in each frame, then converted to the flow index. **Flow over time** is relative to the baseline window (from the start to the first stimulus).'
+                '* Each trial is cut from **Before** to **After** the onset and expressed as % change from its own mean before 0 s. **Average response** is the mean ± SD over trials; the **response** is its mean in the response window (robust); the **peak** is its largest value after onset (noise makes it larger).'
+                '* **Response map**: in every pixel, the flow of the response window divided by the flow before the onsets (both averaged over trials), minus 1, in %.'
+                '## Checks'
+                'Saturated pixels (they lower the contrast), no dark level or pixels below it, a small window, a contrast outside the usual range (static tissue, wrong exposure or already processed images), trials that did not fit, and fewer than 3 trials.'};
+            t.trouble = {
+                'The contrast is close to 0 everywhere, or flow index values are huge', 'The images are probably already processed (perfusion or contrast): set **Images are** accordingly.'
+                'The contrast is above 0.6 everywhere', 'Mostly static tissue, a very short exposure, or speckles much larger than a pixel (close the aperture less / zoom out). Check the focus and the laser.'
+                'The traces are very noisy', 'Increase **Frames per value** (e.g. to one flow value per second), use larger ROIs, or record more stimuli.'
+                '"Type the frame rate"', 'The file does not say it: type the **Frame rate (Hz)** in step 1.'
+                'Stimuli left out (Checks tab)', 'Their trial (Before … After) does not fit in the recording; shorten Before / After.'
+                'The response is smaller than expected', 'With spatial contrast, keep ROIs at least half a window inside the activated area: windows that reach outside mix in unchanged tissue. Try **1/τc** with the exposure for large changes.'
+                '"drawrectangle needs the Image Processing Toolbox"', 'Save the ROIs as `roiMasks` (H × W × K) in the .mat with the images.'};
+            t.images = {};
         end
 
         %% topicEphysExtract - Extract Ephys (TDT, LFP, MUA)

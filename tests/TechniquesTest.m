@@ -25,7 +25,7 @@ end
 
 function testEveryWindowClassExists(tests)
     c = Techniques.windows();
-    tests.verifyGreaterThanOrEqual(numel(c), 11);   % 11 windows since Course, Virtual lab and the Help card left the launcher
+    tests.verifyGreaterThanOrEqual(numel(c), 12);   % 12 windows with Laser speckle (Course, Virtual lab: not yet)
     for k = 1:numel(c)
         mc = meta.class.fromName(c{k});
         tests.verifyNotEmpty(mc, sprintf('window class %s does not exist', c{k}));
@@ -124,7 +124,7 @@ function testDemoChoices(tests)
     [labels, classes] = Techniques.demoChoices();
     tests.verifyEqual(numel(unique(classes)), numel(classes), 'one entry per window');
     tests.verifyEqual(numel(labels), numel(classes));
-    tests.verifyEqual(labels(1:4), {'Extract LDF', 'Process LDF', 'Average LDF', 'Extract LFP / MUA'});
+    tests.verifyEqual(labels(1:5), {'Extract LDF', 'Process LDF', 'Average LDF', 'Laser speckle', 'Extract LFP / MUA'});
     tests.verifyTrue(any(strcmp(labels, 'EEG analysis')));
     tests.verifyEqual(Techniques.windowName('HistologyApp'), 'Histology / culture');
     tests.verifyEqual(Techniques.windowName('NoSuchApp'), 'NoSuchApp');
@@ -152,13 +152,14 @@ function testPackKeepsFamiliesTogether(tests)
             tests.verifyEqual([Bf.head], [Bf.first] == 1);
         end
     end
-    % Default width: Blood flow + Electrophysiology | EEG + Imaging | Across techniques
+    % Default width: Blood flow (LDF, laser speckle) + EEG | Electrophysiology |
+    % Imaging | Across techniques (10 tiles in 3 columns need 4 rows)
     B = Main.pack(counts, 3);
-    tests.verifyEqual([B.row], [1 1 2 2 3]);
-    tests.verifyEqual([B.col], [1 2 1 2 1]);
-    % Two columns: EEG fills the gap next to Blood flow
+    tests.verifyEqual([B.row], [1 2 1 3 4]);
+    tests.verifyEqual([B.col], [1 1 3 1 1]);
+    % Two columns: one family per row, Across techniques over two rows
     B = Main.pack(counts, 2);
-    tests.verifyEqual(B([B.family] == 3).row, 1);
+    tests.verifyEqual([B.row], [1 2 3 4 5 6]);
 end
 
 function testColumnsForWidth(tests)

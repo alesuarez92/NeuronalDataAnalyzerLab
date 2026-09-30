@@ -19,6 +19,10 @@
 %   - histology (demo-like session): images, pixel size, alignment, the
 %     counting settings in um, Otsu (1979) cited only for the automatic
 %     threshold, markers and regions;
+%   - laser speckle (the demo analysed headless): image size, exposure,
+%     dark level, window, frames averaged, flow index, ROIs, trials and
+%     the response window; Briers & Webster / Boas & Dunn cited, the
+%     exposure model (Bandyopadhyay et al.) only when used;
 %   - EEG analysis (demo-like session): participants, EEGLAB cited, the
 %     history read from the files, baseline, the measure and the
 %     repeated-measures test on it; a continuous recording's epochs;
@@ -179,6 +183,46 @@ function testHistology(tests)
     s.results = rmfield(s.results, 'counts');
     txt3 = MethodsWriter.fromSession(s);
     tests.verifyFalse(contains(txt3, 'Cells were counted'), 'No counting text before counting');
+end
+
+function testLaserSpeckle(tests)
+    % A session as LSCIAnalysisApp.sessionState builds it, from the demo analysed headless
+    d = demoLSCI(struct('Seconds', 40));
+    p = LaserSpeckle.defaults();
+    p.Dark = d.dark; p.Fps = d.fps; p.ExposureMs = d.exposureMs; p.Frames = 5;
+    p.Onsets = LaserSpeckle.onsetsFromStimulus(d.stim, d.t, 1);
+    R = LaserSpeckle.analyze(d.frames, d.t, d.roiMasks, p);
+    s = Session.new('LSCIAnalysisApp');
+    s.settings.params = p;
+    s.summary = {sprintf('Images: %d x %d px, %d frames (raw); 3 ROI(s)', size(d.frames, 2), size(d.frames, 1), ...
+        size(d.frames, 3))};
+    s.results = struct('fps', R.fps, 'roiNames', {d.roiNames}, 'onsets', R.onsets, 'response', R.response);
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['Laser speckle images (80 ' char(215) ' 64 pixels, 400 frames) were acquired with an ' ...
+        'exposure time of 5 ms']);
+    verifyHas(tests, txt, 'A camera dark level of 100 counts was subtracted');
+    verifyHas(tests, txt, ['sliding 7 ' char(215) ' 7 pixel window in every frame (Briers & Webster, 1996; Boas & Dunn, 2010)']);
+    verifyHas(tests, txt, 'averaged over non-overlapping blocks of 5 frames');
+    verifyHas(tests, txt, ['speckle flow index 1/K' char(178)]);
+    verifyHas(tests, txt, '3 regions of interest (Activated area, Control cortex and Vessel) at 2 values per second');
+    verifyHas(tests, txt, 'For the stimulus, a trial from 5 s before to 15 s after onset');   % 40 s: one trial fits
+    verifyHas(tests, txt, 'the mean change 2 to 6 s after onset');
+    tests.verifyTrue(any(contains(refs, 'Briers JD, Webster S (1996)')));
+    tests.verifyFalse(any(contains(refs, 'Bandyopadhyay')), 'model not used: not cited');
+    % The exposure model, temporal contrast, and exported perfusion images
+    s.settings.params.FlowModel = 'tauc'; s.settings.params.Beta = 0.8;
+    s.settings.params.Contrast = 'temporal'; s.settings.params.Frames = 25;
+    [txt2, refs2] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt2, refs2);
+    verifyHas(tests, txt2, 'over non-overlapping blocks of 25 consecutive frames (Cheng et al., 2003)');
+    verifyHas(tests, txt2, ['inverse decorrelation time 1/' char(964) 'c']);
+    verifyHas(tests, txt2, ['with T = 5 ms and ' char(946) ' = 0.8']);
+    tests.verifyTrue(any(contains(refs2, 'Bandyopadhyay R')));
+    s.settings.params.InputType = 'flow';
+    txt3 = MethodsWriter.fromSession(s);
+    verifyHas(tests, txt3, 'Perfusion images (80');
+    tests.verifyFalse(contains(txt3, 'speckle contrast K'), 'no contrast step for exported perfusion images');
 end
 
 %% ---------------------------------------------------------- core / files

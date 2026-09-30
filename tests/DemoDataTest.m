@@ -16,6 +16,7 @@ function setupOnce(tests)
     addpath(root);
     addpath(fullfile(root, 'core'));
     addpath(fullfile(root, 'core', 'imaging'));
+    addpath(fullfile(root, 'core', 'io'));
 end
 
 function testLdfExportLoadsWithDefaultChannels(tests)
@@ -106,6 +107,11 @@ function testExtraDemoKinds(tests)
     verifyEqual(tests, size(img), [400 400 2 2]);
     verifyEqual(tests, info.pixelSizeUm, 1);
     verifyEqual(tests, info.truth.nCells, 60);
+    S = readImageStack(DemoData.file('lsci'));
+    verifyEqual(tests, size(S.stack), [64 80 900]);
+    verifyEqual(tests, [S.fps S.exposureMs S.dark], [10 5 100]);
+    verifyEqual(tests, S.roiNames, {'Activated area', 'Control cortex', 'Vessel'});
+    verifyEqual(tests, S.truth.onsets, [10 30 50 70]);
     verifyEqual(tests, numel(dir(fullfile(DemoData.file('groups'), '*.mat'))), 24);
     verifyEqual(tests, exist(DemoData.file('intan'), 'file'), 2);
     verifyEqual(tests, exist(DemoData.file('openephys'), 'dir'), 7);

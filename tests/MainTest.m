@@ -114,19 +114,21 @@ function testLayoutFollowsTheWindowWidth(tests)
     tests.verifyEqual(numel(app.TileGrid.ColumnWidth), 3);
     tests.verifyEqual(headings(app), {F.name}, 'five family headings');
     tests.verifyEqual(tilePlace(app, 'ldf'), [2 1], 'Blood flow first');
-    tests.verifyEqual(tilePlace(app, 'lfp'), [2 2], 'Electrophysiology next to it');
-    tests.verifyEqual(tilePlace(app, 'eeg'), [4 1], 'EEG on the next row');
-    tests.verifyEqual(tilePlace(app, 'sessions'), [6 3], 'Across techniques last');
+    tests.verifyEqual(tilePlace(app, 'lsci'), [2 2], 'Laser speckle next to LDF');
+    tests.verifyEqual(tilePlace(app, 'eeg'), [2 3], 'EEG fills the gap next to Blood flow');
+    tests.verifyEqual(tilePlace(app, 'lfp'), [4 1], 'Electrophysiology on the next row');
+    tests.verifyEqual(tilePlace(app, 'sessions'), [8 3], 'Across techniques last');
     if ~isempty(app.CoverImage)
         tests.verifyEqual(char(app.CoverImage.Visible), 'on', 'cover art shown at the default width');
     end
 
-    % 720 x 640: 2 columns, EEG fills the gap next to Blood flow
+    % 720 x 640: 2 columns, one family per row
     resizeTo(app, 720, 640);
     tests.verifyEqual(app.Columns, 2);
     tests.verifyEqual(tilePlace(app, 'ldf'), [2 1]);
-    tests.verifyEqual(tilePlace(app, 'eeg'), [2 2]);
+    tests.verifyEqual(tilePlace(app, 'lsci'), [2 2]);
     tests.verifyEqual(tilePlace(app, 'lfp'), [4 1]);
+    tests.verifyEqual(tilePlace(app, 'eeg'), [6 1]);
     tests.verifyEqual(headings(app), {F.name}, 'every family keeps its heading');
     tests.verifyEqual(numel(app.LearnGrid.ColumnWidth), 2, 'Learn: two tiles per row');
     pause(0.5);
@@ -151,7 +153,7 @@ function testLayoutFollowsTheWindowWidth(tests)
     % Back to the default: 3 columns again
     resizeTo(app, Main.DefaultSize(1), 900);
     tests.verifyEqual(app.Columns, 3);
-    tests.verifyEqual(tilePlace(app, 'eeg'), [4 1]);
+    tests.verifyEqual(tilePlace(app, 'eeg'), [2 3]);
     tests.verifyEqual(headings(app), {F.name});
 end
 

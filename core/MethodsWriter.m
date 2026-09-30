@@ -16,7 +16,7 @@
 %   [txt, refs] = MethodsWriter.fromSessions(list)
 %       Several sessions of a pipeline (cellstr of paths, struct array or
 %       cell of structs) in pipeline order (Extract LDF -> Process LDF ->
-%       LDF Average -> Extract Ephys -> LFP Analysis -> MUA Analysis ->
+%       LDF Average -> Laser speckle -> Extract Ephys -> LFP Analysis -> MUA Analysis ->
 %       ROI Analysis -> Histology / culture -> EEG Analysis -> Signal
 %       Characterization), one placeholder paragraph
 %       at the start, one software paragraph at the end and one reference
@@ -50,7 +50,7 @@
 classdef MethodsWriter
     properties(Constant)
         % Window classes in pipeline order (unknown windows go before the last)
-        PipelineOrder = {'ExtractLDFApp', 'ProcessingLDFApp', 'LDFGrandAverageApp', ...
+        PipelineOrder = {'ExtractLDFApp', 'ProcessingLDFApp', 'LDFGrandAverageApp', 'LSCIAnalysisApp', ...
             'ExtractEphysApp', 'LFPAnalysisApp', 'MUAAnalysisApp', 'ROIAnalysisApp', ...
             'HistologyApp', 'EEGAnalysisApp', 'SignalCharacterizationApp'}
         Placeholder = ['[Describe the animals (species, strain, sex, age and number), anaesthesia ' ...
@@ -161,6 +161,17 @@ classdef MethodsWriter
                     'the Second International Conference on Knowledge Discovery and Data Mining (KDD-96), pp. 226-231.']
                 'otsu1979', 'Otsu, 1979', ['Otsu N (1979). A threshold selection method from gray-level ' ...
                     'histograms. IEEE Trans Syst Man Cybern 9(1):62-66.']
+                'briers1996', 'Briers & Webster, 1996', ['Briers JD, Webster S (1996). Laser speckle contrast ' ...
+                    'analysis (LASCA): a nonscanning, full-field technique for monitoring capillary blood flow. ' ...
+                    'J Biomed Opt 1(2):174-179.']
+                'boas2010', 'Boas & Dunn, 2010', ['Boas DA, Dunn AK (2010). Laser speckle contrast imaging in ' ...
+                    'biomedical optics. J Biomed Opt 15(1):011109.']
+                'bandyopadhyay2005', 'Bandyopadhyay et al., 2005', ['Bandyopadhyay R, Gittings AS, Suh SS, ' ...
+                    'Dixon PK, Durian DJ (2005). Speckle-visibility spectroscopy: a tool to study time-varying ' ...
+                    'dynamics. Rev Sci Instrum 76(9):093110.']
+                'cheng2003', 'Cheng et al., 2003', ['Cheng H, Luo Q, Zeng S, Chen S, Cen J, Gong H (2003). ' ...
+                    'Modified laser speckle imaging method with improved spatial resolution. J Biomed Opt ' ...
+                    '8(3):559-564.']
                 'delorme2004', 'Delorme & Makeig, 2004', ['Delorme A, Makeig S (2004). EEGLAB: an open source ' ...
                     'toolbox for analysis of single-trial EEG dynamics including independent component analysis. ' ...
                     'J Neurosci Methods 134(1):9-21.']
@@ -277,6 +288,7 @@ classdef MethodsWriter
                 case 'ExtractLDFApp',             paras = MethodsWriter.extractLDF(s);
                 case 'ProcessingLDFApp',          [paras, tbx] = MethodsWriter.processingLDF(s);
                 case 'LDFGrandAverageApp',        paras = MethodsWriter.ldfAverage(s);
+                case 'LSCIAnalysisApp',           paras = MethodsWriter.lsciAnalysis(s);
                 case 'ExtractEphysApp',           [paras, tbx] = MethodsWriter.extractEphys(s);
                 case 'LFPAnalysisApp',            paras = MethodsWriter.lfpAnalysis(s);
                 case 'MUAAnalysisApp',            [paras, tbx] = MethodsWriter.muaAnalysis(s);
@@ -487,6 +499,98 @@ classdef MethodsWriter
                     'the baseline), and its time after onset.'];
             end
             paras = {t};
+        end
+
+        %% lsciAnalysis - Speckle contrast, flow index, ROIs, trials and the response map
+        function paras = lsciAnalysis(s)
+            p = MethodsWriter.getf(s, 'settings.params', struct());
+            if ~isstruct(p) || ~isfield(p, 'InputType'), paras = {}; return; end
+            parts = {};
+            tok = MethodsWriter.summaryTokens(s, 'Images: (\d+) x (\d+) px, (\d+) frames');
+            dims = '';
+            if numel(tok) == 3
+                dims = sprintf(' (%s &times; %s pixels, %s frames)', tok{1}, tok{2}, tok{3});
+            end
+            fps = MethodsWriter.getf(s, 'results.fps', NaN);
+            expo = MethodsWriter.getf(p, 'ExposureMs', NaN);
+            switch p.InputType
+                case 'raw'
+                    if MethodsWriter.isNum(expo)
+                        t = sprintf(['Laser speckle images%s were acquired with an exposure time of %s ms [please ' ...
+                            'add: laser wavelength and power, camera, magnification and frame rate].'], dims, ...
+                            MethodsWriter.num(expo));
+                    else
+                        t = sprintf(['Laser speckle images%s were acquired [please add: laser wavelength and power, ' ...
+                            'camera, magnification, frame rate and exposure time].'], dims);
+                    end
+                    parts{end+1} = t;
+                    dark = MethodsWriter.getf(p, 'Dark', 0);
+                    if MethodsWriter.isNum(dark) && dark > 0
+                        parts{end+1} = sprintf('A camera dark level of %s counts was subtracted from every image.', ...
+                            MethodsWriter.num(dark));
+                    end
+                    n = MethodsWriter.getf(p, 'Frames', 1);
+                    if strcmp(MethodsWriter.getf(p, 'Contrast', 'spatial'), 'temporal')
+                        t = sprintf(['Temporal speckle contrast K = &sigma;/mean(I) was computed for every ' ...
+                            'pixel over non-overlapping blocks of %s consecutive frames ({{cheng2003}}).'], MethodsWriter.num(n));
+                    else
+                        w = MethodsWriter.num(MethodsWriter.getf(p, 'Window', 7));
+                        t = sprintf(['Spatial speckle contrast K = &sigma;/mean(I) of the intensity was computed in a sliding ' ...
+                            '%s &times; %s pixel window in every frame ({{briers1996}}; {{boas2010}})'], w, w);
+                        if MethodsWriter.isNum(n) && n > 1
+                            t = sprintf('%s, and K&sup2; was averaged over non-overlapping blocks of %s frames', t, ...
+                                MethodsWriter.num(n));
+                        end
+                        t = [t '.'];
+                    end
+                    parts{end+1} = t;
+                case 'contrast'
+                    parts{end+1} = sprintf(['Speckle contrast images%s [please add: how the contrast was ' ...
+                        'computed and by which system] were analysed.'], dims);
+                otherwise
+                    parts{end+1} = sprintf(['Perfusion images%s were exported from [please add: the laser speckle ' ...
+                        'system and software, with its settings] and analysed in the units of that system.'], dims);
+            end
+            if ~strcmp(p.InputType, 'flow')
+                if strcmp(MethodsWriter.getf(p, 'FlowModel', 'invK2'), 'tauc')
+                    parts{end+1} = sprintf(['Blood flow was indexed by the inverse decorrelation time 1/&tau;c, ' ...
+                        'obtained by solving K&sup2; = &beta;[exp(&minus;2x) &minus; 1 + 2x]/(2x&sup2;), x = T/&tau;c, ' ...
+                        'for each value ({{bandyopadhyay2005}}; {{boas2010}}), with T = %s ms and &beta; = %s.'], ...
+                        MethodsWriter.num(expo), MethodsWriter.num(MethodsWriter.getf(p, 'Beta', 1)));
+                else
+                    parts{end+1} = ['Blood flow was indexed by the speckle flow index 1/K&sup2;, which is ' ...
+                        'proportional to the inverse decorrelation time for exposures much longer than it ({{boas2010}}).'];
+                end
+            end
+            names = cellstr(MethodsWriter.getf(s, 'results.roiNames', {}));
+            if ~isempty(names)
+                if numel(names) == 1 && strcmp(names{1}, 'Whole image')
+                    t = 'The flow index was averaged over the whole image';
+                else
+                    if numel(names) == 1, roiW = 'one region of interest'; else, roiW = sprintf('%d regions of interest', numel(names)); end
+                    t = sprintf('The flow index was measured in %s (%s)', roiW, MethodsWriter.listText(names));
+                end
+                if MethodsWriter.isNum(fps)
+                    t = sprintf('%s at %s values per second', t, MethodsWriter.num(fps));
+                end
+                if ~strcmp(p.InputType, 'flow')
+                    t = [t ', averaging K&sup2; over the pixels of each region before conversion'];
+                end
+                parts{end+1} = [t '.'];
+            end
+            on = MethodsWriter.getf(s, 'results.onsets', []);
+            if isnumeric(on) && ~isempty(on)
+                rw = MethodsWriter.getf(p, 'ResponseSec', [NaN NaN]);
+                if numel(on) == 1, stimW = 'For the stimulus'; else, stimW = sprintf('For each of %d stimuli', numel(on)); end
+                parts{end+1} = sprintf(['%s, a trial from %s s before to %s s after onset was expressed ' ...
+                    'as the percentage change from its mean before onset; trials were averaged (mean &plusmn; SD), ' ...
+                    'and the response was taken as the mean change %s after onset. A response map was computed ' ...
+                    'as the percentage change, in every pixel, of the flow index averaged over that window and ' ...
+                    'over trials, relative to the pre-stimulus period.'], stimW, ...
+                    MethodsWriter.num(MethodsWriter.getf(p, 'PreSec', NaN)), MethodsWriter.num(MethodsWriter.getf(p, 'PostSec', NaN)), ...
+                    MethodsWriter.secRange(rw(1), rw(2)));
+            end
+            paras = {strjoin(parts, ' ')};
         end
 
         %% extractEphys - Wideband source, LFP and MUA extraction
@@ -1837,7 +1941,7 @@ classdef MethodsWriter
         function t = entities(t)
             map = {'&mu;', 181; '&plusmn;', 177; '&times;', 215; '&ndash;', 8211; '&minus;', 8722; ...
                 '&sup2;', 178; '&sup3;', 179; '&lambda;', 955; '&sigma;', 963; '&epsilon;', 949; ...
-                '&eta;', 951; '&omega;', 969; '&psi;', 968; '&Delta;', 916};
+                '&eta;', 951; '&omega;', 969; '&psi;', 968; '&Delta;', 916; '&tau;', 964; '&beta;', 946};
             for k = 1:size(map, 1)
                 if ~isempty(strfind(t, map{k, 1}))
                     t = strrep(t, map{k, 1}, MethodsWriter.sym(map{k, 2}));

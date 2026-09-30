@@ -23,6 +23,8 @@
 %   'lfpOscillations'  demoLFPOscillations: demo LFP + 6 Hz theta, evoked 40 Hz
 %   'imagingAdvanced'  demoImagingAdvanced: jittered stack, 3 cells, RBC
 %   'histology'        demoHistology: two culture images (nuclei + marker)
+%   'lsci'             demoLSCI: raw laser speckle images, 90 s at 10 Hz, with
+%                      a known +25% flow response in an activated area
 %   'groups'           demoGroups: folder of 3 conditions x 8 animals (LDF trials)
 %   'intan' | 'openephys' | 'nwb'   demoFormats: the demo tank in that format
 % writeAll also writes eeg/ (core/demo/demoEEG: oddball scalp EEG of 8
@@ -44,7 +46,7 @@ classdef DemoData
         %% file - Path to one demo file, generated on first use and cached
         % kind: 'ldfExport' | 'ldfCropped' | 'ldfTrials' | 'tdtTank' | 'lfp' |
         %       'mua' | 'imaging' | 'lfpOscillations' | 'imagingAdvanced' |
-        %       'histology' | 'groups' | 'intan' | 'openephys' | 'nwb'. Files live in
+        %       'histology' | 'lsci' | 'groups' | 'intan' | 'openephys' | 'nwb'. Files live in
         % DemoData.folder(). For 'tdtTank' the returned path is the tank
         % folder (demo_tank/); for 'groups' the folder of group files; for
         % 'openephys' the session folder.
@@ -59,7 +61,7 @@ classdef DemoData
                 'ldfTrials', 'demo_ldf_trials.mat', 'tdtTank', fullfile('demo_tank', 'demo_tank.mat'), ...
                 'lfp', 'demo_lfp.mat', 'mua', 'demo_mua.mat', 'imaging', 'demo_imaging.mat', ...
                 'lfpOscillations', 'demo_lfp_oscillations.mat', 'imagingAdvanced', 'demo_imaging_advanced.mat', ...
-                'histology', 'demo_histology.mat');
+                'histology', 'demo_histology.mat', 'lsci', 'demo_lsci.mat');
             if ~isfield(names, kind)
                 error('NeuroAnalyzer:DemoData:unknownKind', 'Unknown demo data kind ''%s''.', kind);
             end
@@ -76,6 +78,7 @@ classdef DemoData
                     case 'lfpOscillations', DemoData.ensureDemoPath(); s = demoLFPOscillations();
                     case 'imagingAdvanced', DemoData.ensureDemoPath(); s = demoImagingAdvanced();
                     case 'histology',  DemoData.ensureDemoPath(); s = demoHistology();
+                    case 'lsci',       DemoData.ensureDemoPath(); s = demoLSCI();
                     case 'tdtTank',    tank = DemoData.tdtTank(); %#ok<NASGU>
                 end
                 if strcmp(kind, 'tdtTank')
@@ -176,6 +179,10 @@ classdef DemoData
             s = demoHistology();
             files.histology = fullfile(folder, 'demo_histology.mat');
             save(files.histology, '-struct', 's');
+
+            s = demoLSCI();
+            files.lsci = fullfile(folder, 'demo_lsci.mat');
+            save(files.lsci, '-struct', 's');
 
             g = demoGroups(fullfile(folder, 'groups'));
             files.groups = g.folder;                     % folder of 24 trial files
