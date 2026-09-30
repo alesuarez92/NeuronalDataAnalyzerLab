@@ -10,6 +10,8 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-30
+
 ### Added
 
 - **Laser speckle flowmetry** (launcher → Blood flow → *Laser speckle*,
@@ -545,6 +547,7 @@ formats, but the public surface is not yet stable. Expect tightening
 of error handling, more validation around input formats, and additional
 analyses in 0.2.x.
 
-[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.5.2...HEAD
+[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.6.0
 [0.5.2]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.5.2
 [0.5.1]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.5.1
