@@ -113,6 +113,12 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   and the vertex reference. mffpy and MNE-Python read the files written
   here with the same values, gains, pause and events, and readMFF reads
   mffpy's files. The rodent EEG demo is also written as `.mff`.
+- **XDF** (`core/io/readXDF.m`, `writeXDF.m`): LabRecorder files (Lab
+  Streaming Layer): every stream with its time stamps (full or deduced)
+  and clock offsets; EEG analysis reads the EEG stream and takes the
+  marker streams as events. pyxdf reads the files written here with the
+  same values, time stamps and markers. The rodent EEG demo is also
+  written as XDF.
 - **EEG-BIDS** (`core/io/readEEGBIDS.m`, `writeEEGBIDS.m`): EEG analysis
   opens the `sub-…_eeg` file of a BIDS dataset (OpenNeuro) with its
   sidecar files: only the EEG channels of `channels.tsv` (bad channels

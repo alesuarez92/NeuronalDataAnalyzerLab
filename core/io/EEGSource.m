@@ -1,6 +1,6 @@
 %% EEGSource.m
 % =========================================================================
-% EEG SOURCE - ONE DATA SHAPE FOR EEG FROM EEGLAB, FIELDTRIP, BRAINVISION, EDF, EGI, EEG-BIDS AND .MAT
+% EEG SOURCE - ONE DATA SHAPE FOR EEG FROM EEGLAB, FIELDTRIP, BRAINVISION, EDF, EGI, XDF, EEG-BIDS AND .MAT
 % =========================================================================
 % Every EEG file is read into one struct, so the EEG window (and anything
 % after it) does not care where the data came from:
@@ -24,7 +24,7 @@
 %
 %   list  = EEGSource.formats()           struct array: key, label, filter, hint
 %   fmt   = EEGSource.detect(path)        'eeglab' | 'fieldtrip' | 'brainvision' | 'edf' |
-%                                          'mff' (an EGI .mff folder or a file in it) |
+%                                          'mff' (an EGI .mff folder or a file in it) | 'xdf' |
 %                                          'bids' (a sub-*_eeg.* file with BIDS sidecar
 %                                          files, or a folder) | 'matrix'
 %   eeg   = EEGSource.open(path, fmt, map) read (fmt 'auto'/omitted: detect;
@@ -32,6 +32,8 @@
 %   eeg   = EEGSource.fromEDF(path)       EDF / EDF+ / BDF via readEDF: the voltage
 %                                          channels at the common rate, annotations
 %                                          and BDF Status codes as events
+%   eeg   = EEGSource.fromXDF(path)       XDF (Lab Streaming Layer) via readXDF: the
+%                                          EEG stream, marker streams as events
 %   eeg   = EEGSource.make(data, fs, Name, Value, ...)   assemble + check
 %   [ok, problems] = EEGSource.validate(eeg)
 %   lines = EEGSource.describe(eeg)       overview in plain sentences
@@ -55,15 +57,16 @@ classdef EEGSource
         %% formats - Supported sources, in dropdown order
         function list = formats()
             list = struct( ...
-                'key',    {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'mff', 'bids', 'matrix'}, ...
+                'key',    {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'mff', 'xdf', 'bids', 'matrix'}, ...
                 'label',  {'EEGLAB dataset (.set)', 'FieldTrip data (.mat)', 'BrainVision (.vhdr)', ...
-                           'EDF / BDF (.edf, .bdf)', 'EGI Net Station (.mff)', 'EEG-BIDS recording', ...
-                           'MATLAB matrix (.mat)'}, ...
+                           'EDF / BDF (.edf, .bdf)', 'EGI Net Station (.mff)', 'Lab Streaming Layer (.xdf)', ...
+                           'EEG-BIDS recording', 'MATLAB matrix (.mat)'}, ...
                 'filter', {{'*.set;*.mat', 'EEGLAB dataset (*.set, *.mat)'}, ...
                            {'*.mat', 'FieldTrip data (*.mat)'}, ...
                            {'*.vhdr', 'BrainVision header (*.vhdr)'}, ...
                            {'*.edf;*.bdf', 'EDF / EDF+ / BDF (*.edf, *.bdf)'}, ...
                            {'*.mff;info.xml', 'EGI .mff (the folder, or info.xml inside it)'}, ...
+                           {'*.xdf', 'XDF (*.xdf)'}, ...
                            {'*_eeg.edf;*_eeg.bdf;*_eeg.vhdr;*_eeg.set', 'EEG-BIDS data file (sub-*_eeg.*)'}, ...
                            {'*.mat', 'MATLAB file (*.mat)'}}, ...
                 'hint',   {'An EEGLAB .set file (with its .fdt file in the same folder, if there is one), or a .mat file holding an EEG variable', ...
@@ -71,6 +74,7 @@ classdef EEGSource
                            'Brain Products BrainVision Recorder or Analyzer: the .vhdr file, with its .vmrk and .eeg files in the same folder', ...
                            'European Data Format (EDF, EDF+) or BioSemi BDF: continuous recordings; annotations and BDF trigger codes become events', ...
                            'Magstim EGI Net Station recording: the .mff folder (or the info.xml file inside it); events, sensor positions and pauses are read', ...
+                           'LabRecorder file (Lab Streaming Layer): the EEG stream, with the marker streams as events', ...
                            'The sub-*_eeg data file of a BIDS dataset (OpenNeuro): its channels.tsv, events.tsv, electrodes.tsv and eeg.json are read with it', ...
                            'Any .mat file with the EEG as a number array: you say which variable holds what'});
         end
@@ -113,6 +117,7 @@ classdef EEGSource
                 case '.set', fmt = 'eeglab'; return;
                 case '.vhdr', fmt = 'brainvision'; return;
                 case {'.edf', '.bdf'}, fmt = 'edf'; return;
+                case '.xdf', fmt = 'xdf'; return;
                 case {'.vmrk', '.eeg'}
                     error('NeuroAnalyzer:io:unknownFormat', ['%s is one part of a BrainVision recording ' ...
                         '(markers or numbers). Choose the .vhdr file with the same name instead; it ' ...
@@ -146,6 +151,7 @@ classdef EEGSource
                 case 'edf',       eeg = EEGSource.fromEDF(p);
                 case 'bids',      eeg = readEEGBIDS(p);
                 case 'mff',       eeg = readMFF(p);
+                case 'xdf',       eeg = EEGSource.fromXDF(p);
                 case 'matrix'
                     if nargin < 3 || isempty(map)
                         g = EEGSource.guessMatrixMap(p);
@@ -160,8 +166,78 @@ classdef EEGSource
                     eeg = readEEGMatrix(p, map);
                 otherwise
                     error('NeuroAnalyzer:io:unknownFormat', ...
-                        'Unknown format ''%s'' (use eeglab, fieldtrip, brainvision, edf, mff, bids or matrix).', fmt);
+                        'Unknown format ''%s'' (use eeglab, fieldtrip, brainvision, edf, mff, xdf, bids or matrix).', fmt);
             end
+        end
+
+        %% fromXDF - XDF recording as continuous EEG
+        % The stream of type EEG (else the regularly sampled numeric stream
+        % with the most channels); channels in uV / mV / V are converted to
+        % uV. Events: string marker streams (the text) and numeric streams
+        % without a rate ('Code <n>'), at their time stamps from the first
+        % EEG sample.
+        function eeg = fromXDF(p)
+            S = readXDF(p);
+            num = find(~strcmp({S.format}, 'string') & arrayfun(@(s) numel(s.timeStamps) > 1, S));
+            k = num(strcmpi({S(num).type}, 'EEG'));
+            notes = {};
+            if isempty(k)
+                reg = num([S(num).fs] > 0);
+                if isempty(reg)
+                    [~, b, x] = fileparts(p);
+                    error('NeuroAnalyzer:eeg:invalid', '%s%s has no regularly sampled numeric stream.', b, x);
+                end
+                [~, j] = max([S(reg).nChannels]);
+                k = reg(j);
+                notes{end + 1} = sprintf('No stream of type EEG: stream "%s" (%s) is read.', S(k).name, S(k).type);
+            elseif numel(k) > 1
+                notes{end + 1} = sprintf('%d EEG streams: "%s" is read.', numel(k), S(k(1)).name);
+                k = k(1);
+            end
+            E = S(k);
+            X = E.data;
+            known = false(1, E.nChannels);
+            for c = 1:E.nChannels
+                switch lower(strrep(E.units{c}, char(181), 'u'))
+                    case {'uv', 'microvolt', 'microvolts'}, known(c) = true;
+                    case {'mv', 'millivolt', 'millivolts'}, X(c, :) = X(c, :) * 1e3; known(c) = true;
+                    case {'v', 'volt', 'volts'},            X(c, :) = X(c, :) * 1e6; known(c) = true;
+                end
+            end
+            if ~all(known)
+                notes{end + 1} = sprintf('Units not given for %d channel(s): taken as microvolts.', sum(~known));
+            end
+            fs = E.fs;
+            if fs <= 0
+                fs = E.effectiveRate;
+                notes{end + 1} = sprintf('The EEG stream has no nominal rate: %.4g Hz from its time stamps.', fs);
+            elseif isfinite(E.effectiveRate) && abs(E.effectiveRate / fs - 1) > 1e-3
+                notes{end + 1} = sprintf('Rate from the time stamps %.4f Hz (nominal %g Hz).', E.effectiveRate, fs);
+            end
+            t0 = E.timeStamps(1);
+            ev = struct('type', {}, 'latency', {}, 'duration', {});
+            for j = setdiff(1:numel(S), k)
+                M = S(j);
+                if isempty(M.timeStamps), continue; end
+                if strcmp(M.format, 'string')
+                    for i = 1:numel(M.timeStamps)
+                        ev(end + 1) = struct('type', M.data{1, i}, 'latency', M.timeStamps(i) - t0, 'duration', 0); %#ok<AGROW>
+                    end
+                elseif M.fs == 0 && M.nChannels == 1
+                    for i = 1:numel(M.timeStamps)
+                        ev(end + 1) = struct('type', sprintf('Code %g', M.data(1, i)), 'latency', ...
+                            M.timeStamps(i) - t0, 'duration', 0); %#ok<AGROW>
+                    end
+                else
+                    notes{end + 1} = sprintf('Stream "%s" (%s) is not read.', M.name, M.type); %#ok<AGROW>
+                end
+            end
+            if ~isempty(ev)
+                [~, o] = sort([ev.latency]);
+                ev = ev(o);
+            end
+            eeg = EEGSource.make(X, fs, 'Labels', E.labels, 'Events', ev, 'Notes', notes, 'Unit', 'uV', ...
+                'Source', sprintf('XDF (%s)', E.name), 'Format', 'xdf', 'File', p, 'IsEpoched', false);
         end
 
         %% fromEDF - EDF / EDF+ / BDF recording as continuous EEG

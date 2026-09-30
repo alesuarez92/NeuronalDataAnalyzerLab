@@ -64,6 +64,7 @@ their files.
 | ✅ | BrainVision (`.vhdr` / `.eeg` / `.vmrk`) | Brain Products Recorder and Analyzer; also a common export from MNE and EEGLAB. Continuous recordings with their markers, Analyzer segments (condition = marker at time 0), positions, units, and the amplifier filters used when recording. |
 | ✅ | EGI `.mff` | Magstim EGI geodesic nets: continuous recordings with pauses, events, positions and channel gains (segmented files are read as one piece). |
 | ✅ | EEG-BIDS folders | Shared datasets (OpenNeuro): the readers above plus the channel, electrode and event tables. |
+| ✅ | XDF (Lab Streaming Layer) | LabRecorder files: the EEG stream and marker streams as events, clock offsets applied. |
 | 🟢 | Neuroscan / ANT `.cnt`, g.tec, Brainstorm, ERPLAB | Later, when needed: one small, separately tested reader each. |
 
 NWB recordings are already read by Extract Ephys.

@@ -1,7 +1,7 @@
 %% EEGFormatsTest.m
 % =========================================================================
 % UNIT TESTS FOR THE EEG DATA MODEL AND IMPORTERS (EEGLAB, FIELDTRIP,
-% BRAINVISION, EDF / BDF, EGI .mff, EEG-BIDS, .mat)
+% BRAINVISION, EDF / BDF, EGI .mff, XDF, EEG-BIDS, .mat)
 % =========================================================================
 % The synthetic study written by core/demo/demoEEG (oddball scalp EEG and
 % a continuous rodent recording) is read back from every format: each
@@ -178,7 +178,7 @@ function testDetect(tests)
     verifyError(tests, @() EEGSource.detect(fdt), 'NeuroAnalyzer:io:unknownFormat');
     verifyError(tests, @() EEGSource.detect(fullfile(tests.TestData.tmp, 'none.set')), 'NeuroAnalyzer:io:fileNotFound');
     list = EEGSource.formats();
-    verifyEqual(tests, {list.key}, {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'mff', 'bids', 'matrix'});
+    verifyEqual(tests, {list.key}, {'eeglab', 'fieldtrip', 'brainvision', 'edf', 'mff', 'xdf', 'bids', 'matrix'});
     verifyEqual(tests, EEGSource.detect(d.rodent.edf), 'edf');
     verifyEqual(tests, EEGSource.detect(d.rodent.bdf), 'edf');
 end
@@ -243,6 +243,42 @@ function testRodentMFF(tests)
     verifyTrue(tests, any(contains(eeg.notes, 'paused 1 time')));
     bad = fullfile(tests.TestData.tmp, 'empty.mff'); mkdir(bad);
     verifyError(tests, @() readMFF(bad), 'NeuroAnalyzer:io:mff');
+end
+
+function testRodentXDF(tests)
+    % The demo as an XDF file: EEG stream + Markers stream on the LSL clock
+    d = tests.TestData.demo;
+    tr = d.truth.rodent;
+    verifyEqual(tests, EEGSource.detect(d.rodent.xdf), 'xdf');
+    eeg = EEGSource.open(d.rodent.xdf);
+    verifyEqual(tests, eeg.format, 'xdf');
+    verifyEqual(tests, eeg.fs, 1000);
+    verifyEqual(tests, eeg.labels, tr.labels);
+    verifyEqual(tests, double(eeg.data), double(tr.data), 'AbsTol', 1e-4);
+    verifyEqual(tests, [eeg.events.latency], tr.onsets, 'AbsTol', 1e-6);
+    verifyEqual(tests, unique({eeg.events.type}), {'flash'});
+    % Deduced time stamps, clock offsets, millivolts, a numeric marker stream
+    fs = 250; n = 2500; t = 50 + (0:n - 1) / fs;
+    X = [2 * sin(2 * pi * 6 * (t - 50)); cos(2 * pi * 9 * (t - 50))];
+    S = struct('name', {'Amp', 'Codes', 'Motion'}, 'type', {'EEG', 'Markers', 'Accelerometer'}, ...
+        'fs', {fs, 0, 50}, 'format', {'float32', 'int32', 'float32'}, 'labels', {{'C3', 'C4'}, {'Code'}, {'X'}}, ...
+        'units', {{'millivolts', 'millivolts'}, {''}, {'g'}}, 'timeStamps', {t, [52 55.5], 50 + (0:99) / 50}, ...
+        'data', {X, [3 4], zeros(1, 100)}, 'clockOffsets', {[50 0.25; 60 0.25], [50 0.25], []});
+    f = fullfile(tests.TestData.tmp, 'offsets.xdf');
+    writeXDF(f, S, 'Deduce', true, 'ChunkSize', 333);
+    R = readXDF(f);
+    verifyEqual(tests, {R.name}, {'Amp', 'Codes', 'Motion'});
+    verifyEqual(tests, R(1).timeStamps, t, 'AbsTol', 1e-9);
+    verifyEqual(tests, R(1).nClockOffsets, 2);
+    eeg = EEGSource.open(f);
+    verifyEqual(tests, eeg.labels, {'C3', 'C4'});
+    verifyEqual(tests, double(eeg.data), X * 1e3, 'AbsTol', 1e-3, 'millivolts to microvolts');
+    verifyEqual(tests, {eeg.events.type}, {'Code 3', 'Code 4'});
+    verifyEqual(tests, [eeg.events.latency], [2 5.5], 'AbsTol', 1e-9);
+    verifyTrue(tests, any(contains(eeg.notes, 'Motion')), 'the accelerometer stream is not read');
+    bad = fullfile(tests.TestData.tmp, 'bad.xdf');
+    fid = fopen(bad, 'w'); fwrite(fid, uint8('NOTXDF'), 'uint8'); fclose(fid);
+    verifyError(tests, @() readXDF(bad), 'NeuroAnalyzer:io:xdf');
 end
 
 function testRodentBIDS(tests)

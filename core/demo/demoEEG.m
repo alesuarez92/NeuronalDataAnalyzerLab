@@ -46,6 +46,9 @@
 %              trigger code 1 for 10 ms at each flash
 %   mff        rodent only: an EGI .mff folder (writeMFF), blocks of 1000
 %              samples, 'flash' events, positions (cm = mm / 10)
+%   xdf        rodent only: a LabRecorder-style .xdf (writeXDF): an EEG
+%              stream (float32, microvolts, time stamps from 1000 s) and a
+%              Markers stream with 'flash' at each onset
 %   bids       rodent only: an EEG-BIDS dataset (writeEEGBIDS) in bids/:
 %              sub-rat01/ses-1/eeg/*_task-flash_eeg.edf with channels,
 %              events (flash), electrodes (bregma, mm) and eeg.json
@@ -63,19 +66,19 @@
 %   'Participants'  number of scalp participants (default 8)
 %   'Kinds'         subset of {'scalp', 'rodent'} (default both)
 %   'Formats'       subset of {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision',
-%                   'matrix', 'edf', 'bdf', 'mff', 'bids'} to write (default
-%                   all; edf, bdf, mff and bids are written for the rodent
-%                   only)
+%                   'matrix', 'edf', 'bdf', 'mff', 'xdf', 'bids'} to write
+%                   (default all; edf, bdf, mff, xdf and bids are written for
+%                   the rodent only)
 %   'Force'         true regenerates the cache (demoEEG() only)
 % Deterministic: RandStream('mt19937ar', 'Seed', 20260926 + participant;
 % rodent 20260926 + 100). Requires core/io on the path (EEGSource,
 % writeEEGLAB, writeFieldTrip, writeBrainVision, writeEDF, writeMFF,
-% writeEEGBIDS).
+% writeXDF, writeEEGBIDS).
 % Toolboxes: none.
 % =========================================================================
 
 function files = demoEEG(folder, varargin)
-    allFormats = {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision', 'matrix', 'edf', 'bdf', 'mff', 'bids'};
+    allFormats = {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision', 'matrix', 'edf', 'bdf', 'mff', 'xdf', 'bids'};
     o = struct('Participants', 8, 'Kinds', {{'scalp', 'rodent'}}, 'Formats', {allFormats}, 'Force', false);
     for k = 1:2:numel(varargin)
         o.(varargin{k}) = varargin{k + 1};
@@ -278,7 +281,8 @@ function [out, truth] = writeRodent(folder, formats)
     out = struct('eeglab', fullfile(folder, 'rat01_eeglab.set'), 'eeglabfdt', fullfile(folder, 'rat01_fdt.set'), ...
         'fieldtrip', fullfile(folder, 'rat01_fieldtrip.mat'), 'brainvision', fullfile(folder, 'rat01_brainvision.vhdr'), ...
         'matrix', fullfile(folder, 'rat01_matrix.mat'), 'edf', fullfile(folder, 'rat01_edf.edf'), ...
-        'bdf', fullfile(folder, 'rat01_biosemi.bdf'), 'mff', fullfile(folder, 'rat01_egi.mff'), 'bids', '');
+        'bdf', fullfile(folder, 'rat01_biosemi.bdf'), 'mff', fullfile(folder, 'rat01_egi.mff'), ...
+        'xdf', fullfile(folder, 'rat01_lsl.xdf'), 'bids', '');
     has = @(f) any(strcmp(formats, f));
     if has('eeglab'), writeEEGLAB(out.eeglab, eeg, 'History', hist, 'CoordSys', 'bregma, mm'); end
     if has('eeglabfdt')
@@ -337,6 +341,14 @@ function [out, truth] = writeRodent(folder, formats)
             'theta', NaN, 'radius', NaN);
         if exist(out.mff, 'dir') == 7, rmdir(out.mff, 's'); end
         writeMFF(out.mff, eegM);
+    end
+    % XDF: an EEG stream and a Markers stream on the LSL clock (from 1000 s)
+    if has('xdf')
+        S = struct('name', {'RodentAmp', 'Flash'}, 'type', {'EEG', 'Markers'}, 'fs', {fs, 0}, ...
+            'format', {'float32', 'string'}, 'labels', {labels, {'Marker'}}, ...
+            'units', {repmat({'microvolts'}, 1, 4), {''}}, 'timeStamps', {1000 + t, 1000 + onsets}, ...
+            'data', {double(data), repmat({'flash'}, 1, numel(onsets))});
+        writeXDF(out.xdf, S);
     end
     % EEG-BIDS: positions as ML (x, right) and AP (y, anterior) in mm from bregma
     if has('bids')
