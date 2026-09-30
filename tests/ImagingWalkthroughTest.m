@@ -164,6 +164,11 @@ function deleteIfExists(f)
     if exist(f, 'file') == 2, delete(f); end
 end
 
+function n = nFrames(app)
+    % Frames of the loaded stack (last dimension: 3 for gray, 4 for RGB stacks)
+    if ndims(app.Stack) == 4, n = size(app.Stack, 4); else, n = size(app.Stack, 3); end
+end
+
 function testMicroscopeFiles(tests)
     % Files from microscope software open with their frame rate and channel choice
     d = tempname; mkdir(d); cl = onCleanup(@() rmdir(d, 's'));
@@ -173,7 +178,7 @@ function testMicroscopeFiles(tests)
     f = fullfile(d, 'movie.isxd');
     writeImagingFormat('isxd', f, st, 'Fps', 20);
     tests.verifyTrue(logical(app.openFile(f)));
-    tests.verifyEqual(app.nFrames(), 12);
+    tests.verifyEqual(nFrames(app), 12);
     tests.verifyTrue(app.TimeFromFile);
     tests.verifyEqual(app.TimeVec(end), 11 / 20, 'AbsTol', 1e-9);
     thor = fullfile(d, 'thor');
@@ -219,7 +224,7 @@ function testMicroscopeFiles(tests)
     fprintf(fid, '{"deviceName": "Miniscope", "deviceType": "Miniscope_V4_BNO", "frameRate": "30FPS"}');
     fclose(fid);
     tests.verifyTrue(logical(app.openFile(fullfile(ms, '0.avi'))));
-    tests.verifyEqual(app.nFrames(), 12, 'both videos');
+    tests.verifyEqual(nFrames(app), 12, 'both videos');
     tests.verifyEqual(app.TimeVec, (ts - ts(1)) / 1000, 'AbsTol', 1e-6, 'times from timeStamps.csv');
     shot(tests, app, 'ROIAnalysisApp_microscope_files');
 end
