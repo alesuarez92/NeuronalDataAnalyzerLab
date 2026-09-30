@@ -710,7 +710,8 @@ classdef HelpApp < handle
             t.inputs = {
                 '`.mat` with the images in `frames` or `stack` (H × W × N; any numeric type); optional `t` (s per frame) or `fps`, `exposureMs`, `dark` (counts), `stim` (one value per frame, or a faster trace over the same time), `roiMasks` (H × W × K logical) with `roiNames`, and `kind` (''raw speckle'', ''contrast'' or ''perfusion'')'
                 'Multi-frame TIFF (raw camera frames or exported perfusion / flux images; the frame interval is read from ImageJ TIFFs) or a video (.avi, .mp4: frame rate from the file; avoid compressed videos for raw speckle)'
-                'Perfusion images from commercial systems: export them as TIFF (or MATLAB) from the system''s software and choose **Perfusion / flux images**'};
+                'Perimed PeriCam PSI / PIMSoft recordings (`.dat`): opened directly as speckle contrast images (β · SD / intensity, from the variance and intensity images in the file; frame rate and pixel size from its header), so this window computes the flow index. PIMSoft''s own perfusion values are gain × (1/C − 1), limited to 0–3000 PU'
+                'Perfusion images from other commercial systems (moorFLPI, RWD, SIM, Omegawave; their own files are not documented): export them as TIFF, video or MATLAB from the system''s software and choose **Perfusion / flux images**'};
             t.outputs = {
                 '.csv: `Time_s`, then per ROI `FlowChange_pct_<ROI>` (change from the baseline window) and `FlowIndex_<ROI>`'
                 '.mat: struct `results` with the maps (`flowMean`, `K2Mean`, `responseMap`), `t`, `roiFlow`, `roiRel`, `trials` (ROI × trial × sample, %), `trialMean` / `trialSD`, `response`, `peak`, `peakTime`, `onsets`, `checks`, the ROI masks and names and every setting'

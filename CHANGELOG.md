@@ -50,6 +50,14 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 - `core/io/readImageStack.m`: one reader for image stacks over time
   (.mat, multi-page TIFF with the ImageJ frame interval, channels and
   pixel size, and video).
+- **Perimed PeriCam PSI recordings** (`core/io/readPerimedDat.m`,
+  `perimedPerfusion.m`, `writePerimedDat.m`): PIMSoft .dat files (file
+  versions 1 to 3) open in the Laser speckle window as speckle contrast
+  images (β · SD / intensity from the variance and intensity images),
+  with the frame rate and pixel size of the header; PIMSoft's perfusion
+  (gain × (1/C − 1), 0–3000 PU) is available as well. Other laser speckle
+  systems (moorFLPI, RWD, SIM, Omegawave) keep their undocumented files:
+  open their TIFF, video or MATLAB exports.
 
 ### Changed
 

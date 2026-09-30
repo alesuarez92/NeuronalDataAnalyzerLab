@@ -20,7 +20,14 @@ function setupOnce(tests)
     addpath(root);
     addpath(fullfile(root, 'core'));
     addpath(fullfile(root, 'core', 'demo'));
+    addpath(fullfile(root, 'core', 'io'));
     tests.TestData.demo = demoLSCI();
+    tests.TestData.dir = tempname;
+    mkdir(tests.TestData.dir);
+end
+
+function teardownOnce(tests)
+    try, rmdir(tests.TestData.dir, 's'); catch, end
 end
 
 %% speckle - H x W x N independent speckle, intensity Gamma(a) scaled to mean m (K = 1/sqrt(a))
@@ -210,4 +217,66 @@ function testChecksAndErrors(tests)
     R = LaserSpeckle.analyze(s.frames, s.t, s.roiMasks(:, :, 1), q);
     tests.verifyEqual(R.onsets, 30);
     tests.verifyTrue(any(contains(R.checks, '2 of 3 stimuli were left out')), strjoin(R.checks, newline));
+end
+
+function testPerimedDat(tests)
+    % PIMSoft .dat, every file version: header, images, contrast and perfusion as PIMSoft computes them
+    H = 6; W = 5; N = 4;
+    K = 0.1 + 0.02 * reshape(1:H*W*N, H, W, N) / (H*W*N);        % known contrast
+    I = 1000 + 10 * reshape(1:H*W*N, H, W, N);
+    beta = 0.9; gain = 2.5;
+    V = (K .* I / beta) .^ 2;                                  % C = beta sqrt(V) / I = K
+    V(1, 1, 1) = -V(1, 1, 1);                                  % a negative variance keeps its sign
+    hdr = struct('gain', gain, 'beta', beta, 'name', 'Paw left', 'serial', 'PSI-1234', ...
+        'startTime', '10:31:02', 'durationS', 0.2, 'distanceMm', 100, 'frameRateText', '21 img/s', ...
+        'resolutionMm', 0.05);
+    for ver = 1:3
+        f = fullfile(tests.TestData.dir, sprintf('v%d.dat', ver));
+        hdr.version = ver;
+        writePerimedDat(f, V, I, hdr);
+        P = readPerimedDat(f);
+        tests.verifyEqual([P.version P.nFrames P.width P.height], [ver N W H]);
+        tests.verifyEqual([P.gain P.beta], [gain beta]);
+        tests.verifyEqual(P.variance, V);
+        tests.verifyEqual(P.intensity, I);
+        Kexp = K; Kexp(1, 1, 1) = -K(1, 1, 1);
+        tests.verifyEqual(P.contrast, Kexp, 'RelTol', 1e-12);
+        Pexp = min(max(gain * (1 ./ Kexp - 1), 0), 3000);
+        tests.verifyEqual(P.perfusion, Pexp, 'RelTol', 1e-12);
+        tests.verifyEqual(P.perfusion(1, 1, 1), 0, 'a negative contrast gives 0 PU');
+        if ver >= 2
+            tests.verifyEqual(P.name, 'Paw left');
+            tests.verifyEqual(P.serial, 'PSI-1234');
+            tests.verifyEqual(P.fps, 21);
+            tests.verifyEqual(P.resolutionMm, 0.05);
+            tests.verifyEqual(P.durationS, 0.2);
+        else
+            tests.verifyTrue(isnan(P.fps));
+        end
+        tests.verifyEqual(P.dataOffset, [46 540 581 + 32 * N] * ((1:3)' == ver));
+    end
+    % readImageStack: contrast by default, perfusion on request
+    S = readImageStack(f);
+    tests.verifyEqual(S.kind, 'contrast');
+    tests.verifyEqual(S.info.format, 'perimed');
+    tests.verifyEqual(double(S.stack), Kexp, 'RelTol', 1e-6);
+    tests.verifyEqual(S.fps, 21);
+    tests.verifyEqual(S.pixelSizeUm, 50, 'AbsTol', 1e-9);
+    S = readImageStack(f, struct('Perimed', 'perfusion'));
+    tests.verifyEqual(S.kind, 'flow');
+    tests.verifyEqual(double(S.stack), Pexp, 'RelTol', 1e-6);
+    % Version 1 has no frame rate: from nothing, fps stays unknown
+    S = readImageStack(fullfile(tests.TestData.dir, 'v1.dat'));
+    tests.verifyTrue(isnan(S.fps));
+    % Averaging: V and I first, then convert
+    [C1, P1] = perimedPerfusion(mean(V(:, :, 2:end), 3), mean(I(:, :, 2:end), 3), beta, gain);
+    tests.verifyEqual(size(C1), [H W]);
+    tests.verifyEqual(P1, min(max(gain * (1 ./ C1 - 1), 0), 3000));
+    % Not a PSI file / cut short
+    g = fullfile(tests.TestData.dir, 'other.dat');
+    fid = fopen(g, 'w'); fwrite(fid, zeros(1, 100), 'uint8'); fclose(fid);
+    tests.verifyError(@() readPerimedDat(g), 'NeuroAnalyzer:io:perimed');
+    fid = fopen(f, 'r'); b = fread(fid, Inf, 'uint8=>uint8'); fclose(fid);
+    fid = fopen(g, 'w'); fwrite(fid, b(1:end-8), 'uint8'); fclose(fid);
+    tests.verifyError(@() readPerimedDat(g), 'NeuroAnalyzer:io:perimed');
 end
