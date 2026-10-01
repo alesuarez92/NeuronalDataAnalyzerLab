@@ -12,9 +12,14 @@
 %   before the cleaning and trial steps existed; then the raw demo
 %   (3 continuous BrainVision recordings) cleaned (T7 bad, 0.1-30 Hz,
 %   average reference), cut around its markers with a 100 uV rejection
-%   that leaves out exactly the blink trials -> P300 -> session. Checks
-%   the results against the demo's known answers (core/demo/demoEEG.m)
-%   and saves a frame after every step to
+%   that leaves out exactly the blink trials -> P300 -> session; then the
+%   electrode layout: the demo's positions from the files, the Electrode
+%   layout dialog (drawing, table, By name, Cancel), every channel by name
+%   on the 10-5 system, a positions file that calls T7 by its old name T3,
+%   a channel placed by hand, Use this layout (confirmed) -> session, and
+%   the rodent's skull layout in mm from bregma. Checks the results
+%   against the demo's known answers (core/demo/demoEEG.m) and saves a
+%   frame after every step to
 %   test-artifacts/screens/walkthrough/EEGAnalysisApp_<NN>_<step>.png.
 % Skipped when no display is available.
 % =========================================================================
@@ -62,6 +67,43 @@ function shot(tests, app, name, tabTitle)
     catch ME
         warning('EEGAnalysisWalkthroughTest:capture', '%s: %s', name, ME.message);
     end
+end
+
+%% shotDialog - Save a frame of a dialog window (e.g. the Electrode layout dialog)
+function shotDialog(tests, fig, name)
+    drawnow; pause(0.5);
+    try
+        exportapp(fig, fullfile(tests.TestData.outDir, [name '.png']));
+    catch ME
+        warning('EEGAnalysisWalkthroughTest:capture', '%s: %s', name, ME.message);
+    end
+end
+
+%% press - Click a button: run its ButtonPushedFcn
+function press(b)
+    fcn = b.ButtonPushedFcn;
+    fcn(b, []);
+    drawnow;
+end
+
+%% choose - Pick an item of a dropdown: set it and run its ValueChangedFcn
+function choose(dd, value)
+    dd.Value = value;
+    fcn = dd.ValueChangedFcn;
+    fcn(dd, []);
+    drawnow;
+end
+
+%% editCell - Type a value into a table cell: set it and run its CellEditCallback
+function editCell(tbl, ij, value)
+    prev = tbl.Data{ij(1), ij(2)};
+    d = tbl.Data;
+    d{ij(1), ij(2)} = value;
+    tbl.Data = d;
+    fcn = tbl.CellEditCallback;
+    fcn(tbl, struct('Indices', ij, 'DisplayIndices', ij, 'PreviousData', prev, 'EditData', value, ...
+        'NewData', value, 'Error', ''));
+    drawnow;
 end
 
 %% values - Participants x {Standard, Target, Novel} from the app's measures
@@ -442,4 +484,225 @@ function testRawDemoCleaning(tests)
     tests.verifyEmpty(app.EventsEdit.Value);
     tests.verifyFalse(logical(app.RejectCb.Value));
     tests.verifyEqual(app.PeakToPeakEdit.Value, 100);
+end
+
+function testElectrodeLayout(tests)
+    DemoData.ensureDemoPath();
+    f = demoEEG();
+    sc = f.truth.scalp;
+    u = sc.posRAS ./ sqrt(sum(sc.posRAS .^ 2, 2));     % the demo's directions (x = right ear, y = nose, z = up)
+    [tl, tp] = EEGLayout.template();
+    notChecked = [' Not checked yet: open Electrode layout' char(8230) ' to look at it.'];
+    app = EEGAnalysisApp(); c = onCleanup(@() delete(app.UIFig));
+    tests.verifyEqual(char(app.LayoutBtn.Enable), 'off', 'nothing loaded yet');
+    tests.verifyEmpty(app.openLayout(), 'no layout dialog without data');
+
+    % 1. Demo: the 32 positions of the EEGLAB files, turned to x = right ear, y = nose; not confirmed
+    tests.verifyTrue(logical(app.loadDemo()));
+    L = app.Layout;
+    tests.verifyEqual(L.kind, 'scalp');
+    tests.verifyEqual(L.labels, sc.labels);
+    tests.verifyEqual(L.source, repmat({'file'}, 1, 32), 'all 32 from the file');
+    tests.verifyEqual(L.pos, u, 'AbsTol', 1e-9);
+    tests.verifyEqual(L.summary, '32 of 32 channels placed: 32 from the file.');
+    tests.verifyTrue(startsWith(L.frame, 'EEGLAB (x = nose, y = left ear, z = up), turned to x = right ear'));
+    tests.verifyFalse(L.confirmed);
+    tests.verifyEqual(app.LayoutSettings.source, 'auto');
+    tests.verifyEmpty(app.LayoutSettings.positionsFile);
+    tests.verifyEmpty(app.LayoutSettings.edits);
+    tests.verifyEqual(app.LayoutInfo.Text, [L.summary notChecked]);
+    tests.verifyEqual(char(app.LayoutBtn.Enable), 'on');
+    ov = strjoin(app.OverviewText.Value(:)', newline);
+    tests.verifyTrue(startsWith(ov, sprintf('Electrode layout (from the first participant, %s):', app.Names{1})));
+    tests.verifyTrue(contains(ov, ['   ' L.summary]));
+    tests.verifyTrue(contains(ov, 'Positions: EEGLAB (x = nose, y = left ear, z = up), turned to'));
+    tests.verifyFalse(contains(ov, 'Electrode positions for'), 'the layout replaces the position sentence of each file');
+
+    % 2. The dialog: the drawing (head, nose, ears and 32 electrodes), the table and the summary
+    fig = app.openLayout();
+    tests.verifyTrue(isvalid(fig));
+    tests.verifySameHandle(app.LayoutFig, fig);
+    tests.verifyEqual(char(fig.WindowStyle), 'normal', 'not modal');
+    d = app.LayoutDlg;
+    tests.verifyEqual(d.SourceDrop.Items, app.LayoutSources);
+    tests.verifyEqual(d.SourceDrop.Value, 'From the files, others by name');
+    tests.verifyEqual(d.Table.ColumnName(:)', {'Channel', 'Placed from', 'As', 'Status'});
+    tests.verifyEqual(logical(d.Table.ColumnEditable), [false false true false], 'only As is editable');
+    tests.verifySize(d.Table.Data, [32 4]);
+    tests.verifyEqual(d.Table.Data(:, 1)', sc.labels);
+    tests.verifyEqual(unique(d.Table.Data(:, 2))', {'file'});
+    tests.verifyEqual(d.Table.Data(:, 3)', sc.labels, 'the 10-5 name of each channel');
+    tests.verifyEqual(unique(d.Table.Data(:, 4))', {'placed'});
+    tests.verifyEqual(d.Text.Value{1}, L.summary);
+    tests.verifyNumElements(findall(d.Axes, 'Type', 'line'), 5, 'head, nose, two ears and one set of electrodes');
+    el = findall(d.Axes, 'Type', 'line', '-regexp', 'Tag', '^EEGLayout:');
+    tests.verifyEqual(sum(arrayfun(@(h) numel(h.XData), el)), 32, 'every electrode drawn');
+    tests.verifyNumElements(findobj(d.Axes, 'Type', 'text'), 32, 'one name per electrode');
+    shotDialog(tests, fig, 'EEGAnalysisApp_15_layout_dialog');
+
+    % 3. By name (10-5 system) in the dialog: shown at once, not used before Use this layout; Cancel
+    choose(d.SourceDrop, 'By name (10-5 system)');
+    tests.verifyEqual(app.LayoutDlg.L.summary, '32 of 32 channels placed: 32 by name (10-5 system).');
+    tests.verifyEqual(unique(d.Table.Data(:, 2))', {'name (10-5)'});
+    tests.verifyEqual(app.Layout.summary, '32 of 32 channels placed: 32 from the file.', 'only a preview');
+    shotDialog(tests, fig, 'EEGAnalysisApp_16_layout_by_name');
+    press(d.CancelBtn);
+    tests.verifyFalse(isvalid(fig), 'Cancel closes the dialog');
+    tests.verifyEmpty(app.LayoutFig);
+    tests.verifyEqual(app.LayoutSettings.source, 'auto', 'Cancel keeps the layout');
+    tests.verifyFalse(app.Layout.confirmed);
+
+    % 4. Every channel by name: the 32 actiCAP names are all 10-5 positions
+    tests.verifyTrue(all(ismember(sc.labels, tl)), 'the demo names are 10-5 names');
+    tests.verifyTrue(logical(app.setLayout('Source', 'template')));
+    L = app.Layout;
+    [~, i] = ismember(L.labels, tl);
+    tests.verifyEqual(L.source, repmat({'template'}, 1, 32));
+    tests.verifyEqual(L.as, L.labels);
+    tests.verifyEqual(L.pos, tp(i, :), 'AbsTol', 1e-12);
+    tests.verifyEqual(L.summary, '32 of 32 channels placed: 32 by name (10-5 system).');
+    tests.verifyEmpty(L.check.renamed);
+    tests.verifyFalse(L.confirmed);
+    tests.verifyEqual(app.LayoutInfo.Text, [L.summary notChecked]);
+
+    % 5. A positions file (ASA .elc, mm) that names T7 by its old 10-20 name T3
+    lab = sc.labels;
+    lab{strcmp(lab, 'T7')} = 'T3';
+    pf = fullfile(tests.TestData.tmp, 'actiCAP_T3.elc');
+    writeElectrodes(pf, lab, sc.posRAS, 'Unit', 'mm');
+    tests.verifyTrue(logical(app.setLayout('PositionsFile', pf)));
+    L = app.Layout;
+    tests.verifyEqual(app.LayoutSettings.source, 'auto', 'a positions file replaces By name');
+    tests.verifyEqual(app.LayoutSettings.positionsFile, pf);
+    tests.verifyEqual(app.LayoutPositions.format, 'ASA .elc');
+    tests.verifyEqual(L.source, repmat({'positions file'}, 1, 32));
+    tests.verifyEqual(L.summary, '32 of 32 channels placed: 32 from the positions file.');
+    tests.verifyEqual(L.check.renamed, {'T7', 'T3'}, 'channel T7 took the position named T3 (its old name)');
+    t7 = find(strcmp(L.labels, 'T7'));
+    tests.verifyEqual(L.status{t7}, 'renamed');
+    tests.verifyEqual(L.pos, u, 'AbsTol', 1e-6, 'the same places as the positions in the recording files');
+    tests.verifyTrue(contains(strjoin(EEGLayout.describe(L), newline), 'T7 placed at T3 of the positions file'));
+    % a file that is not there: a plain message and the layout unchanged
+    tests.verifyFalse(logical(app.setLayout('PositionsFile', fullfile(tests.TestData.tmp, 'none.elc'))));
+    tests.verifyTrue(startsWith(app.StatusLabel.Text, [char(10007) ' Electrode layout not changed: File not found']));
+    tests.verifyEqual(app.LayoutSettings.positionsFile, pf);
+
+    % 6. T7 placed by hand on FT7 in the table (As), then a name that is not a 10-5 position (refused)
+    fig = app.openLayout();
+    d = app.LayoutDlg;
+    tests.verifyEqual(d.SourceDrop.Value, 'From a positions file');
+    tests.verifyEqual(d.Text.Value{1}, 'Positions file: actiCAP_T3.elc');
+    tests.verifyEqual(d.Table.Data{t7, 4}, ['renamed (T7 ' char(8594) ' T3)']);
+    editCell(d.Table, [t7 3], 'FT7');
+    D = app.LayoutDlg.L;
+    tests.verifyEqual(D.summary, '32 of 32 channels placed: 31 from the positions file, 1 placed by hand.');
+    tests.verifyEqual(D.pos(t7, :), tp(strcmp(tl, 'FT7'), :), 'AbsTol', 1e-12);
+    tests.verifyEqual(d.Table.Data(t7, 2:4), {'by hand', 'FT7', 'placed'});
+    tests.verifyEqual(app.Layout.summary, '32 of 32 channels placed: 32 from the positions file.', 'not used yet');
+    editCell(d.Table, [t7 3], 'XYZ');
+    tests.verifyEqual(d.Table.Data{t7, 3}, 'FT7', 'the table shows the layout before the refused name');
+    tests.verifyTrue(contains(d.Message.Text, '''XYZ'' is not a position of the 10-5 system'));
+    shotDialog(tests, fig, 'EEGAnalysisApp_17_layout_edited');
+
+    % 7. Use this layout: used, confirmed, the dialog closed
+    press(d.UseBtn);
+    tests.verifyFalse(isvalid(fig), 'Use this layout closes the dialog');
+    L = app.Layout;
+    tests.verifyTrue(L.confirmed);
+    tests.verifyTrue(app.LayoutSettings.confirmed);
+    tests.verifyEqual(L.summary, '32 of 32 channels placed: 31 from the positions file, 1 placed by hand.');
+    tests.verifyEqual(L.source{t7}, 'edited');
+    tests.verifyEmpty(L.check.renamed, 'T7 placed by hand is no longer renamed');
+    E = app.LayoutSettings.edits;
+    tests.verifyNumElements(E, 1);
+    tests.verifyEqual({E.label, E.as}, {'T7', 'FT7'});
+    tests.verifyTrue(isnan(E.ap) && isnan(E.ml));
+    tests.verifyEqual(app.LayoutInfo.Text, [L.summary ' Confirmed.']);
+    tests.verifyTrue(contains(app.StatusLabel.Text, 'Electrode layout confirmed'));
+    tests.verifyTrue(contains(strjoin(app.OverviewText.Value(:)', newline), 'Positions: positions file (ASA .elc)'));
+    shot(tests, app, 'EEGAnalysisApp_18_layout_confirmed', 'Overview');
+
+    % 8. Session: settings.layout, the positions file among the inputs; reopened with the same layout
+    p = fullfile(tests.TestData.tmp, ['EEGAnalysisLayout' Session.Extension]);
+    tests.verifyTrue(logical(app.saveSessionTo(p, 'EEG walkthrough: electrode layout')));
+    s = Session.load(p);
+    ly = s.settings.layout;
+    tests.verifyEqual(sort(fieldnames(ly))', sort({'source', 'positionsFile', 'edits', 'confirmed', 'kind', ...
+        'counts', 'renamed', 'frame', 'format', 'summary'}));
+    tests.verifyEqual(ly.source, 'auto');
+    tests.verifyEqual(ly.positionsFile, pf);
+    tests.verifyTrue(ly.confirmed);
+    tests.verifyEqual(ly.kind, 'scalp');
+    tests.verifyEqual(ly.counts, struct('file', 0, 'template', 0, 'positionsFile', 31, 'edited', 1, 'none', 0, ...
+        'total', 32));
+    tests.verifySize(ly.renamed, [0 2]);
+    tests.verifyEqual(ly.frame, L.frame);
+    tests.verifyEqual(ly.format, 'ASA .elc');
+    tests.verifyEqual(ly.summary, L.summary);
+    tests.verifyEqual({ly.edits.label, ly.edits.as}, {'T7', 'FT7'});
+    isPos = strcmp({s.inputs.role}, app.PositionsRole);
+    tests.verifyEqual(sum(isPos), 1, 'the positions file is one of the inputs');
+    tests.verifyEqual(s.inputs(isPos).name, 'actiCAP_T3.elc');
+    tests.verifyNotEmpty(s.inputs(isPos).md5);
+    b = EEGAnalysisApp(); cb = onCleanup(@() delete(b.UIFig));
+    tests.verifyTrue(logical(b.openSession(p)), 'session not reopened');
+    tests.verifyEqual(b.Layout.pos, L.pos, 'AbsTol', 1e-9);
+    tests.verifyEqual(b.Layout.source, L.source);
+    tests.verifyTrue(b.Layout.confirmed);
+    tests.verifyEqual(b.LayoutSettings.positionsFile, pf);
+    tests.verifyEqual(b.LayoutInfo.Text, app.LayoutInfo.Text);
+    shot(tests, b, 'EEGAnalysisApp_19_layout_session_reopened');
+    delete(cb);
+    % a session saved before layouts existed: the layout made from the files, not confirmed
+    s.settings = rmfield(s.settings, 'layout');
+    s.inputs = s.inputs(~isPos);
+    o = EEGAnalysisApp(); co = onCleanup(@() delete(o.UIFig));
+    tests.verifyTrue(logical(o.restoreSession(s)), 'session without a layout not restored');
+    tests.verifyEqual(o.Layout.summary, '32 of 32 channels placed: 32 from the file.');
+    tests.verifyFalse(o.Layout.confirmed);
+    tests.verifyEqual(o.LayoutSettings.source, 'auto');
+    delete(co);
+
+    % 9. Rodent: a skull layout in mm from bregma (AP, ML), the demo's screw positions
+    rt = f.truth.rodent;
+    tests.verifyTrue(logical(app.openFiles({f.rodent.eeglab})));
+    L = app.Layout;
+    tests.verifyEqual(L.kind, 'skull');
+    tests.verifyEqual(L.labels, rt.labels);
+    tests.verifyEqual(L.pos(:, 2)', rt.ap, 'AbsTol', 1e-9, 'AP (anterior +)');
+    tests.verifyEqual(L.pos(:, 1)', rt.ml, 'AbsTol', 1e-9, 'ML (right +)');
+    tests.verifyEqual(L.summary, '4 of 4 channels placed: 4 from the file.');
+    tests.verifyFalse(L.confirmed, 'new files: a new layout, not confirmed');
+    tests.verifyEmpty(app.LayoutSettings.positionsFile, 'new files forget the positions file');
+    tests.verifyEqual(app.LayoutInfo.Text, [L.summary notChecked]);
+    ov = strjoin(app.OverviewText.Value(:)', newline);
+    tests.verifyTrue(startsWith(ov, 'Electrode layout:'));
+    tests.verifyTrue(contains(ov, 'turned to mm from bregma'));
+    fig = app.openLayout();
+    d = app.LayoutDlg;
+    tests.verifyEqual(d.Table.ColumnName(:)', {'Channel', 'AP (mm)', 'ML (mm)', 'Status'});
+    tests.verifyEqual(logical(d.Table.ColumnEditable), [false true true false], 'AP and ML are editable');
+    tests.verifyEqual(d.Table.Data(:, 1)', rt.labels);
+    tests.verifyEqual(cell2mat(d.Table.Data(:, 2))', rt.ap, 'AbsTol', 1e-9);
+    tests.verifyEqual(cell2mat(d.Table.Data(:, 3))', rt.ml, 'AbsTol', 1e-9);
+    tests.verifyNumElements(findall(d.Axes, 'Type', 'line'), 5, 'skull outline, midline, bregma cross, electrodes');
+    v1l = find(strcmp(L.labels, 'V1-L'));
+    editCell(d.Table, [v1l 2], -4);
+    tests.verifyEqual(app.LayoutDlg.L.pos(v1l, 1:2), [-2.5 -4], 'AbsTol', 1e-12, 'AP typed: ML kept');
+    tests.verifyEqual(app.LayoutDlg.L.source{v1l}, 'edited');
+    shotDialog(tests, fig, 'EEGAnalysisApp_20_layout_rodent');
+    press(d.CancelBtn);
+    tests.verifyEqual(app.Layout.pos(v1l, 1:2), [-2.5 -3.5], 'AbsTol', 1e-12, 'Cancel keeps the layout');
+    % the same kind of placement by script: V1-L at AP -4, ML -3 mm, confirmed
+    tests.verifyTrue(logical(app.setLayout('Edits', struct('label', 'V1-L', 'ap', -4, 'ml', -3), 'Confirm', true)));
+    L = app.Layout;
+    tests.verifyEqual(L.pos(v1l, :), [-3 -4 0], 'AbsTol', 1e-12);
+    tests.verifyEqual(L.source, {'file', 'file', 'edited', 'file'});
+    tests.verifyEqual(L.summary, '4 of 4 channels placed: 3 from the file, 1 placed by hand.');
+    tests.verifyTrue(L.confirmed);
+    % a 10-5 name cannot place a channel on a skull: a plain message, the layout unchanged
+    tests.verifyFalse(logical(app.setLayout('Edits', struct('label', 'V1-L', 'as', 'Oz'))));
+    tests.verifyTrue(contains(app.StatusLabel.Text, 'the layout is in mm from bregma'));
+    tests.verifyEqual(app.Layout.pos(v1l, :), [-3 -4 0], 'AbsTol', 1e-12);
+    tests.verifyTrue(app.Layout.confirmed);
 end

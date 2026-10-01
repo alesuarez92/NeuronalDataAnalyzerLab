@@ -327,9 +327,19 @@ classdef EEGLayout
             end
             c = L.check;
             if ~isempty(c.renamed)
-                parts = arrayfun(@(k) sprintf('%s treated as %s', c.renamed{k, 1}, c.renamed{k, 2}), ...
-                    1:size(c.renamed, 1), 'UniformOutput', false);
-                lines{end + 1} = sprintf('Names read as 10-5 positions: %s.', EEGLayout.listText(parts));
+                % By name: the channel takes the 10-5 position of the name; positions
+                % file: the channel takes the position the file gives under that name
+                fromFile = cellfun(@(ch) any(strcmp(L.source(strcmp(L.labels, ch)), 'positions file')), ...
+                    c.renamed(:, 1))';
+                parts = cell(1, size(c.renamed, 1));
+                for k = 1:numel(parts)
+                    if fromFile(k)
+                        parts{k} = sprintf('%s placed at %s of the positions file', c.renamed{k, 1}, c.renamed{k, 2});
+                    else
+                        parts{k} = sprintf('%s treated as %s', c.renamed{k, 1}, c.renamed{k, 2});
+                    end
+                end
+                lines{end + 1} = sprintf('Names read as other names: %s.', EEGLayout.listText(parts));
             end
             if ~isempty(c.missing)
                 parts = c.missing;

@@ -12,7 +12,10 @@
 % Layout (UIKit.window): numbered step cards on the left
 %   1 Load EEG      (one or several files; a plain .mat file gets a short
 %                    form saying what its variables are; two demos: the
-%                    cleaned study and 3 raw continuous recordings)
+%                    cleaned study and 3 raw continuous recordings; the
+%                    Electrode layout... dialog shows where every electrode
+%                    sits, core/EEGLayout.m, and lets the user change and
+%                    confirm it)
 %   2 Clean recordings (bad channels per participant, with a suggestion;
 %                    high-pass, low-pass and notch filters; re-reference to
 %                    the average, linked mastoids or chosen channels)
@@ -36,7 +39,9 @@
 % session replays them exactly.
 %
 % Scriptable (CI walkthroughs, no dialogs): openFiles(paths, maps),
-% loadDemo(), loadRawDemo(), setBadChannels(participant, names),
+% loadDemo(), loadRawDemo(), setLayout('Source', s, 'PositionsFile', f,
+% 'Edits', E, 'Confirm', tf), openLayout() (the layout dialog, not modal;
+% returns its figure), setBadChannels(participant, names),
 % suggestBadChannels(participant), setFilters(highPass, lowPass, notch),
 % setReference(mode, channels), applyCleaning(), setEvents(text),
 % setTrialWindow([from to] s), setRejection(on, peakToPeak, absolute),
@@ -59,6 +64,8 @@ classdef EEGAnalysisApp < handle
         DemoBtn
         RawDemoBtn
         FileInfo
+        LayoutBtn           % Electrode layout... (opens the layout dialog)
+        LayoutInfo          % summary of the layout, confirmed or not
         % Step 2
         CleanParticipantDrop    % whose bad channels the field shows
         BadEdit             % text: 'T7' or 'T7, FT9'
@@ -132,6 +139,12 @@ classdef EEGAnalysisApp < handle
         Measures = {}       % 1 x P measure() results
         MeasureSettings = []
         StatsResult = []    % GroupStats.compare result
+        % Electrode layout (step 1)
+        Layout = []         % EEGLayout of participant 1 (core/EEGLayout.m: kind, labels, pos, ...)
+        LayoutSettings = [] % source 'auto' | 'template' | 'file', positionsFile, edits, confirmed
+        LayoutPositions = []    % readElectrodes struct of the positions file ([] = none)
+        LayoutFig = []      % the Electrode layout dialog while it is open
+        LayoutDlg = []      % its controls and the layout shown in it (draft, not yet used)
     end
 
     properties(Constant)
@@ -140,6 +153,8 @@ classdef EEGAnalysisApp < handle
         MeasureKinds = {'Mean amplitude', 'Peak amplitude'}
         NotchItems = {'Off', '50 Hz (+ harmonics)', '60 Hz (+ harmonics)'}
         ReferenceModes = {'As recorded', 'Average', 'Linked mastoids', 'Channels'}
+        LayoutSources = {'From the files, others by name', 'By name (10-5 system)', 'From a positions file'}
+        PositionsRole = 'Electrode positions'   % role of the positions file in a session's inputs
     end
 
     methods
@@ -157,6 +172,7 @@ classdef EEGAnalysisApp < handle
                 'Cleaning, ERPs per condition, amplitude measures and statistics for scalp or rodent EEG', ...
                 'EEG Analysis', [1320 900]);
             app.UIFig = app.W.Fig;
+            app.UIFig.DeleteFcn = @(~,~)app.closeLayout();     % the layout dialog closes with the window
             app.StatusLabel = app.W.Status;
             app.W.Body.RowHeight = {'1x'};
             app.W.Body.ColumnWidth = {360, '1x'};
@@ -168,7 +184,7 @@ classdef EEGAnalysisApp < handle
             ch = T.controlHeight; bh = T.buttonHeight;
 
             % --- 1 Load EEG ---
-            [p, g, heights{1}] = stepCard(left, 1, 'Load EEG', {bh, bh, 48});
+            [p, g, heights{1}] = stepCard(left, 1, 'Load EEG', {bh, bh, 48, bh, 60});
             p.Layout.Row = 1;
             app.LoadBtn = UIKit.button(g, ['Load EEG files' char(8230)], @(~,~)app.loadDialog(), 'primary', ...
                 ['One file per participant: EEGLAB .set, FieldTrip .mat, BrainVision .vhdr (Brain Products Recorder or ' ...
@@ -188,6 +204,15 @@ classdef EEGAnalysisApp < handle
             app.RawDemoBtn.Layout.Row = 3; app.RawDemoBtn.Layout.Column = [1 2];
             app.FileInfo = infoLabel(g, 'Nothing loaded', 'Participants, channels and trials');
             app.FileInfo.Layout.Row = 4; app.FileInfo.Layout.Column = [1 2];
+            app.LayoutBtn = UIKit.button(g, ['Electrode layout' char(8230)], @(~,~)app.openLayout(), 'secondary', ...
+                ['Where every electrode sits, drawn on a head (scalp) or a skull (rodent, mm from bregma): from the ' ...
+                 'positions in the files, from the channel names on the 10-5 system, or from a positions file ' ...
+                 '(.elc, .sfp, .loc, .ced, .xyz, .elp, .bvef, .csv, .tsv, .txt). Check it, change it if needed and ' ...
+                 'confirm it.']);
+            app.LayoutBtn.Layout.Row = 5; app.LayoutBtn.Layout.Column = [1 2];
+            app.LayoutInfo = infoLabel(g, '', ['Electrode layout of the first participant: how many channels have a ' ...
+                'position and where it comes from']);
+            app.LayoutInfo.Layout.Row = 6; app.LayoutInfo.Layout.Column = [1 2];
 
             % --- 2 Clean recordings ---
             [p, g, heights{2}] = stepCard(left, 2, 'Clean recordings', {ch, ch, bh, ch, ch, ch, ch, ch, bh, 48});
@@ -489,6 +514,171 @@ classdef EEGAnalysisApp < handle
             UIKit.setStatus(app.StatusLabel, sprintf(['Raw demo loaded: %d continuous recordings; %s suggested as ' ...
                 'bad. Next: check the settings and Apply (step 2), then Cut into trials (step 3).'], ...
                 numel(app.Loaded), badText), 'success');
+        end
+
+        %% setLayout - Electrode layout of the recordings (made from participant 1)
+        % Name, Value: 'Source' 'auto' (the files' positions, the other
+        % channels by name on the 10-5 system) | 'template' (by name only) |
+        % 'file' (positions only); 'PositionsFile' a file of electrode
+        % positions (core/io/readElectrodes.m) used instead of the files'
+        % positions ('' = none; dropped with Source 'template'; given without
+        % Source it turns 'template' into 'auto'); 'Edits' struct array
+        % label / as / ap / ml of placements by hand (as: a 10-5 name; ap, ml:
+        % mm from bregma; [] = none); 'Confirm' true / false. Options left out
+        % keep their value; a change without 'Confirm' leaves the layout not
+        % confirmed. Returns false, with the reason in the status bar and the
+        % layout unchanged, when the file or the placements cannot be used.
+        function ok = setLayout(app, varargin)
+            ok = false;
+            if isempty(app.Loaded)
+                UIKit.setStatus(app.StatusLabel, 'Load EEG files first (step 1).', 'warning');
+                return;
+            end
+            ls = app.LayoutSettings;
+            confirm = [];
+            try
+                if mod(numel(varargin), 2) ~= 0
+                    error('NeuroAnalyzer:eeg:badOption', 'Layout options must come in Name, Value pairs.');
+                end
+                given = {};
+                for k = 1:2:numel(varargin)
+                    name = lower(char(varargin{k}));
+                    v = varargin{k + 1};
+                    given{end + 1} = name; %#ok<AGROW>
+                    switch name
+                        case 'source'
+                            v = lower(strtrim(char(v)));
+                            if ~any(strcmp(v, {'auto', 'template', 'file'}))
+                                error('NeuroAnalyzer:eeg:badOption', ...
+                                    'Unknown layout source ''%s'' (use auto, template or file).', v);
+                            end
+                            ls.source = v;
+                        case 'positionsfile'
+                            ls.positionsFile = strtrim(char(v));
+                        case 'edits'
+                            ls.edits = layoutEdits(v);
+                        case 'confirm'
+                            confirm = logical(v);
+                        otherwise
+                            error('NeuroAnalyzer:eeg:badOption', ['Unknown layout option ''%s'' (use Source, ' ...
+                                'PositionsFile, Edits or Confirm).'], char(varargin{k}));
+                    end
+                end
+                if isempty(ls.positionsFile), ls.positionsFile = ''; end
+                if ~isempty(ls.positionsFile) && strcmp(ls.source, 'template')
+                    if any(strcmp(given, 'source')), ls.positionsFile = ''; else, ls.source = 'auto'; end
+                end
+                changed = ~isequaln(rmfield(ls, 'confirmed'), rmfield(app.LayoutSettings, 'confirmed'));
+                if changed || isempty(app.Layout)
+                    [L, P] = buildLayout(app.Loaded{1}, ls);
+                else
+                    L = app.Layout;
+                    P = app.LayoutPositions;
+                end
+            catch ME
+                UIKit.setStatus(app.StatusLabel, sprintf('Electrode layout not changed: %s', ME.message), 'error');
+                return;
+            end
+            if isempty(confirm), confirm = ls.confirmed && ~changed; end
+            ls.confirmed = logical(confirm(1));
+            L.confirmed = ls.confirmed;
+            app.Layout = L;
+            app.LayoutSettings = ls;
+            app.LayoutPositions = P;
+            if ~isempty(app.LayoutDlg)              % an open layout dialog shows the layout now in use
+                app.LayoutDlg.draft = ls;
+                app.LayoutDlg.positions = P;
+                app.LayoutDlg.L = L;
+                app.showLayoutDraft();
+            end
+            app.showLayoutInfo();
+            app.fillOverview();
+            if L.confirmed
+                UIKit.setStatus(app.StatusLabel, ['Electrode layout confirmed: ' L.summary], 'success');
+            else
+                UIKit.setStatus(app.StatusLabel, ['Electrode layout: ' L.summary ' Not confirmed yet.'], 'info');
+            end
+            ok = true;
+        end
+
+        %% openLayout - The Electrode layout dialog (not modal); returns its figure
+        % Left: the drawing (EEGLayout.plot); right: the Source list,
+        % Positions file..., the table (scalp: Channel | Placed from | As |
+        % Status, As editable; skull: Channel | AP (mm) | ML (mm) | Status, AP
+        % and ML editable), the summary and notes, then Cancel and Use this
+        % layout. Changes are drawn at once but used only after Use this
+        % layout, which also confirms the layout.
+        function fig = openLayout(app)
+            fig = [];
+            if isempty(app.Loaded)
+                UIKit.setStatus(app.StatusLabel, 'Load EEG files first (step 1).', 'warning');
+                return;
+            end
+            if ~isempty(app.LayoutFig) && isvalid(app.LayoutFig)
+                fig = app.LayoutFig;
+                figure(fig);
+                return;
+            end
+            T = UITheme;
+            D = UIKit.dialog('Electrode layout', ['Where every electrode sits: check it, change it if needed, ' ...
+                'then Use this layout'], 'EEG Analysis', [1000 660]);
+            fig = D.Fig;
+            fig.WindowStyle = 'normal';         % not modal: the window stays usable
+            fig.Resize = 'on';
+            fig.CloseRequestFcn = @(~,~)app.closeLayout();
+            D.Body.Scrollable = 'off';
+            D.Body.ColumnWidth = {'1x', 420};
+            D.Body.RowHeight = {'1x'};
+            plotPanel = uipanel(D.Body, 'BackgroundColor', T.cardBg, 'BorderType', 'line', ...
+                'HighlightColor', T.cardBorder);
+            plotPanel.Layout.Row = 1; plotPanel.Layout.Column = 1;
+            gp = uigridlayout(plotPanel, [1 1], 'Padding', [4 4 4 4], 'BackgroundColor', T.cardBg);
+            ax = uiaxes(gp);
+            right = uigridlayout(D.Body, [5 2], 'ColumnWidth', {64, '1x'}, ...
+                'RowHeight', {T.controlHeight, T.buttonHeight, '1x', 130, 34}, 'Padding', [0 0 0 0], ...
+                'RowSpacing', 8, 'ColumnSpacing', 8, 'BackgroundColor', T.bgGray);
+            right.Layout.Row = 1; right.Layout.Column = 2;
+            drop = addField(right, 1, 'Source', 'dropdown', {app.LayoutSources, app.LayoutSources{1}}, ...
+                ['From the files: the positions stored in the recording, the other channels by their names on ' ...
+                 'the 10-5 system. By name: every channel on the 10-5 position of its name (idealized head). ' ...
+                 'From a positions file: the positions of a cap or digitizer file.']);
+            drop.ValueChangedFcn = @(~,~)app.onLayoutSource();
+            fileBtn = UIKit.button(right, ['Positions file' char(8230)], @(~,~)app.choosePositionsFile(), ...
+                'secondary', ['A file of electrode positions: .elc, .sfp, .loc / .locs, .ced, .xyz, .elp (BESA), ' ...
+                '.bvef (BrainVision), .csv, .tsv or .txt (name with x, y, z; theta and phi; or ap and ml for a ' ...
+                'rodent). Channels are matched by name (any case; T3 is read as T7).']);
+            fileBtn.Layout.Row = 2; fileBtn.Layout.Column = [1 2];
+            tbl = uitable(right, 'RowName', {}, 'FontSize', T.fontSmall + 1, ...
+                'CellEditCallback', @(~, evt)app.onLayoutEdit(evt), 'Tooltip', ...
+                ['As: type a 10-5 name to place a channel there (empty = no position). AP / ML: mm from ' ...
+                 'bregma (anterior +, right +).']);
+            tbl.Layout.Row = 3; tbl.Layout.Column = [1 2];
+            txt = uitextarea(right, 'Value', {''}, 'Editable', 'off', 'FontSize', T.fontSmall, ...
+                'FontColor', T.sectionTitleColor);
+            txt.Layout.Row = 4; txt.Layout.Column = [1 2];
+            msg = uilabel(right, 'Text', '', 'FontSize', T.fontSmall, 'WordWrap', 'on', ...
+                'VerticalAlignment', 'top', 'Interpreter', 'none');
+            msg.Layout.Row = 5; msg.Layout.Column = [1 2];
+            cancelBtn = UIKit.button(D.Buttons, 'Cancel', @(~,~)app.closeLayout(), 'secondary', ...
+                'Close without changing the layout');
+            useBtn = UIKit.button(D.Buttons, 'Use this layout', @(~,~)app.useLayout(), 'primary', ...
+                'Use the layout shown and mark it as checked');
+            D.Buttons.ColumnWidth = {'1x', 100, 150};
+            d = struct();
+            d.Axes = ax;
+            d.SourceDrop = drop;
+            d.FileBtn = fileBtn;
+            d.Table = tbl;
+            d.Text = txt;
+            d.Message = msg;
+            d.CancelBtn = cancelBtn;
+            d.UseBtn = useBtn;
+            d.draft = app.LayoutSettings;       % what the dialog shows (used after Use this layout)
+            d.positions = app.LayoutPositions;
+            d.L = app.Layout;
+            app.LayoutFig = fig;
+            app.LayoutDlg = d;
+            app.showLayoutDraft();
         end
 
         %% ----------------------------------------------------------------
@@ -986,6 +1176,14 @@ classdef EEGAnalysisApp < handle
             st.settings.maps = app.Maps;
             st.settings.sources = cellfun(@(e) e.source, app.Loaded, 'UniformOutput', false);
             st.settings.continuous = ~e1.isEpoched;
+            % Electrode layout (step 1); its positions file is an input too
+            if ~isempty(app.Layout)
+                st.settings.layout = layoutSession(app.Layout, app.LayoutSettings, app.LayoutPositions);
+                if ~isempty(app.LayoutSettings.positionsFile)
+                    info = Session.fileInfo(app.LayoutSettings.positionsFile, app.PositionsRole);
+                    if isempty(st.inputs), st.inputs = info; else, st.inputs(end + 1) = info; end
+                end
+            end
             % Step 2: the settings applied (or those in the window when not applied)
             if isempty(app.CleanSettings)
                 cl = app.currentCleaning();
@@ -1020,6 +1218,10 @@ classdef EEGAnalysisApp < handle
             st.settings.tested = ~isempty(app.StatsResult);
             st.summary{end + 1} = sprintf('%d participant(s): %s; %d channels at %g Hz (%s)', numel(app.Names), ...
                 strjoin(app.Names, ', '), numel(e1.labels), e1.fs, strjoin(EEGSource.stableUnique(st.settings.sources), ', '));
+            if ~isempty(app.Layout)
+                st.summary{end + 1} = sprintf('Electrode layout: %s%s', app.Layout.summary, ...
+                    ifelse(app.Layout.confirmed, ' Confirmed.', ' Not confirmed.'));
+            end
             if cl.applied
                 st.summary{end + 1} = ['Cleaning: ' cleaningText(cl, numel(app.Names))];
                 for i = 1:numel(cl.filterText)
@@ -1066,21 +1268,39 @@ classdef EEGAnalysisApp < handle
         %% restoreSession - Reload the files, re-apply the settings, re-run each step
         % Sessions saved before steps 2 and 3 existed have no cleaning / trials
         % settings: their continuous recordings are cut with trialWindow only.
+        % Sessions without a layout keep the layout made from the files (not
+        % confirmed). The positions file is the input of role PositionsRole;
+        % every other input is an EEG file.
         function ok = restoreSession(app, s)
             ok = false;
             cfg = s.settings;
+            ins = s.inputs;
+            isPos = false(1, numel(ins));
+            if isstruct(ins) && ~isempty(ins) && isfield(ins, 'role')
+                isPos = strcmp({ins.role}, app.PositionsRole);
+            end
+            eegIn = ins(~isPos);
             gen = '';
             if isfield(cfg, 'generator'), gen = cfg.generator; end
             if strcmp(gen, 'demoEEG')
                 if ~app.loadDemo(), return; end
             elseif strcmp(gen, 'demoEEGraw')
                 if ~app.loadRawDemo(), return; end
-            elseif isempty(s.inputs)
+            elseif isempty(eegIn)
                 ok = true; return;
             else
                 maps = {};
                 if isfield(cfg, 'maps'), maps = cfg.maps; end
-                if ~app.openFiles({s.inputs.path}, maps), return; end
+                if ~app.openFiles({eegIn.path}, maps), return; end
+            end
+            if isfield(cfg, 'layout') && isstruct(cfg.layout)
+                ly = cfg.layout;
+                f = ly.positionsFile;
+                if any(isPos), f = ins(find(isPos, 1)).path; end      % where the session check found it
+                if ~app.setLayout('Source', ly.source, 'PositionsFile', f, 'Edits', ly.edits, ...
+                        'Confirm', ly.confirmed)
+                    return;
+                end
             end
             if isfield(cfg, 'cleaning') && isstruct(cfg.cleaning)
                 cl = cfg.cleaning;
@@ -1175,6 +1395,7 @@ classdef EEGAnalysisApp < handle
             app.TrialSettings = [];
             app.Rejections = [];
             app.clearResults();
+            app.resetLayout();
             app.CleanParticipantDrop.Items = names;
             app.CleanParticipantDrop.Value = names{1};
             app.showBadChannels();
@@ -1239,6 +1460,224 @@ classdef EEGAnalysisApp < handle
                 app.ErpInfo.Text = '';
                 app.MeasureInfo.Text = '';
             end
+        end
+
+        %% resetLayout - New files: the layout of participant 1 from its positions (others by name), not confirmed
+        % Never stops the loading: an error gives a layout without positions and a note.
+        function resetLayout(app)
+            app.closeLayout();
+            ls = struct();
+            ls.source = 'auto';
+            ls.positionsFile = '';
+            ls.edits = layoutEdits([]);
+            ls.confirmed = false;
+            app.LayoutSettings = ls;
+            app.LayoutPositions = [];
+            try
+                app.Layout = EEGLayout.fromEEG(app.Loaded{1});
+            catch ME
+                app.Layout = noLayout(app.Loaded{1}.labels, ME.message);
+            end
+            app.showLayoutInfo();
+        end
+
+        %% showLayoutInfo - Step 1: the layout's summary, confirmed or not
+        function showLayoutInfo(app)
+            L = app.Layout;
+            if isempty(L)
+                app.LayoutInfo.Text = '';
+                return;
+            end
+            if L.confirmed
+                app.LayoutInfo.Text = [L.summary ' Confirmed.'];
+                app.LayoutInfo.FontColor = UITheme.success;
+            else
+                app.LayoutInfo.Text = [L.summary ' Not checked yet: open Electrode layout' char(8230) ' to look at it.'];
+                app.LayoutInfo.FontColor = UITheme.warning;
+            end
+        end
+
+        %% showLayoutDraft - The layout dialog: Source list, table, summary and drawing of the layout shown
+        function showLayoutDraft(app)
+            d = app.LayoutDlg;
+            if isempty(d) || isempty(app.LayoutFig) || ~isvalid(app.LayoutFig), return; end
+            L = d.L;
+            items = app.LayoutSources;
+            if ~isempty(d.draft.positionsFile)
+                d.SourceDrop.Value = items{3};
+            elseif strcmp(d.draft.source, 'template')
+                d.SourceDrop.Value = items{2};
+            else
+                d.SourceDrop.Value = items{1};
+            end
+            tbl = d.Table;
+            tbl.Data = cell(0, 4);                  % no old rows under the new column formats
+            if strcmp(L.kind, 'skull')
+                tbl.ColumnName = {'Channel', 'AP (mm)', 'ML (mm)', 'Status'};
+                tbl.ColumnEditable = [false true true false];
+                tbl.ColumnFormat = {'char', 'numeric', 'numeric', 'char'};
+            else
+                tbl.ColumnName = {'Channel', 'Placed from', 'As', 'Status'};
+                tbl.ColumnEditable = [false false true false];
+                tbl.ColumnFormat = {'char', 'char', 'char', 'char'};
+            end
+            tbl.Data = layoutRows(L);
+            lines = EEGLayout.describe(L);
+            if ~isempty(d.draft.positionsFile)
+                lines = [{sprintf('Positions file: %s', fileName(d.draft.positionsFile))}, lines];
+            end
+            d.Text.Value = lines(:);
+            ax = d.Axes;
+            delete(allchild(ax));
+            EEGLayout.plot(ax, L);
+        end
+
+        %% layoutMessage - One line under the summary of the layout dialog (kind: info | warning | error)
+        function layoutMessage(app, msg, kind)
+            d = app.LayoutDlg;
+            if isempty(d) || ~isvalid(d.Message), return; end
+            d.Message.Text = msg;
+            switch kind
+                case 'error', d.Message.FontColor = UITheme.danger;
+                case 'warning', d.Message.FontColor = UITheme.warning;
+                otherwise, d.Message.FontColor = UITheme.bodyColor;
+            end
+        end
+
+        %% previewLayout - Show the layout of new dialog settings (not used until Use this layout)
+        % dropEdits: when the placements by hand do not fit the new layout
+        % (e.g. 10-5 names on a skull), drop them instead of refusing the change.
+        function previewLayout(app, dr, P, dropEdits, note)
+            if nargin < 5, note = ''; end
+            eeg = app.Loaded{1};
+            L = [];
+            try
+                L = buildLayout(eeg, dr, P);
+            catch ME
+                why = ME.message;
+                if dropEdits && ~isempty(dr.edits)
+                    dr.edits = layoutEdits([]);
+                    try
+                        L = buildLayout(eeg, dr, P);
+                        note = sprintf('Your placements by hand were dropped: %s', why);
+                    catch ME2
+                        why = ME2.message;
+                    end
+                end
+                if isempty(L)
+                    app.showLayoutDraft();          % back to the layout shown before
+                    app.layoutMessage(sprintf('Not changed: %s', why), 'error');
+                    return;
+                end
+            end
+            app.LayoutDlg.draft = dr;
+            app.LayoutDlg.positions = P;
+            app.LayoutDlg.L = L;
+            app.showLayoutDraft();
+            app.layoutMessage(note, 'warning');
+        end
+
+        %% onLayoutSource - Source list of the layout dialog
+        function onLayoutSource(app)
+            d = app.LayoutDlg;
+            if isempty(d), return; end
+            dr = d.draft;
+            k = find(strcmp(app.LayoutSources, d.SourceDrop.Value), 1);
+            if k == 3
+                if isempty(dr.positionsFile), app.choosePositionsFile(); end
+                return;
+            end
+            dr.source = ifelse(k == 2, 'template', 'auto');
+            dr.positionsFile = '';
+            app.previewLayout(dr, [], true);
+        end
+
+        %% choosePositionsFile - Positions file... of the layout dialog
+        function choosePositionsFile(app)
+            start = ProjectManager.getImportDir();
+            if isempty(start), start = pwd; end
+            [f, p] = uigetfile({'*.elc;*.sfp;*.loc;*.locs;*.ced;*.xyz;*.elp;*.bvef;*.csv;*.tsv;*.txt', ...
+                'Electrode positions (.elc, .sfp, .loc, .locs, .ced, .xyz, .elp, .bvef, .csv, .tsv, .txt)'}, ...
+                'Electrode positions', start);
+            if isempty(app.LayoutDlg) || isempty(app.LayoutFig) || ~isvalid(app.LayoutFig), return; end
+            figure(app.LayoutFig);
+            if isequal(f, 0)
+                app.showLayoutDraft();              % the Source list shows the layout in use again
+                return;
+            end
+            app.usePositionsFile(fullfile(p, f));
+        end
+
+        %% usePositionsFile - Read a positions file and show the layout it gives (layout dialog)
+        function usePositionsFile(app, f)
+            try
+                P = readElectrodes(f);
+            catch ME
+                app.showLayoutDraft();
+                app.layoutMessage(sprintf('Positions file not read: %s', ME.message), 'error');
+                return;
+            end
+            dr = app.LayoutDlg.draft;
+            if strcmp(dr.source, 'template'), dr.source = 'auto'; end
+            dr.positionsFile = f;
+            app.previewLayout(dr, P, true);
+        end
+
+        %% onLayoutEdit - A cell of the layout table: As (scalp) or AP / ML (skull) typed
+        % Empty = no position. A skull channel without a position gets 0 mm
+        % for the coordinate not typed yet.
+        function onLayoutEdit(app, evt)
+            d = app.LayoutDlg;
+            if isempty(d), return; end
+            L = d.L;
+            r = evt.Indices(1);
+            c = evt.Indices(2);
+            if r < 1 || r > numel(L.labels), return; end
+            E = struct('label', L.labels{r}, 'as', '', 'ap', NaN, 'ml', NaN);
+            note = '';
+            if strcmp(L.kind, 'skull')
+                if c ~= 2 && c ~= 3, return; end
+                v = evt.NewData;
+                if ischar(v) || isstring(v), v = str2double(v); end
+                if isempty(v) || ~isnumeric(v) || ~isscalar(v), v = NaN; end
+                v = double(v);
+                ml = L.pos(r, 1);
+                ap = L.pos(r, 2);
+                if c == 2, ap = v; else, ml = v; end
+                if isfinite(v)
+                    if ~isfinite(ap), ap = 0; note = sprintf('%s placed at AP 0 mm: type its AP too.', E.label); end
+                    if ~isfinite(ml), ml = 0; note = sprintf('%s placed at ML 0 mm: type its ML too.', E.label); end
+                    E.ap = ap;
+                    E.ml = ml;
+                end
+            else
+                if c ~= 3, return; end
+                E.as = strtrim(char(evt.NewData));
+            end
+            dr = d.draft;
+            dr.edits = setEdit(dr.edits, E);
+            app.previewLayout(dr, d.positions, false, note);
+        end
+
+        %% useLayout - Use this layout: apply the dialog's layout, confirmed, and close the dialog
+        function useLayout(app)
+            d = app.LayoutDlg;
+            if isempty(d), return; end
+            dr = d.draft;
+            if app.setLayout('Source', dr.source, 'PositionsFile', dr.positionsFile, 'Edits', dr.edits, ...
+                    'Confirm', true)
+                app.closeLayout();
+            else
+                app.layoutMessage(app.StatusLabel.Text, 'error');
+            end
+        end
+
+        %% closeLayout - Close the layout dialog (Cancel, its close box, new files, the window closing)
+        function closeLayout(app)
+            fig = app.LayoutFig;
+            app.LayoutFig = [];
+            app.LayoutDlg = [];
+            if ~isempty(fig) && isvalid(fig), delete(fig); end
         end
 
         %% isReady - Data cut into trials (message otherwise)
@@ -1491,12 +1930,25 @@ classdef EEGAnalysisApp < handle
         end
 
         %% fillOverview - What every file holds and what was done to it before
+        % The electrode layout (of participant 1) comes first, in place of the
+        % position sentence of each file.
         function fillOverview(app)
             lines = {};
+            if ~isempty(app.Loaded) && ~isempty(app.Layout)
+                if numel(app.Loaded) > 1
+                    lines{end + 1} = sprintf('Electrode layout (from the first participant, %s):', app.Names{1});
+                else
+                    lines{end + 1} = 'Electrode layout:';
+                end
+                lines = [lines, strcat({'   '}, EEGLayout.describe(app.Layout)), {''}];
+            end
             for k = 1:numel(app.Loaded)
                 e = app.analysedData(k);
                 lines{end + 1} = sprintf('%s  (%s, %s)', app.Names{k}, e.source, fileName(e.file)); %#ok<AGROW>
-                lines = [lines, strcat({'   '}, EEGSource.describe(e))]; %#ok<AGROW>
+                d = EEGSource.describe(e);
+                d = d(cellfun(@isempty, regexp(d, '^(Electrode positions for |The file has no electrode positions)', ...
+                    'once')));
+                lines = [lines, strcat({'   '}, d)]; %#ok<AGROW>
                 bad = EEGAnalysis.badChannels(e);
                 if any(bad)
                     lines{end + 1} = sprintf(['   Bad channels: %s (left out of the reference, rejection, ERPs ' ...
@@ -1661,6 +2113,7 @@ classdef EEGAnalysisApp < handle
             app.PeakToPeakEdit.Enable = onoff(has && reject);
             app.AbsoluteEdit.Enable = onoff(has && reject);
             app.CutBtn.Enable = onoff(has);
+            app.LayoutBtn.Enable = onoff(has);
             app.BaselineFromEdit.Enable = onoff(ready && app.BaselineCb.Value);
             app.BaselineToEdit.Enable = onoff(ready && app.BaselineCb.Value);
             app.ShowBtn.Enable = onoff(ready);
@@ -2042,6 +2495,129 @@ function [events, rename, problems] = parseEvents(txt)
             rename(end + 1, :) = {type, name}; %#ok<AGROW>
         end
     end
+end
+
+%% buildLayout - EEGLayout of a recording with layout settings (source, positionsFile, edits)
+% P: the positions file already read ([] = read it here when there is one).
+function [L, P] = buildLayout(eeg, ls, P)
+    if nargin < 3, P = []; end
+    if isempty(ls.positionsFile) || strcmp(ls.source, 'template')
+        P = [];
+    elseif isempty(P)
+        P = readElectrodes(ls.positionsFile);
+    end
+    L = EEGLayout.fromEEG(eeg, 'Source', ls.source, 'Positions', P, 'Edits', ls.edits);
+end
+
+%% layoutEdits - Placements by hand as a struct array label / as / ap / ml (0 x 0 when none)
+% as: a 10-5 name ('' = none); ap, ml: mm from bregma (NaN = none).
+function out = layoutEdits(E)
+    out = struct('label', {}, 'as', {}, 'ap', {}, 'ml', {});
+    if isempty(E), return; end
+    if ~isstruct(E) || ~isfield(E, 'label')
+        error('NeuroAnalyzer:eeg:badOption', ['Placements by hand must be a struct array with label and as ' ...
+            '(a 10-5 name), or label, ap and ml (mm from bregma).']);
+    end
+    for k = 1:numel(E)
+        e = struct('label', strtrim(char(E(k).label)), 'as', '', 'ap', NaN, 'ml', NaN);
+        if isfield(E, 'as') && (ischar(E(k).as) || isstring(E(k).as)), e.as = strtrim(char(E(k).as)); end
+        if isfield(E, 'ap') && isnumeric(E(k).ap) && isscalar(E(k).ap), e.ap = double(E(k).ap); end
+        if isfield(E, 'ml') && isnumeric(E(k).ml) && isscalar(E(k).ml), e.ml = double(E(k).ml); end
+        if isempty(e.as), e.as = ''; end
+        out(end + 1) = e; %#ok<AGROW>
+    end
+end
+
+%% setEdit - The placements with e for its channel (replaced, else added)
+function E = setEdit(E, e)
+    E = layoutEdits(E);
+    e = layoutEdits(e);
+    k = find(strcmpi({E.label}, e.label), 1);
+    if isempty(k), k = numel(E) + 1; end
+    E(k) = e;
+end
+
+%% noLayout - A layout without positions (when making the layout failed)
+function L = noLayout(labels, why)
+    labels = EEGSource.cellRow(labels);
+    n = numel(labels);
+    L = struct('kind', 'none', 'labels', {labels}, 'pos', NaN(n, 3), 'source', {repmat({''}, 1, n)}, ...
+        'as', {repmat({''}, 1, n)}, 'status', {repmat({'none'}, 1, n)}, 'frame', '', ...
+        'notes', {{sprintf('The electrode layout could not be made: %s', why)}}, ...
+        'check', struct('matched', {{}}, 'renamed', {cell(0, 2)}, 'missing', {labels}, 'duplicated', {{}}, ...
+        'outside', {{}}), 'summary', sprintf('0 of %d channels placed.', n), 'confirmed', false);
+end
+
+%% layoutRows - Rows of the layout table
+% Scalp: Channel | Placed from | As (the 10-5 name) | Status;
+% skull: Channel | AP (mm) | ML (mm) | Status ([] = no position).
+function rows = layoutRows(L)
+    n = numel(L.labels);
+    rows = cell(n, 4);
+    skull = strcmp(L.kind, 'skull');
+    pairs = EEGLayout.duplicatePairs(L);
+    for k = 1:n
+        has = all(isfinite(L.pos(k, :)));
+        switch L.status{k}
+            case 'ok'
+                st = 'placed';
+            case 'renamed'
+                i = find(strcmp(L.check.renamed(:, 1), L.labels{k}), 1);
+                if isempty(i)
+                    st = 'renamed';
+                else
+                    st = sprintf('renamed (%s %s %s)', L.check.renamed{i, 1}, char(8594), L.check.renamed{i, 2});
+                end
+            case 'duplicate'
+                other = pairs(any(pairs == k, 2), :);
+                other = unique(other(other ~= k))';
+                st = sprintf('same place as %s', strjoin(L.labels(other), ', '));
+            case 'outside'
+                st = 'outside the head';
+            otherwise
+                st = 'no position';
+        end
+        if skull
+            ap = []; ml = [];
+            if has, ap = L.pos(k, 2); ml = L.pos(k, 1); end
+            rows(k, :) = {L.labels{k}, ap, ml, st};
+        else
+            as = L.as{k};
+            if isempty(as) && has, as = EEGLayout.cleanName(L.labels{k}); end
+            switch L.source{k}
+                case 'file', from = 'file';
+                case 'template', from = 'name (10-5)';
+                case 'positions file', from = 'positions file';
+                case 'edited', from = 'by hand';
+                otherwise, from = '';
+            end
+            rows(k, :) = {L.labels{k}, from, as, st};
+        end
+    end
+end
+
+%% layoutSession - The layout settings and what they gave, for the session (settings.layout)
+% source, positionsFile, edits, confirmed; kind, counts (channels per
+% source: file, template, positionsFile, edited; none; total), renamed
+% (n x 2: channel, name used), frame, format (of the positions file),
+% summary.
+function ly = layoutSession(L, ls, P)
+    has = all(isfinite(L.pos), 2)';
+    count = @(what) sum(strcmp(L.source, what) & has);
+    ly = struct();
+    ly.source = ls.source;
+    ly.positionsFile = ls.positionsFile;
+    ly.edits = layoutEdits(ls.edits);
+    ly.confirmed = logical(ls.confirmed);
+    ly.kind = L.kind;
+    ly.counts = struct('file', count('file'), 'template', count('template'), ...
+        'positionsFile', count('positions file'), 'edited', count('edited'), 'none', sum(~has), ...
+        'total', numel(L.labels));
+    ly.renamed = L.check.renamed;
+    ly.frame = L.frame;
+    ly.format = '';
+    if isstruct(P) && isfield(P, 'format'), ly.format = char(P.format); end
+    ly.summary = L.summary;
 end
 
 %% onoff - 'on'/'off' from a logical
