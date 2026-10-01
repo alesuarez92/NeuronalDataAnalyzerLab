@@ -60,11 +60,26 @@ end
 %% ------------------------------------------------------------- helpers
 
 %% resizeTo - Set the launcher's size and re-flow it (as a drag of the window edge does)
+% Since R2026b the window takes a new size a moment later, and a late report
+% of the size before can undo a new one: wait (up to 5 s per try, 3 tries)
+% until the window has the size asked for.
 function resizeTo(app, w, h)
-    app.UIFig.Position(3:4) = [w h];
-    drawnow;
+    for attempt = 1:3
+        app.UIFig.Position(3:4) = [w h];
+        t0 = tic;
+        while ~hasSize(app, w, h) && toc(t0) < 5
+            drawnow; pause(0.05);
+        end
+        drawnow; pause(0.2); drawnow;
+        if hasSize(app, w, h), break; end
+    end
     app.onResize();
     drawnow;
+end
+
+%% hasSize - The launcher's window is w x h px
+function tf = hasSize(app, w, h)
+    tf = isequal(round(app.UIFig.Position(3:4)), [w h]);
 end
 
 %% press - Click a button: run its ButtonPushedFcn
@@ -124,6 +139,7 @@ function testLayoutFollowsTheWindowWidth(tests)
 
     % 720 x 640: 2 columns, one family per row
     resizeTo(app, 720, 640);
+    tests.verifyEqual(round(app.UIFig.Position(3)), 720, 'the window took the new width');
     tests.verifyEqual(app.Columns, 2);
     tests.verifyEqual(tilePlace(app, 'ldf'), [2 1]);
     tests.verifyEqual(tilePlace(app, 'lsci'), [2 2]);
@@ -140,6 +156,7 @@ function testLayoutFollowsTheWindowWidth(tests)
 
     % 560 wide: 1 column, no cover art (no room next to the title)
     resizeTo(app, 560, 640);
+    tests.verifyEqual(round(app.UIFig.Position(3)), 560, 'the window took the new width');
     tests.verifyEqual(app.Columns, 1);
     tests.verifyEqual(numel(app.LearnGrid.ColumnWidth), 1);
     cols = arrayfun(@(t) t.panel.Layout.Column, app.Tiles);
