@@ -36,7 +36,7 @@ them exposed two limits, which are now fixed.
 | ✅ | Session files and reports | Reproducibility | Save settings, input-file provenance (with checksums) and results together; a one-page PDF report per analysis for the lab notebook. |
 | ✅ | CSD methods | LFP | Inverse CSD (delta, step, spline) and kernel CSD next to the standard CSD, tested against laminar data with a known CSD. |
 | ✅ | Repeated-measures statistics | Response features | Repeated-measures ANOVA with sphericity checks and corrections, and the Friedman test, for the same animals in several conditions. |
-| 🔨 | EEG | New pipeline | Scalp and rodent EEG, first from data already cleaned in MATLAB (done in v0.4.0: EEG Analysis window), then from raw recordings of the most used systems (readers, basic cleaning and electrode layouts done). Plan below. |
+| 🔨 | EEG | New pipeline | Scalp and rodent EEG, first from data already cleaned in MATLAB (done in v0.4.0: EEG Analysis window), then from raw recordings of the most used systems (readers, basic cleaning, electrode layouts and scalp maps done). Plan below. |
 
 ## EEG
 
@@ -95,8 +95,8 @@ Done in step 3 (*Electrode layout…* in the EEG window; `core/EEGLayout.m`,
 - A layout check draws every electrode on the head (or skull) and lists
   the channels matched, renamed (for example "T3 treated as T7"), without
   a position, duplicated or outside the head. *Use this layout* confirms
-  it; scalp maps (step 4) will use the confirmed layout. Without
-  positions, everything except scalp maps still works.
+  it; scalp maps (step 4) use the layout and say when it is not
+  confirmed. Without positions, everything except scalp maps still works.
 
 | | Still open | Notes |
 |---|---|---|
@@ -110,7 +110,7 @@ Done in step 3 (*Electrode layout…* in the EEG window; `core/EEGLayout.m`,
 | ✅ | 1. Data model and MATLAB importers | `core/io/EEGSource.m`, `core/demo/demoEEG.m`, `tests/EEGFormatsTest.m`; the form for plain `.mat` files is in the window (step 2). EEGLAB, FieldTrip, plain `.mat`. Synthetic demo with known answers: 32 channels on 10-20 positions, three conditions, a known P1 / N1 / P300 and scalp distribution, known alpha, some trials already rejected; a rodent version with a few skull electrodes. The demo is written in every supported format, so each importer is tested against the same data. |
 | ✅ | 2. EEG Analysis window | In v0.4.0 (`apps/EEGAnalysisApp.m`, `core/EEGAnalysis.m`, tests, Help, launcher card, sessions and methods text): Overview (channels, trials per condition, what was already done), the form for plain `.mat` files, continuous recordings cut into trials, ERP per condition (butterfly, chosen channels, difference waves, grand average), peak and mean amplitude in a window per participant, and the repeated-measures statistics of Groups & statistics run in the window itself on those values (they stay in the EEG window; not sent to Signal Characterization). |
 | ✅ | 3. Electrode layouts | `core/EEGLayout.m` (the 10-5 template computed, name matching, one orientation, skull layouts in mm from bregma, the check), `core/io/readElectrodes.m` / `writeElectrodes.m` (position files), the *Electrode layout…* window in step 1, sessions and methods text; `tests/EEGLayoutTest.m`, `tests/ElectrodesFileTest.m`, walkthrough. BioSemi and EGI HydroCel templates wait for the licence check (above). |
-| 📅 | 4. Scalp maps | Topography at a time or window: spherical spline on scalp layouts, flat interpolation on skull layouts; tested on the demo's known distribution. |
+| ✅ | 4. Scalp maps | `core/ScalpMap.m`, *Scalp maps* in step 5 of the window (`apps/EEGAnalysisApp.m`), sessions, methods text and Help; `tests/ScalpMapTest.m`, walkthrough. The mean voltage in the window of step 5, one map per condition and A minus B, one colour scale: spherical splines on scalp layouts (Perrin et al., 1989; as MNE-Python's interpolation matrix without regularization), a thin-plate spline inside the electrodes on skull layouts. Tested against MNE-Python and scipy and on the demo's known distributions (P300 at Pz, N1 at Cz, the rodent VEP over V1). |
 | 📅 | 5. Time–frequency per condition | ERSP / ITPC and band power from the existing time–frequency code. |
 | ✅ | 6. Raw recordings | BrainVision read first (the author's lab records with Brain Products); EDF / BDF, EGI `.mff` and EEG-BIDS done, each with a tested writer. Basic steps in the window (steps 2 and 3): bad channels (suggested, left out of the reference, rejection and ERPs), zero-phase FIR filters as MNE-Python (high-pass, low-pass, notch), re-reference (average, linked mastoids, chosen channels), trials cut at named events, trials rejected by peak-to-peak or absolute amplitude; a raw demo with known artefacts. ICA and advanced cleaning stay in EEGLAB / FieldTrip; Help explains how to bring their result back. |
 | 📅 | 7. Batch, sessions, methods text, website | Same as the other pipelines, plus a walkthrough. |

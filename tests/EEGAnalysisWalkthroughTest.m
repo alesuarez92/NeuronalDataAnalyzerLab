@@ -17,7 +17,9 @@
 %   layout dialog (drawing, table, By name, Cancel), every channel by name
 %   on the 10-5 system, a positions file that calls T7 by its old name T3,
 %   a channel placed by hand, Use this layout (confirmed) -> session, and
-%   the rodent's skull layout in mm from bregma. Checks the results
+%   the rodent's skull layout in mm from bregma; then scalp maps (P300
+%   window, N1 at 100 ms, one participant, a session, the rodent's flat
+%   map, a file without positions). Checks the results
 %   against the demo's known answers (core/demo/demoEEG.m) and saves a
 %   frame after every step to
 %   test-artifacts/screens/walkthrough/EEGAnalysisApp_<NN>_<step>.png.
@@ -706,4 +708,125 @@ function testElectrodeLayout(tests)
     tests.verifyTrue(contains(app.StatusLabel.Text, 'the layout is in mm from bregma'));
     tests.verifyEqual(app.Layout.pos(v1l, :), [-3 -4 0], 'AbsTol', 1e-12);
     tests.verifyTrue(app.Layout.confirmed);
+end
+
+function testScalpMaps(tests)
+    DemoData.ensureDemoPath();
+    f = demoEEG();
+    app = EEGAnalysisApp(); c = onCleanup(@() delete(app.UIFig));
+    tests.verifyTrue(logical(app.loadDemo()));
+    tests.verifyEqual(char(app.MapsBtn.Enable), 'off', 'no ERPs yet');
+    tests.verifyFalse(logical(app.showScalpMaps()), 'maps need the ERPs');
+    tests.verifyTrue(logical(app.showERPs()));
+    tests.verifyEqual(char(app.MapsBtn.Enable), 'on');
+    xy = EEGLayout.project(app.Layout);
+    at = @(name) xy(strcmp(app.Layout.labels, name), :);
+    vAt = @(m, name) m.values(strcmp(m.labels, name));
+
+    % 1. The P300 window of step 5 (300-400 ms): a map per condition and Target minus Standard,
+    %    on the layout from the files, not confirmed yet (the window says so)
+    app.setView('grand', 'Conditions', 'Target', 'Standard');
+    press(app.MapsBtn);
+    tests.verifyEqual(app.ViewDrop.Value, 'Scalp maps');
+    tests.verifyEqual(char(app.CondBDrop.Enable), 'on', 'B of the A minus B map');
+    tests.verifyEqual(char(app.MapPanel.Visible), 'on');
+    tests.verifyEqual(app.PlotGrid.RowHeight, {0, '1x'});
+    tests.verifyTrue(contains(app.StatusLabel.Text, 'not confirmed'));
+    tests.verifyTrue(logical(app.setLayout('Confirm', true)));
+    tests.verifyFalse(contains(app.StatusLabel.Text, 'not confirmed'));
+    M = app.ScalpMaps;
+    tests.verifyEqual({M.name}, [app.Grand.conditions, {'Target minus Standard'}]);
+    tests.verifyEqual(app.MapSettings.window, [0.3 0.4], 'AbsTol', 1e-12);
+    tests.verifyEqual(M(1).method, 'spherical spline');
+    tests.verifyNumElements(M(1).labels, 32);
+    t = M(strcmp({M.name}, 'Target'));
+    nv = M(strcmp({M.name}, 'Novel'));
+    st = M(strcmp({M.name}, 'Standard'));
+    tests.verifyLessThan(norm(peakAt(t, 'max') - at('Pz')), 0.15, 'P300 largest near Pz');
+    tests.verifyLessThan(norm(peakAt(M(end), 'max') - at('Pz')), 0.15, 'Target minus Standard largest near Pz');
+    tests.verifyTrue(vAt(t, 'Pz') > vAt(nv, 'Pz') && vAt(nv, 'Pz') > vAt(st, 'Pz'), 'Target > Novel > Standard at Pz');
+    axs = findobj(app.MapPanel, 'Type', 'axes');
+    tests.verifyNumElements(axs, 5, 'four maps and the colour scale');
+    lim = ScalpMap.limits(M);
+    tests.verifyEqual(sum(arrayfun(@(a) isequal(a.CLim, lim), axs)), 4, 'one colour scale for every map');
+    shot(tests, app, 'EEGAnalysisApp_m01_scalp_maps_p300');
+
+    % 2. N1 at 100 ms (one sample): most negative near Cz; step 5 shows the window
+    tests.verifyTrue(logical(app.showScalpMaps([0.1 0.1])));
+    tests.verifyEqual([app.WindowFromEdit.Value app.WindowToEdit.Value], [100 100]);
+    tests.verifyTrue(contains(app.StatusLabel.Text, 'voltage at 100 ms'));
+    n1 = app.ScalpMaps(strcmp({app.ScalpMaps.name}, 'Standard'));
+    tests.verifyLessThan(norm(peakAt(n1, 'min') - at('Cz')), 0.15, 'N1 most negative near Cz');
+    tests.verifyLessThan(vAt(n1, 'Cz'), -2);
+    shot(tests, app, 'EEGAnalysisApp_m02_scalp_maps_n1');
+
+    % 3. One participant and other conditions in the bar: the maps follow
+    app.setView(3, '', 'Novel', 'Standard');
+    names = {app.ScalpMaps.name};
+    tests.verifyEqual(sort(names(1:end - 1)), sort(app.Grand.conditions));
+    tests.verifyEqual(names{end}, 'Novel minus Standard');
+    tests.verifyEqual(app.MapSettings.participant, app.Names{3});
+    tests.verifyEqual(app.MapSettings.window, [0.1 0.1], 'AbsTol', 1e-12);
+
+    % 4. Measuring while the maps are shown: they follow the window measured
+    app.setView('grand', '', 'Target', 'Standard');
+    app.setMeasure('mean', 'positive', [0.3 0.4], {'Pz'});
+    tests.verifyTrue(logical(app.measure()));
+    tests.verifyEqual(app.ViewDrop.Value, 'Scalp maps');
+    tests.verifyEqual(app.MapSettings.window, [0.3 0.4], 'AbsTol', 1e-12);
+
+    % 5. Session: the maps come back with the same values; the methods text describes them
+    p = fullfile(tests.TestData.tmp, ['EEGAnalysisMaps' Session.Extension]);
+    tests.verifyTrue(logical(app.saveSessionTo(p, 'scalp maps')));
+    s = Session.load(p);
+    tests.verifyEqual(s.settings.scalpMaps.window, [0.3 0.4], 'AbsTol', 1e-12);
+    tests.verifyTrue(contains(MethodsWriter.fromSession(s), ['Scalp maps of the mean voltage from 300 to 400 ms ' ...
+        'were interpolated over the head with spherical splines']));
+    b = EEGAnalysisApp(); cb = onCleanup(@() delete(b.UIFig));
+    tests.verifyTrue(logical(b.openSession(p)), 'session not reopened');
+    tests.verifyEqual(b.ViewDrop.Value, 'Scalp maps');
+    tests.verifyEqual({b.ScalpMaps.name}, {app.ScalpMaps.name});
+    tests.verifyEqual(b.ScalpMaps(2).z, app.ScalpMaps(2).z, 'AbsTol', 1e-9);
+    delete(cb);
+
+    % 6. Back to the ERPs: the plot area shows the axes again
+    app.setView('', 'Conditions');
+    tests.verifyEqual(char(app.MapPanel.Visible), 'off');
+    tests.verifyEqual(app.PlotGrid.RowHeight, {'1x', 0});
+    tests.verifyNumElements(findall(app.AxERP, 'Type', 'line'), 3, 'one line per condition');
+
+    % 7. The rodent recording: a flat map between the four screws, the VEP trough over V1
+    tests.verifyTrue(logical(app.openFiles({f.rodent.eeglab})));
+    app.setTrialWindow([-0.1 0.4]);
+    tests.verifyTrue(logical(app.cutIntoTrials()));
+    app.setBaseline(true, [-0.1 0]);
+    app.setChannels({'V1-L', 'V1-R'});
+    tests.verifyTrue(logical(app.showERPs()));
+    tests.verifyTrue(logical(app.showScalpMaps([0.05 0.05])));
+    M = app.ScalpMaps;
+    tests.verifyNumElements(M, 1, 'one condition: one map');
+    tests.verifyEqual(M.method, 'thin-plate spline');
+    tests.verifyLessThan(vAt(M, 'V1-L'), -25);
+    tests.verifyLessThan(vAt(M, 'V1-L'), vAt(M, 'M1-L'));
+    tests.verifyTrue(isnan(M.z(end, 1)), 'nothing drawn outside the screws');
+    shot(tests, app, 'EEGAnalysisApp_m03_rodent_flat_map');
+
+    % 8. No positions (a plain .mat file, layout from the file only): no maps, and why
+    tests.verifyTrue(logical(app.openFiles({f.scalp(1).matrix})));
+    tests.verifyTrue(logical(app.setLayout('Source', 'file')));
+    tests.verifyEqual(app.Layout.kind, 'none');
+    tests.verifyTrue(logical(app.showERPs()));
+    tests.verifyFalse(logical(app.showScalpMaps()));
+    tests.verifyEmpty(app.ScalpMaps);
+    tests.verifyTrue(contains(app.StatusLabel.Text, 'No scalp maps'));
+end
+
+%% peakAt - Drawing coordinates of the largest ('max') or smallest ('min') value of a map
+function p = peakAt(M, which)
+    z = M.z;
+    if strcmp(which, 'min'), z = -z; end
+    z(isnan(z)) = -Inf;
+    [~, i] = max(z(:));
+    [r, k] = ind2sub(size(z), i);
+    p = [M.x(k) M.y(r)];
 end

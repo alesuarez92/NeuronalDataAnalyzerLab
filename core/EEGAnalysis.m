@@ -71,6 +71,11 @@
 %   d   = EEGAnalysis.difference(erp, condA, condB)
 %       Difference wave condA minus condB: d.mean (channels x time),
 %       d.label ('Target minus Standard'), d.times, d.labels.
+%   v   = EEGAnalysis.windowMean(erp, window, condA, condB)
+%       The mean voltage of every channel (channels x 1, uV; NaN for bad
+%       channels) of condition condA in window [from to] s, or of the
+%       difference condA minus condB (for scalp maps, core/ScalpMap.m). A
+%       window between two samples (e.g. [t t]) takes the nearest sample.
 %   r   = EEGAnalysis.measure(erp, Name, Value)
 %       One number per condition from the ERP averaged over 'Channels'
 %       (names, default all; bad channels left out, NaN when none is left)
@@ -305,6 +310,33 @@ classdef EEGAnalysis
             end
             d = struct('label', sprintf('%s minus %s', a, b), 'mean', erp.mean(:, :, ia) - erp.mean(:, :, ib), ...
                 'times', erp.times, 'labels', {erp.labels});
+        end
+
+        %% windowMean - Mean of every channel in a window (scalp maps)
+        function v = windowMean(erp, win, a, b)
+            if nargin < 4, b = ''; end
+            ia = find(strcmp(erp.conditions, a), 1);
+            ib = [];
+            if ~isempty(b), ib = find(strcmp(erp.conditions, b), 1); end
+            if isempty(ia) || (~isempty(b) && isempty(ib))
+                error('NeuroAnalyzer:eeg:unknownCondition', 'Unknown condition: choose from %s.', ...
+                    EEGSource.listText(erp.conditions));
+            end
+            t = erp.times;
+            tol = 1e-9;
+            ok = isnumeric(win) && numel(win) == 2 && win(1) <= win(2);
+            w = false(size(t));
+            if ok, w = t >= win(1) - tol & t <= win(2) + tol; end
+            if ~any(w) && ok && win(1) >= t(1) - tol && win(2) <= t(end) + tol
+                [~, i] = min(abs(t - mean(win)));      % between two samples: the nearest one
+                w = false(size(t));
+                w(i) = true;
+            elseif ~any(w)
+                w = EEGAnalysis.windowMask(t, win, 'map');
+            end
+            Y = erp.mean(:, w, ia);
+            if ~isempty(ib), Y = Y - erp.mean(:, w, ib); end
+            v = mean(Y, 2);
         end
 
         %% measure - Mean or peak amplitude per condition in a window

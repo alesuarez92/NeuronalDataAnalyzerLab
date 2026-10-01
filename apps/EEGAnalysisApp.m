@@ -24,13 +24,16 @@
 %                    events; trials with too large amplitudes left out)
 %   4 ERPs          (baseline, channels to look at)
 %   5 Measure       (mean or peak amplitude in a time window, per
-%                    participant and condition; warns about edge peaks)
+%                    participant and condition; warns about edge peaks;
+%                    Scalp maps of the same window)
 %   6 Statistics    (conditions compared within participants: paired
 %                    t-test / Wilcoxon for two, repeated-measures ANOVA /
 %                    Friedman for more; core/GroupStats.m)
 %   7 Save          (measures as .csv, everything as .mat; sessions)
-% and on the right the ERP plot (conditions, all channels, or a
-% difference wave; one participant or the grand average) above the tabs
+% and on the right the ERP plot (conditions, all channels, a difference
+% wave, or scalp maps of the window of step 5: one per condition and A
+% minus B, core/ScalpMap.m; one participant or the grand average) above
+% the tabs
 % Overview (what each file holds and what was done to it) |
 % Measures | Statistics. The computations are in core/EEGAnalysis.m.
 % Step 2 always starts again from the files as read and step 3 from the
@@ -46,8 +49,9 @@
 % setReference(mode, channels), applyCleaning(), setEvents(text),
 % setTrialWindow([from to] s), setRejection(on, peakToPeak, absolute),
 % cutIntoTrials(), setBaseline(on, [from to] s), setChannels(names),
-% showERPs(), setView(participant, view, condA, condB), setMeasure(kind,
-% polarity, [from to] s, channels), measure(), setStatsMethod(m),
+% showERPs(), setView(participant, view, condA, condB), showScalpMaps([from
+% to] s), setMeasure(kind, polarity, [from to] s, channels), measure(),
+% setStatsMethod(m),
 % compareConditions(), exportResultsTo(path). Sessions:
 % saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
 % sessionState(), restoreSession(s).
@@ -100,6 +104,7 @@ classdef EEGAnalysisApp < handle
         WindowToEdit        % ms
         MeasureChannelsEdit
         MeasureBtn
+        MapsBtn             % Scalp maps (of the window above, in the plot area)
         MeasureInfo
         % Step 6
         MethodDrop
@@ -114,6 +119,8 @@ classdef EEGAnalysisApp < handle
         CondADrop
         CondBDrop
         AxERP
+        PlotGrid            % holds AxERP (row 1) and MapPanel (row 2); the row shown has height '1x'
+        MapPanel            % the scalp maps (view Scalp maps)
         Tabs
         OverviewText
         MeasuresTable
@@ -139,6 +146,8 @@ classdef EEGAnalysisApp < handle
         Measures = {}       % 1 x P measure() results
         MeasureSettings = []
         StatsResult = []    % GroupStats.compare result
+        ScalpMaps = []      % maps last drawn (ScalpMap.make results plus name), [] = none
+        MapSettings = []    % window [from to] s, participant, condA, condB of ScalpMaps
         % Electrode layout (step 1)
         Layout = []         % EEGLayout of participant 1 (core/EEGLayout.m: kind, labels, pos, ...)
         LayoutSettings = [] % source 'auto' | 'template' | 'file', positionsFile, edits, confirmed
@@ -149,7 +158,7 @@ classdef EEGAnalysisApp < handle
 
     properties(Constant)
         GrandLabel = 'All participants (grand average)'
-        Views = {'Conditions', 'All channels (butterfly)', 'Difference wave'}
+        Views = {'Conditions', 'All channels (butterfly)', 'Difference wave', 'Scalp maps'}
         MeasureKinds = {'Mean amplitude', 'Peak amplitude'}
         NotchItems = {'Off', '50 Hz (+ harmonics)', '60 Hz (+ harmonics)'}
         ReferenceModes = {'As recorded', 'Average', 'Linked mastoids', 'Channels'}
@@ -274,10 +283,10 @@ classdef EEGAnalysisApp < handle
                 ['Leave out the trials whose amplitude is too large on any good channel (blinks, movements, ' ...
                  'electrode pops). Mark noisy channels bad first (step 2), or they reject every trial.']);
             app.RejectCb.ValueChangedFcn = @(~,~)app.updateControls();
-            app.PeakToPeakEdit = addField(g, 6, 'Peak-to-peak (uV)', 'numeric', 100, ...
+            app.PeakToPeakEdit = addField(g, 6, ['Peak-to-peak (' char(181) 'V)'], 'numeric', 100, ...
                 ['Reject a trial when the largest minus the smallest value of a good channel exceeds this (0 = off). ' ...
                  '100 uV is usual for scalp EEG after filtering.'], [0 1e6]);
-            app.AbsoluteEdit = addField(g, 7, 'Absolute (uV)', 'numeric', 0, ...
+            app.AbsoluteEdit = addField(g, 7, ['Absolute (' char(181) 'V)'], 'numeric', 0, ...
                 'Reject a trial when any value of a good channel lies further than this from 0 uV (0 = off)', [0 1e6]);
             app.CutBtn = UIKit.button(g, 'Cut into trials', @(~,~)app.cutIntoTrials(), 'secondary', ...
                 ['Cut every continuous recording into trials around its events (after step 2 when it was applied), ' ...
@@ -327,7 +336,12 @@ classdef EEGAnalysisApp < handle
                 'Channels to measure at, separated by commas (averaged). Empty = the channels of step 4.');
             app.MeasureBtn = UIKit.button(g, 'Measure', @(~,~)app.measure(), 'secondary', ...
                 'One number per participant and condition, in the Measures tab; the window is shaded on the plot');
-            app.MeasureBtn.Layout.Row = 7; app.MeasureBtn.Layout.Column = [1 2];
+            app.MeasureBtn.Layout.Row = 7; app.MeasureBtn.Layout.Column = 1;
+            app.MapsBtn = UIKit.button(g, 'Scalp maps', @(~,~)app.showScalpMaps(), 'secondary', ...
+                ['The mean voltage of every electrode in this window, drawn on the head (or skull) for each ' ...
+                 'condition and for A minus B, in the plot above (Show: Scalp maps). Uses the electrode layout ' ...
+                 'of step 1; bad channels are left out.']);
+            app.MapsBtn.Layout.Row = 7; app.MapsBtn.Layout.Column = 2;
             app.MeasureInfo = infoLabel(g, '', 'Result of the measure and its checks');
             app.MeasureInfo.Layout.Row = 8; app.MeasureInfo.Layout.Column = [1 2];
 
@@ -370,17 +384,25 @@ classdef EEGAnalysisApp < handle
             app.ViewDrop = uidropdown(bar, 'Items', app.Views, 'Value', app.Views{1}, ...
                 'ValueChangedFcn', @(~,~)app.onView(), 'Tooltip', ...
                 ['Conditions: one line per condition at the chosen channels (shade = SEM). All channels: every ' ...
-                 'channel of one condition (chosen channels in colour). Difference wave: condition A minus B.']);
+                 'channel of one condition (chosen channels in colour). Difference wave: condition A minus B. ' ...
+                 'Scalp maps: the mean voltage in the window of step 5 over the head, per condition and A minus B.']);
             barLabel(bar, 'Condition');
             app.CondADrop = uidropdown(bar, 'Items', {'(none)'}, 'Value', '(none)', ...
-                'ValueChangedFcn', @(~,~)app.plotERP(), 'Tooltip', 'Condition shown (All channels) or A (Difference wave)');
+                'ValueChangedFcn', @(~,~)app.plotERP(), 'Tooltip', ...
+                'Condition shown (All channels) or A (Difference wave; the A minus B map of Scalp maps)');
             barLabel(bar, 'minus');
             app.CondBDrop = uidropdown(bar, 'Items', {'(none)'}, 'Value', '(none)', ...
-                'ValueChangedFcn', @(~,~)app.plotERP(), 'Tooltip', 'Condition B, subtracted from A (Difference wave)');
+                'ValueChangedFcn', @(~,~)app.plotERP(), 'Tooltip', ...
+                'Condition B, subtracted from A (Difference wave; the A minus B map of Scalp maps)');
             plotPanel = uipanel(right, 'BackgroundColor', T.cardBg, 'BorderType', 'line', 'HighlightColor', T.cardBorder);
-            gp = uigridlayout(plotPanel, [1 1], 'Padding', [4 4 4 4], 'BackgroundColor', T.cardBg);
+            gp = uigridlayout(plotPanel, [2 1], 'RowHeight', {'1x', 0}, 'Padding', [4 4 4 4], 'RowSpacing', 0, ...
+                'BackgroundColor', T.cardBg);
+            app.PlotGrid = gp;
             app.AxERP = uiaxes(gp);
+            app.AxERP.Layout.Row = 1;
             app.AxERP.Toolbar.Visible = 'on';
+            app.MapPanel = uipanel(gp, 'BorderType', 'none', 'BackgroundColor', T.cardBg, 'Visible', 'off');
+            app.MapPanel.Layout.Row = 2;
             UIKit.emptyAxes(app.AxERP, 'Load EEG files (or Try demo data) to begin');
 
             app.Tabs = uitabgroup(right);
@@ -391,14 +413,14 @@ classdef EEGAnalysisApp < handle
             tm = uitab(app.Tabs, 'Title', 'Measures', 'BackgroundColor', T.cardBg);
             g2 = uigridlayout(tm, [1 1], 'Padding', [6 6 6 6], 'BackgroundColor', T.cardBg);
             app.MeasuresTable = uitable(g2, 'RowName', {}, 'FontSize', T.fontSmall + 1, 'ColumnName', ...
-                {'Participant', 'Condition', 'Value (uV)', 'Latency (ms)', 'Trials', 'Check'});
+                {'Participant', 'Condition', ['Value (' char(181) 'V)'], 'Latency (ms)', 'Trials', 'Check'});
             ts = uitab(app.Tabs, 'Title', 'Statistics', 'BackgroundColor', T.cardBg);
             g3 = uigridlayout(ts, [2 1], 'RowHeight', {'1x', '1x'}, 'Padding', [6 6 6 6], 'RowSpacing', 6, ...
                 'BackgroundColor', T.cardBg);
             app.StatsText = uitextarea(g3, 'Value', {'Measure (step 5), then Compare conditions (step 6).'}, ...
                 'Editable', 'off', 'FontSize', T.fontBody, 'FontColor', T.sectionTitleColor);
             app.StatsTable = uitable(g3, 'RowName', {}, 'FontSize', T.fontSmall + 1, 'ColumnName', ...
-                {'Comparison', 'Difference (uV)', '95% CI', 'p (Holm)', 'Test'});
+                {'Comparison', ['Difference (' char(181) 'V)'], '95% CI', 'p (Holm)', 'Test'});
 
             UIKit.setStatus(app.StatusLabel, ['Step 1: load one EEG file per participant (or Try demo data).'], 'info');
         end
@@ -594,6 +616,9 @@ classdef EEGAnalysisApp < handle
             end
             app.showLayoutInfo();
             app.fillOverview();
+            if strcmp(app.ViewDrop.Value, app.Views{4}) && ~isempty(app.ERPs)
+                app.plotMaps(true);             % the maps shown, on the new layout
+            end
             if L.confirmed
                 UIKit.setStatus(app.StatusLabel, ['Electrode layout confirmed: ' L.summary], 'success');
             else
@@ -959,6 +984,7 @@ classdef EEGAnalysisApp < handle
             app.ERPs = erps;
             app.Grand = grand;
             app.ERPSettings = struct('baseline', base, 'channels', {chans});
+            app.ScalpMaps = [];
             app.Measures = {};
             app.StatsResult = [];
             app.fillMeasures();
@@ -1004,6 +1030,26 @@ classdef EEGAnalysisApp < handle
             app.onView();
         end
 
+        %% showScalpMaps - Scalp maps of a window: [from to] s (default: the window of step 5)
+        % A window given here is also put in step 5. One map per condition and
+        % one of A minus B (the conditions of the plot bar), for the participant
+        % shown or the grand average, in the plot area (Show: Scalp maps).
+        function ok = showScalpMaps(app, w)
+            ok = false;
+            if isempty(app.ERPs)
+                UIKit.setStatus(app.StatusLabel, 'Show the ERPs first (step 4).', 'warning');
+                return;
+            end
+            if nargin >= 2 && ~isempty(w)
+                app.WindowFromEdit.Value = w(1) * 1000;
+                app.WindowToEdit.Value = w(2) * 1000;
+            end
+            app.MapSettings = struct('window', [app.WindowFromEdit.Value app.WindowToEdit.Value] / 1000);
+            app.ViewDrop.Value = app.Views{4};
+            app.updateControls();
+            ok = app.plotERP();
+        end
+
         %% ----------------------------------------------------------------
         %% Step 5: measure
         %% setMeasure - kind 'mean' | 'peak', polarity, [from to] s, channels
@@ -1038,6 +1084,9 @@ classdef EEGAnalysisApp < handle
             app.Measures = r;
             app.MeasureSettings = o;
             app.StatsResult = [];
+            if strcmp(app.ViewDrop.Value, app.Views{4})     % maps shown: they follow the window measured
+                app.MapSettings = struct('window', o.Window);
+            end
             app.fillMeasures();
             app.fillStats();
             nEdge = sum(cellfun(@(x) sum([x.atEdge]), r));
@@ -1251,6 +1300,15 @@ classdef EEGAnalysisApp < handle
                     ifelse(isempty(app.ERPSettings.baseline), 'no baseline subtracted', ...
                     sprintf('baseline %g to %g ms', app.ERPSettings.baseline * 1000)));
             end
+            st.settings.scalpMaps = [];
+            if ~isempty(app.ScalpMaps)
+                M = app.ScalpMaps;
+                st.settings.scalpMaps = app.MapSettings;
+                st.results.scalpMaps = struct('names', {{M.name}}, 'kind', M(1).kind, 'method', M(1).method, ...
+                    'electrodes', {M(1).labels}, 'left', {M(1).left});
+                st.summary{end + 1} = sprintf('Scalp maps (%s): %s. %s', app.MapSettings.participant, ...
+                    mapWindowText(app.MapSettings.window), ScalpMap.describe(M(1)));
+            end
             if isempty(app.Measures), return; end
             st.results.measureHeader = {'Participant', 'Condition', 'Value_uV', 'Latency_s', 'Trials', 'PeakAtEdge'};
             st.results.measures = app.measureRows(false);
@@ -1333,6 +1391,16 @@ classdef EEGAnalysisApp < handle
             if cfg.erpsShown && ~app.showERPs(), return; end
             if cfg.measured && ~app.measure(), return; end
             if cfg.tested && ~app.compareConditions(), return; end
+            if isfield(cfg, 'scalpMaps') && isstruct(cfg.scalpMaps) && ~isempty(cfg.scalpMaps) && ~isempty(app.ERPs)
+                ms = cfg.scalpMaps;
+                if any(strcmp(app.ParticipantDrop.Items, ms.participant)), app.ParticipantDrop.Value = ms.participant; end
+                if any(strcmp(app.CondADrop.Items, ms.condA)), app.CondADrop.Value = ms.condA; end
+                if any(strcmp(app.CondBDrop.Items, ms.condB)), app.CondBDrop.Value = ms.condB; end
+                app.MapSettings = struct('window', ms.window);
+                app.ViewDrop.Value = app.Views{4};
+                app.updateControls();
+                if ~app.plotERP(), return; end
+            end
             app.updateControls();
             ok = true;
         end
@@ -1461,6 +1529,7 @@ classdef EEGAnalysisApp < handle
         function clearResults(app)
             app.ERPs = {}; app.Grand = []; app.ERPSettings = [];
             app.Measures = {}; app.MeasureSettings = []; app.StatsResult = [];
+            app.ScalpMaps = []; app.MapSettings = [];
             if ~isempty(app.MeasuresTable) && isvalid(app.MeasuresTable)
                 app.fillMeasures();
                 app.fillStats();
@@ -1838,9 +1907,15 @@ classdef EEGAnalysisApp < handle
             app.plotERP();
         end
 
-        %% plotERP - Conditions, butterfly or difference wave of the shown participant(s)
+        %% plotERP - Conditions, butterfly, difference wave or scalp maps of the shown participant(s)
         % ok: false when the plot could not be made (the axes and the status say why)
         function ok = plotERP(app)
+            mapsView = strcmp(app.ViewDrop.Value, app.Views{4}) && ~isempty(app.ERPs);
+            app.showMapPanel(mapsView);
+            if mapsView
+                ok = app.plotMaps();
+                return;
+            end
             ok = true;
             ax = app.AxERP;
             % cla keeps objects with hidden handles (butterfly lines, SEM shades): delete them all
@@ -1927,12 +2002,111 @@ classdef EEGAnalysisApp < handle
             xline(ax, 0, ':', 'Color', T.stimColor, 'HandleVisibility', 'off');
             yline(ax, 0, '-', 'Color', T.axesGrid, 'HandleVisibility', 'off');
             hold(ax, 'off');
-            UIKit.styleAxes(ax, ttl, 'Time from the event (ms)', 'Voltage (uV, positive up)');
+            UIKit.styleAxes(ax, ttl, 'Time from the event (ms)', ['Voltage (' char(181) 'V, positive up)']);
             xlim(ax, [t(1) t(end)]);
             if ~isempty(findobj(ax, 'Type', 'line'))
                 legend(ax, 'Location', 'northwest', 'Box', 'off', 'Interpreter', 'none');
             else
                 legend(ax, 'off');
+            end
+        end
+
+        %% showMapPanel - The plot area shows the scalp maps (true) or the ERP axes (false)
+        function showMapPanel(app, on)
+            if on
+                app.PlotGrid.RowHeight = {0, '1x'};
+            else
+                app.PlotGrid.RowHeight = {'1x', 0};
+            end
+            app.MapPanel.Visible = onoff(on);
+        end
+
+        %% plotMaps - Scalp maps of the shown participant, one colour scale for all
+        % The window is MapSettings.window (set by showScalpMaps and measure).
+        % quiet: leave the status bar as it is.
+        function ok = plotMaps(app, quiet)
+            if nargin < 2, quiet = false; end
+            ok = false;
+            T = UITheme;
+            delete(app.MapPanel.Children);
+            g = uigridlayout(app.MapPanel, [2 1], 'RowHeight', {'fit', '1x'}, 'Padding', [4 2 4 2], ...
+                'RowSpacing', 4, 'BackgroundColor', T.cardBg);
+            info = uilabel(g, 'Text', '', 'WordWrap', 'on', 'FontSize', T.fontSmall + 1, ...
+                'FontColor', T.sectionTitleColor);
+            if isempty(app.MapSettings)
+                app.MapSettings = struct('window', [app.WindowFromEdit.Value app.WindowToEdit.Value] / 1000);
+            end
+            w = app.MapSettings.window;
+            try
+                maps = app.makeMaps(w);
+            catch ME
+                app.ScalpMaps = [];
+                info.Text = sprintf('No scalp maps: %s', ME.message);
+                info.FontColor = T.warning;
+                if ~quiet, UIKit.setStatus(app.StatusLabel, info.Text, 'warning'); end
+                return;
+            end
+            n = numel(maps);
+            mg = uigridlayout(g, [1 n + 1], 'ColumnWidth', [repmat({'1x'}, 1, n), {70}], 'Padding', [0 0 0 0], ...
+                'ColumnSpacing', 2, 'BackgroundColor', T.cardBg);
+            lim = ScalpMap.limits(maps);
+            for k = 1:n
+                ax = uiaxes(mg);
+                ax.Toolbar.Visible = 'off';
+                disableDefaultInteractivity(ax);
+                ScalpMap.plot(ax, maps(k), 'CLim', lim, 'Title', maps(k).name, 'FontSize', T.fontSmall);
+            end
+            ax = uiaxes(mg);
+            ax.Toolbar.Visible = 'off';
+            disableDefaultInteractivity(ax);
+            ScalpMap.colorScale(ax, lim, [char(181) 'V']);
+            app.ScalpMaps = maps;
+            app.MapSettings.participant = app.ParticipantDrop.Value;
+            app.MapSettings.condA = app.CondADrop.Value;
+            app.MapSettings.condB = app.CondBDrop.Value;
+            info.Text = sprintf('%s: %s. %s Every map has the same colour scale (red positive, blue negative).', ...
+                app.ParticipantDrop.Value, mapWindowText(w), ScalpMap.describe(maps(1)));
+            confirmed = app.Layout.confirmed;
+            if ~confirmed
+                info.Text = sprintf(['%s The electrode layout is not confirmed yet: check it (step 1, ' ...
+                    'Electrode layout%s).'], info.Text, char(8230));
+                info.FontColor = T.warning;
+            end
+            ok = true;
+            if quiet, return; end
+            if confirmed
+                UIKit.setStatus(app.StatusLabel, sprintf('Scalp maps of %s.', mapWindowText(w)), 'success');
+            else
+                UIKit.setStatus(app.StatusLabel, sprintf(['Scalp maps of %s, on an electrode layout that is not ' ...
+                    'confirmed yet: check it in Electrode layout%s (step 1).'], mapWindowText(w), char(8230)), 'warning');
+            end
+        end
+
+        %% makeMaps - Maps of every condition and of A minus B for the shown participant (window w in s)
+        function maps = makeMaps(app, w)
+            L = app.Layout;
+            if isempty(L) || ~any(strcmp(L.kind, {'scalp', 'skull'}))
+                error('NeuroAnalyzer:eeg:invalid', ['the channels have no positions (none in the files and no ' ...
+                    '10-5 names). Give them a layout in step 1 (Electrode layout%s).'], char(8230));
+            end
+            e = app.analysisERP(app.shownIndex());
+            names = e.conditions;
+            a = app.CondADrop.Value;
+            b = app.CondBDrop.Value;
+            pairs = [names(:), repmat({''}, numel(names), 1)];
+            if numel(names) > 1 && ~strcmp(a, b) && all(ismember({a, b}, names))
+                pairs(end + 1, :) = {a, b};
+            end
+            maps = [];
+            for k = 1:size(pairs, 1)
+                v = EEGAnalysis.windowMean(e, w, pairs{k, 1}, pairs{k, 2});
+                m = ScalpMap.make(L, v, 'Labels', e.labels);
+                if isempty(pairs{k, 2})
+                    m.name = pairs{k, 1};
+                else
+                    m.name = sprintf('%s minus %s', pairs{k, 1}, pairs{k, 2});
+                end
+                maps = [maps, m]; %#ok<AGROW>
             end
         end
 
@@ -2125,13 +2299,14 @@ classdef EEGAnalysisApp < handle
             app.BaselineToEdit.Enable = onoff(ready && app.BaselineCb.Value);
             app.ShowBtn.Enable = onoff(ready);
             app.MeasureBtn.Enable = onoff(shown);
+            app.MapsBtn.Enable = onoff(shown);
             app.PolarityDrop.Enable = onoff(peak);
             app.StatsBtn.Enable = onoff(measured && numel(app.Measures) > 1);
             app.ExportBtn.Enable = onoff(measured);
             app.ParticipantDrop.Enable = onoff(shown);
             app.ViewDrop.Enable = onoff(shown);
             app.CondADrop.Enable = onoff(shown && ~strcmp(shownView, app.Views{1}));
-            app.CondBDrop.Enable = onoff(shown && strcmp(shownView, app.Views{3}));
+            app.CondBDrop.Enable = onoff(shown && any(strcmp(shownView, app.Views([3 4]))));
             UIKit.setSessionEnable(app.SessionBtns, has);
             setButtonStyle(app.LoadBtn, ifelse(~has, 'primary', 'secondary'));
             setButtonStyle(app.ApplyCleanBtn, ifelse(cleanNext, 'primary', 'secondary'));
@@ -2613,6 +2788,15 @@ function ly = layoutSession(L, ls, P)
     ly.format = '';
     if isstruct(P) && isfield(P, 'format'), ly.format = char(P.format); end
     ly.summary = L.summary;
+end
+
+%% mapWindowText - 'mean voltage from 300 to 400 ms' or 'voltage at 100 ms'
+function t = mapWindowText(w)
+    if abs(w(2) - w(1)) < 1e-9
+        t = sprintf('voltage at %g ms', w(1) * 1000);
+    else
+        t = sprintf('mean voltage from %g to %g ms', w * 1000);
+    end
 end
 
 %% onoff - 'on'/'off' from a logical

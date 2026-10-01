@@ -10,6 +10,29 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+### Added
+
+- **EEG Analysis: scalp maps** (ROADMAP EEG step 4). **Scalp maps** in
+  step 5 (or *Scalp maps* in the plot's Show list) draws the mean voltage
+  of every electrode in the window of step 5 on the head: one map per
+  condition and one of A minus B, for the participant shown or the grand
+  average, on one colour scale, with the electrodes used and those left
+  out (bad channels). Scalp layouts use spherical splines (Perrin et al.,
+  1989; m = 4, 50 Legendre terms, no regularization, so the map passes
+  through every electrode): the same numbers as MNE-Python's spherical
+  spline interpolation matrix. Rodent skull layouts get a flat map, a
+  thin-plate spline in mm from bregma drawn only inside the electrodes
+  (the same numbers as scipy's `RBFInterpolator`). Sessions keep the maps
+  (window, participant, conditions), and the methods text and the
+  report describe them. `core/ScalpMap.m`, `EEGAnalysis.windowMean`,
+  `tests/ScalpMapTest.m`; Help gives the demo's maps (P300 over Pz, N1
+  over Cz, the rodent VEP over V1).
+
+### Changed
+
+- **EEG Analysis** writes µV (not uV) on the plot, in the tables and on
+  the rejection thresholds.
+
 ### Fixed
 
 - **Batch results table on MATLAB R2026b**: the third column is called

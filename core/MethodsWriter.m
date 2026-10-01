@@ -186,6 +186,12 @@ classdef MethodsWriter
                 'oostenveld2001', 'Oostenveld & Praamstra, 2001', ['Oostenveld R, Praamstra P (2001). The five ' ...
                     'percent electrode system for high-resolution EEG and ERP measurements. Clin Neurophysiol ' ...
                     '112(4):713-719.']
+                'perrin1989', 'Perrin et al., 1989', ['Perrin F, Pernier J, Bertrand O, Echallier JF (1989). ' ...
+                    'Spherical splines for scalp potential and current density mapping. Electroencephalogr Clin ' ...
+                    'Neurophysiol 72(2):184-187.']
+                'duchon1977', 'Duchon, 1977', ['Duchon J (1977). Splines minimizing rotation-invariant ' ...
+                    'semi-norms in Sobolev spaces. In: Schempp W, Zeller K (eds) Constructive Theory of Functions of ' ...
+                    'Several Variables. Lecture Notes in Mathematics 571. Springer, Berlin, pp 85-100.']
                 'jurcak2007', 'Jurcak et al., 2007', ['Jurcak V, Tsuzuki D, Dan I (2007). 10/20, 10/10, and 10/5 ' ...
                     'systems revisited: their validity as relative head-surface-based positioning systems. ' ...
                     'NeuroImage 34(4):1600-1611.']
@@ -1602,6 +1608,22 @@ classdef MethodsWriter
             parts = {[t '.']};
             if nP > 1
                 parts{end+1} = 'Grand averages were the mean of the participants'' ERPs, each participant weighted equally.';
+            end
+            sm = MethodsWriter.getf(st, 'scalpMaps', []);
+            if isstruct(sm) && isscalar(sm) && isfield(sm, 'window') && numel(sm.window) == 2
+                w = sm.window * 1000;
+                if abs(w(2) - w(1)) < 1e-6
+                    when = sprintf('the voltage at %s ms', MethodsWriter.num(w(1)));
+                else
+                    when = sprintf('the mean voltage from %s to %s ms', MethodsWriter.num(w(1)), MethodsWriter.num(w(2)));
+                end
+                if strcmp(MethodsWriter.getf(s, 'results.scalpMaps.kind', 'scalp'), 'skull')
+                    parts{end+1} = sprintf(['Maps of %s were interpolated between the skull electrodes with a ' ...
+                        'thin-plate spline ({{duchon1977}}) and drawn only within their outline.'], when);
+                else
+                    parts{end+1} = sprintf(['Scalp maps of %s were interpolated over the head with spherical ' ...
+                        'splines ({{perrin1989}}; order m = 4, 50 Legendre terms, no regularization).'], when);
+                end
             end
             m = MethodsWriter.getf(st, 'measure', struct());
             mtxt = '';

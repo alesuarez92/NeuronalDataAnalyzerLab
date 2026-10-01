@@ -502,6 +502,26 @@ end
 %% tinyEEG - 2 channels x 5 samples x 4 trials with known averages
 % Trial k, channel c: k + c * [0 0 3 6 3] at -0.2 ... 0.2 s; conditions
 % A B A B. Baseline [-0.2 0] leaves c * [-1 -1 2 5 2] in every trial.
+%% testWindowMean - One value per channel in a window (scalp maps)
+function testWindowMean(tests)
+    erp = EEGAnalysis.conditionERPs(tinyEEG());     % A: 2 + [1; 2] * [0 0 3 6 3], B: 3 + ...
+    verifyEqual(tests, EEGAnalysis.windowMean(erp, [0 0.1], 'A'), [6.5; 11], 'AbsTol', 1e-12);
+    verifyEqual(tests, EEGAnalysis.windowMean(erp, [0 0.1], 'A', 'B'), [-1; -1], 'AbsTol', 1e-12);
+    verifyEqual(tests, EEGAnalysis.windowMean(erp, [0.1 0.1], 'B'), [9; 15], 'AbsTol', 1e-12, 'one sample');
+    verifyEqual(tests, EEGAnalysis.windowMean(erp, [0.04 0.04], 'A'), [5; 8], 'AbsTol', 1e-12, ...
+        'between two samples: the nearest one');
+    verifyEqual(tests, EEGAnalysis.windowMean(erp, [0.02 0.06], 'A'), [5; 8], 'AbsTol', 1e-12, ...
+        'no sample inside: the one nearest the middle');
+    verifyError(tests, @() EEGAnalysis.windowMean(erp, [0.3 0.4], 'A'), 'NeuroAnalyzer:eeg:badWindow');
+    verifyError(tests, @() EEGAnalysis.windowMean(erp, [0.1 0], 'A'), 'NeuroAnalyzer:eeg:badWindow');
+    verifyError(tests, @() EEGAnalysis.windowMean(erp, [0 0.1], 'C'), 'NeuroAnalyzer:eeg:unknownCondition');
+    verifyError(tests, @() EEGAnalysis.windowMean(erp, [0 0.1], 'A', 'C'), 'NeuroAnalyzer:eeg:unknownCondition');
+    erp = EEGAnalysis.conditionERPs(EEGAnalysis.markBad(tinyEEG(), {'Cz'}));
+    v = EEGAnalysis.windowMean(erp, [0 0.1], 'A');
+    verifyEqual(tests, v(1), 6.5, 'AbsTol', 1e-12);
+    verifyTrue(tests, isnan(v(2)), 'a bad channel has no value');
+end
+
 function eeg = tinyEEG()
     x = zeros(2, 5, 4);
     for k = 1:4

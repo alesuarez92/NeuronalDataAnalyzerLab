@@ -276,39 +276,8 @@ classdef EEGLayout
             has = all(isfinite(xy), 2)';
             wasHeld = ishold(ax);
             hold(ax, 'on');
-            grey = [0.35 0.38 0.42];
-            outline = [];
-            if strcmp(L.kind, 'skull')
-                pts = [xy(has, :); 0 0];
-                lo = min(pts, [], 1);
-                hi = max(pts, [], 1);
-                c = (lo + hi) / 2;
-                ab = max(sqrt(2) * (hi - lo) / 2 + 1.5, [3 4]);
-                t = linspace(0, 2 * pi, 181);
-                outline = [outline, plot(ax, c(1) + ab(1) * cos(t), c(2) + ab(2) * sin(t), '-', ...
-                    'Color', grey, 'LineWidth', 1.5)];
-                dy = ab(2) * sqrt(max(0, 1 - (c(1) / ab(1)) ^ 2));
-                outline = [outline, plot(ax, [0 0], c(2) + [-dy dy], '--', 'Color', grey)];
-                outline = [outline, plot(ax, [-0.6 0.6], [0 0], '-', 'Color', grey, 'LineWidth', 1.5)];
-                outline = [outline, plot(ax, [0 0], [-0.6 0.6], '-', 'Color', grey, 'LineWidth', 1.5)];
-                outline = [outline, text(ax, 0.7, -0.5, 'bregma', 'Color', grey, 'FontSize', o.FontSize, ...
-                    'HorizontalAlignment', 'left', 'VerticalAlignment', 'top')];
-                xlabel(ax, 'Medial-lateral (mm, right +)');
-                ylabel(ax, 'Anterior-posterior (mm, front +)');
-                axis(ax, 'on');
-                lim = [c - ab - 1; c + ab + 1];
-            else
-                t = linspace(0, 2 * pi, 181);
-                outline = [outline, plot(ax, cos(t), sin(t), '-', 'Color', grey, 'LineWidth', 1.5)];
-                outline = [outline, plot(ax, [-0.09 0 0.09], [0.996 1.1 0.996], '-', 'Color', grey, 'LineWidth', 1.5)];
-                e = linspace(-pi / 2, pi / 2, 31);
-                outline = [outline, plot(ax, 1 + 0.05 * cos(e), 0.16 * sin(e), '-', 'Color', grey, 'LineWidth', 1.5)];
-                outline = [outline, plot(ax, -1 - 0.05 * cos(e), 0.16 * sin(e), '-', 'Color', grey, 'LineWidth', 1.5)];
-                r = 1.15;
-                if any(has), r = max(r, max(sqrt(sum(xy(has, :) .^ 2, 2))) + 0.1); end
-                lim = [-r -r; r r];
-                axis(ax, 'off');
-            end
+            [outline, lim] = EEGLayout.drawOutline(ax, L.kind, xy(has, :), o.FontSize);
+            if strcmp(L.kind, 'skull'), axis(ax, 'on'); else, axis(ax, 'off'); end
             [statuses, colours] = EEGLayout.statusColours();
             electrodes = [];
             for s = 1:numel(statuses)
@@ -404,6 +373,45 @@ classdef EEGLayout
     end
 
     methods(Static, Hidden)
+
+        %% drawOutline - Head (scalp) or skull outline around drawing coordinates xy
+        % Scalp: the head line (r = 1), nose and ears. Skull: an ellipse around
+        % the electrodes and bregma, the midline and a cross at bregma, with mm
+        % axis labels. lim: [xmin ymin; xmax ymax] that shows it all.
+        function [outline, lim] = drawOutline(ax, kind, xy, fontSize)
+            grey = [0.35 0.38 0.42];
+            outline = [];
+            has = all(isfinite(xy), 2);
+            if strcmp(kind, 'skull')
+                pts = [xy(has, :); 0 0];
+                lo = min(pts, [], 1);
+                hi = max(pts, [], 1);
+                c = (lo + hi) / 2;
+                ab = max(sqrt(2) * (hi - lo) / 2 + 1.5, [3 4]);
+                t = linspace(0, 2 * pi, 181);
+                outline = [outline, plot(ax, c(1) + ab(1) * cos(t), c(2) + ab(2) * sin(t), '-', ...
+                    'Color', grey, 'LineWidth', 1.5)];
+                dy = ab(2) * sqrt(max(0, 1 - (c(1) / ab(1)) ^ 2));
+                outline = [outline, plot(ax, [0 0], c(2) + [-dy dy], '--', 'Color', grey)];
+                outline = [outline, plot(ax, [-0.6 0.6], [0 0], '-', 'Color', grey, 'LineWidth', 1.5)];
+                outline = [outline, plot(ax, [0 0], [-0.6 0.6], '-', 'Color', grey, 'LineWidth', 1.5)];
+                outline = [outline, text(ax, 0.7, -0.5, 'bregma', 'Color', grey, 'FontSize', fontSize, ...
+                    'HorizontalAlignment', 'left', 'VerticalAlignment', 'top')];
+                xlabel(ax, 'Medial-lateral (mm, right +)');
+                ylabel(ax, 'Anterior-posterior (mm, front +)');
+                lim = [c - ab - 1; c + ab + 1];
+            else
+                t = linspace(0, 2 * pi, 181);
+                outline = [outline, plot(ax, cos(t), sin(t), '-', 'Color', grey, 'LineWidth', 1.5)];
+                outline = [outline, plot(ax, [-0.09 0 0.09], [0.996 1.1 0.996], '-', 'Color', grey, 'LineWidth', 1.5)];
+                e = linspace(-pi / 2, pi / 2, 31);
+                outline = [outline, plot(ax, 1 + 0.05 * cos(e), 0.16 * sin(e), '-', 'Color', grey, 'LineWidth', 1.5)];
+                outline = [outline, plot(ax, -1 - 0.05 * cos(e), 0.16 * sin(e), '-', 'Color', grey, 'LineWidth', 1.5)];
+                r = 1.15;
+                if any(has), r = max(r, max(sqrt(sum(xy(has, :) .^ 2, 2))) + 0.1); end
+                lim = [-r -r; r r];
+            end
+        end
 
         %% buildTemplate - Compute the 10-5 positions (see template)
         function [labels, pos] = buildTemplate()

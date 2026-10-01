@@ -311,6 +311,27 @@ function testEEGAnalysis(tests)
     tests.verifyTrue(any(startsWith(refs, 'Delorme A, Makeig S (2004). EEGLAB')));
     tests.verifyFalse(any(startsWith(refs, 'Oostenveld')), 'FieldTrip not used, not cited');
     tests.verifyTrue(res.main.p < 0.05);
+    tests.verifyFalse(contains(txt, 'Scalp maps'), 'no scalp maps drawn, none described');
+
+    % Scalp maps: spherical splines on the head; a flat map between skull electrodes
+    m = eegSession();
+    m.settings.scalpMaps = struct('window', [0.3 0.4], 'participant', 'All participants (grand average)', ...
+        'condA', 'Target', 'condB', 'Standard');
+    m.results.scalpMaps = struct('names', {{'Standard', 'Target', 'Novel', 'Target minus Standard'}}, ...
+        'kind', 'scalp', 'method', 'spherical spline', 'electrodes', {{'Fp1', 'Fp2'}}, 'left', {{}});
+    [txt, refs] = MethodsWriter.fromSession(m);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['Scalp maps of the mean voltage from 300 to 400 ms were interpolated over the head with ' ...
+        'spherical splines (Perrin et al., 1989; order m = 4, 50 Legendre terms, no regularization).']);
+    tests.verifyTrue(any(startsWith(refs, 'Perrin F, Pernier J, Bertrand O, Echallier JF (1989)')));
+    m.settings.scalpMaps.window = [0.05 0.05];
+    m.results.scalpMaps.kind = 'skull';
+    [txt, refs] = MethodsWriter.fromSession(m);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['Maps of the voltage at 50 ms were interpolated between the skull electrodes with a ' ...
+        'thin-plate spline (Duchon, 1977) and drawn only within their outline.']);
+    tests.verifyTrue(any(startsWith(refs, 'Duchon J (1977)')));
+    tests.verifyFalse(any(startsWith(refs, 'Perrin')), 'no spherical splines, not cited');
 
     % Peak measure, FieldTrip, continuous recordings cut into trials, no baseline, no test
     s.settings.sources = repmat({'FieldTrip'}, 1, 8);
