@@ -86,7 +86,7 @@ ef = electrodesFile(folder, prefix);
 if ~isempty(ef)
     P = readTSV(ef);
     if all(isfield(P, {'name', 'x', 'y', 'z'}))
-        n = 0;
+        placed = false(1, numel(labels));
         for k = 1:numel(labels)
             i = find(strcmp(P.name, labels{k}), 1);
             if isempty(i), continue; end
@@ -94,9 +94,15 @@ if ~isempty(ef)
             if any(~isfinite(xyz)), continue; end
             locs(k).x = xyz(1); locs(k).y = xyz(2); locs(k).z = xyz(3);
             locs(k).theta = NaN; locs(k).radius = NaN;
-            n = n + 1;
+            placed(k) = true;
         end
+        n = sum(placed);
         if n > 0
+            % One frame for every position: the channels the table leaves out have none
+            for k = find(~placed)
+                locs(k).x = NaN; locs(k).y = NaN; locs(k).z = NaN;
+                locs(k).theta = NaN; locs(k).radius = NaN;
+            end
             J = readJSON(regexprep(ef, '_electrodes\.tsv$', '_coordsystem.json'));
             cs = field(J, 'EEGCoordinateSystem', 'unknown system');
             un = field(J, 'EEGCoordinateUnits', 'unknown units');
