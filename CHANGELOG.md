@@ -39,6 +39,10 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   after its values (Fs_Hz, ROI, Series, Channel ...); in 0.7.0 it was
   still called Message, the name it had in the list of queued files.
   The window now draws the table empty before it shows other columns.
+- **LDF Processing**: the "Threshold" label sits at the right end of its
+  line instead of over the first pulse.
+- **MUA Analysis**: the ISI histograms leave room above the bars for
+  their legend, which covered them.
 
 ## [0.7.0] - 2026-10-01
 

@@ -600,6 +600,8 @@ classdef ProcessingLDFApp < handle
         end
 
         %% drawThreshold - Dashed threshold line on the stimulus axes
+        % Labelled at the right end: recordings usually start with a pulse
+        % and end with the response window after the last one.
         function drawThreshold(app)
             if ~isempty(app.ThreshLine) && isgraphics(app.ThreshLine)
                 delete(app.ThreshLine);
@@ -607,7 +609,7 @@ classdef ProcessingLDFApp < handle
             app.ThreshLine = [];
             if isempty(app.Stim), return; end
             app.ThreshLine = yline(app.AxStim, app.ThresholdInput.Value, '--', 'Threshold', ...
-                'Color', UITheme.plotColors(2, :), 'LabelHorizontalAlignment', 'left');
+                'Color', UITheme.plotColors(2, :), 'LabelHorizontalAlignment', 'right');
         end
 
         %% drawOnsets - Mark accepted onsets on the stimulus axes

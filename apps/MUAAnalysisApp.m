@@ -1827,17 +1827,23 @@ classdef MUAAnalysisApp < handle
             resetAxes(ax);
             hold(ax, 'on');
             edges = 0:0.5:50;
+            top = 0;
+            nShown = 0;
             for p = sel
                 q = app.ClusterQC(p);
                 if isempty(q.isiMs), continue; end
-                histogram(ax, q.isiMs, edges, 'FaceColor', clusterColor(q.id), 'FaceAlpha', 0.45, ...
+                h = histogram(ax, q.isiMs, edges, 'FaceColor', clusterColor(q.id), 'FaceAlpha', 0.45, ...
                     'EdgeColor', 'none', 'DisplayName', sprintf('%s (%.1f%%)', clusterName(q.id), q.isiPct));
+                top = max([top, h.Values]);
+                nShown = nShown + 1;
             end
             xline(ax, app.SpikeSortParams.refractoryMs, '--', 'Color', T.danger, 'LineWidth', 1.2, ...
                 'HandleVisibility', 'off');
             hold(ax, 'off');
             xlim(ax, [0 50]);
-            showLegend(ax, 'best');
+            % Room above the tallest bar for the legend (one line per cluster), so it never covers the bars
+            if top > 0, ylim(ax, [0 top * (1.15 + 0.12 * nShown)]); end
+            showLegend(ax, 'northeast');
             UIKit.styleAxes(ax, sprintf('ISI (dashed = %g ms refractory)', app.SpikeSortParams.refractoryMs), ...
                 'ISI (ms)', 'Count');
         end
