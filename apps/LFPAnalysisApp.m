@@ -344,9 +344,9 @@ classdef LFPAnalysisApp < handle
             app.AxOverlay = uiaxes(tabGrid(app.TabOverlay));
             app.AxContainer = uipanel(tabGrid(app.TabChannels), 'BorderType', 'none', ...
                 'BackgroundColor', T.cardBg);
-            app.AxCSD     = uiaxes(tabGrid(app.TabCSD));
+            app.AxCSD     = uiaxes(tabGrid(app.TabCSD, 20));          % room for the colour-bar label
             app.AxSpectrum    = uiaxes(tabGrid(app.TabSpectrum));
-            app.AxSpectrogram = uiaxes(tabGrid(app.TabSpectrogram));
+            app.AxSpectrogram = uiaxes(tabGrid(app.TabSpectrogram, 20));
             eg = tabGrid(app.TabERSP);
             eg.ColumnWidth = {'1x', '1x'}; eg.ColumnSpacing = 12;
             app.AxERSP = uiaxes(eg);
@@ -1353,10 +1353,12 @@ classdef LFPAnalysisApp < handle
             imagesc(ax, t, y, img);
             colormap(ax, jet);
             cb = colorbar(ax);
+            % Plain text (m², m³) and room on the right: the TeX label was cut off at the panel edge (R2026b)
+            cb.Label.Interpreter = 'none';
             if strcmp(app.LastCSDMethod, 'standard')
-                cb.Label.String = 'CSD (amplitude / m^2)';
+                cb.Label.String = ['CSD (amplitude / m' char(178) ')'];
             else
-                cb.Label.String = 'CSD (A/m^3 if the LFP is in V)';
+                cb.Label.String = ['CSD (A/m' char(179) ' if the LFP is in V)'];
             end
             m = max(abs(img(:)));
             if isfinite(m) && m > 0, ax.CLim = [-m m]; end   % symmetric: sinks vs sources
@@ -1630,7 +1632,8 @@ classdef LFPAnalysisApp < handle
             ax.YDir = 'normal';
             colormap(ax, parula(256));
             cb = colorbar(ax);
-            cb.Label.String = 'Power (dB: 10·log_{10} units^2/Hz)';
+            cb.Label.Interpreter = 'none';
+            cb.Label.String = ['Power (dB: 10' char(183) 'log10 units' char(178) '/Hz)'];
             v = sort(S.powerDb(isfinite(S.powerDb)));
             if numel(v) > 1
                 lim = [v(max(1, round(0.01 * numel(v)))), v(max(1, round(0.995 * numel(v))))];
@@ -1851,9 +1854,10 @@ function resetAxes(ax)
 end
 
 %% Local helper: padded 1x1 grid inside a tab (room for titles and labels)
-function g = tabGrid(tab)
+function g = tabGrid(tab, padRight)
+    if nargin < 2, padRight = 8; end
     T = UITheme;
-    g = uigridlayout(tab, [1 1], 'Padding', [8 8 8 8], 'BackgroundColor', T.cardBg);
+    g = uigridlayout(tab, [1 1], 'Padding', [8 8 padRight 8], 'BackgroundColor', T.cardBg);
 end
 
 %% Local helper: small wrapped info text inside a card

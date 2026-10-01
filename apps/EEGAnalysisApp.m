@@ -300,7 +300,8 @@ classdef EEGAnalysisApp < handle
                 'End of the baseline window (usually the event, 0 ms)', [-60000 60000]);
             app.ChannelsEdit = addField(g, 5, 'Channels to plot', 'text', '', ...
                 ['Channel names separated by commas, e.g. Pz or Cz, FCz (any case). Several channels are averaged. ' ...
-                 'Empty = the average of all channels.']);
+                 'Empty = the average of all channels (flat after an average reference); new files fill in ' ...
+                 'Pz, Cz, Fz or Oz when they have one.']);
             app.ShowBtn = UIKit.button(g, 'Show ERPs', @(~,~)app.showERPs(), 'secondary', ...
                 ['Average the trials of each condition for every participant (and across participants) and plot them. ' ...
                  'Use the bar above the plot to switch participant, view and conditions.']);
@@ -1432,6 +1433,12 @@ classdef EEGAnalysisApp < handle
             % Channels typed for earlier files: keep only those the new files have
             app.ChannelsEdit.Value = channelText(keepChannels(app.ChannelsEdit.Value, e1.labels));
             app.MeasureChannelsEdit.Value = channelText(keepChannels(app.MeasureChannelsEdit.Value, e1.labels));
+            % None left: a midline channel when the files have one (the average
+            % of all channels is flat after an average reference)
+            if isempty(app.ChannelsEdit.Value)
+                mid = keepChannels({'Pz', 'Cz', 'Fz', 'Oz'}, e1.labels);
+                if ~isempty(mid), app.ChannelsEdit.Value = mid{1}; end
+            end
             items = names;
             if numel(names) > 1, items = [{app.GrandLabel}, names]; end
             app.ParticipantDrop.Items = items;
@@ -1912,7 +1919,7 @@ classdef EEGAnalysisApp < handle
             end
             if ~isempty(app.MeasureSettings)
                 wm = app.MeasureSettings.Window * 1000;
-                yl = dataRange(ax);   % not ylim(ax): before the first draw it can still be [0 1]
+                yl = UIKit.dataLimits(ax, 'y');   % not ylim(ax): before the first draw it can still be [0 1]
                 patch(ax, [wm(1) wm(2) wm(2) wm(1)], [yl(1) yl(1) yl(2) yl(2)], T.accent, 'FaceAlpha', 0.1, ...
                     'EdgeColor', 'none', 'HandleVisibility', 'off');
                 ylim(ax, yl);
@@ -2306,18 +2313,6 @@ function setButtonStyle(b, style)
     else
         b.BackgroundColor = T.secondaryBg; b.FontColor = T.secondaryFg; b.FontWeight = 'normal';
     end
-end
-
-%% dataRange - [low high] of the lines and shades drawn in ax, with a 5% margin
-function yl = dataRange(ax)
-    h = findall(ax, 'Type', 'line', '-or', 'Type', 'patch');
-    y = get(h, 'YData');
-    if iscell(y), y = cellfun(@(v) v(:)', y, 'UniformOutput', false); y = [y{:}]; else, y = y(:)'; end
-    y = y(isfinite(y));
-    if isempty(y), yl = [-1 1]; return; end
-    lo = min(y); hi = max(y);
-    pad = 0.05 * max(hi - lo, eps);
-    yl = [lo - pad, hi + pad];
 end
 
 %% lighten - Colour mixed with white (f = 0: unchanged, 1: white)

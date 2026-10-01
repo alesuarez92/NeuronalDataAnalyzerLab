@@ -585,6 +585,7 @@ classdef BatchApp < handle
                 names{i} = [nm ex];
             end
             app.Table.Data = table(names, status(:), messages(:), 'VariableNames', {'File', 'Status', 'Message'});
+            app.Table.ColumnName = {'File', 'Status', 'Message'};   % R2026b keeps the old headers otherwise
             app.Table.ColumnWidth = {150, 62, 'auto'};
             app.colourRows();
         end
@@ -614,6 +615,7 @@ classdef BatchApp < handle
             w(strcmp(v, 'Status')) = {62};
             w(strcmp(v, 'Message')) = {220};
             app.Table.Data = d;
+            app.Table.ColumnName = v;          % R2026b keeps the queue's headers otherwise
             app.Table.ColumnWidth = w;
             app.colourRows();
         end

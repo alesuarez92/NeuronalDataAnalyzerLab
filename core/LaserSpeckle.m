@@ -413,7 +413,7 @@ classdef LaserSpeckle
                 c{end+1} = sprintf(['Flow index = 1/tau_c from the exposure model (T = %g ms, beta = %g); relative ' ...
                     'changes do not depend on beta, absolute values do.'], p.ExposureMs, p.Beta);
             elseif ~strcmpi(p.InputType, 'flow')
-                c{end+1} = ['Flow index = 1/K^2 (speckle flow index): relative changes are close to changes in flow, ' ...
+                c{end+1} = ['Flow index = 1/K' char(178) ' (speckle flow index): relative changes are close to changes in flow, ' ...
                     'slightly smaller for large changes. Use the correlation-time model with the exposure for a closer estimate.'];
             end
             if isfield(R, 'onsets')
@@ -435,14 +435,16 @@ classdef LaserSpeckle
         end
 
         %% flowLabel - Axis label of the flow index
+        % Plain text (1/K², 1/τc), not TeX: it also goes into titles and
+        % the Checks text, which show markup as typed.
         function s = flowLabel(p)
             p = LaserSpeckle.complete(p);
             if strcmpi(p.InputType, 'flow')
                 s = 'Perfusion (as exported)';
             elseif strcmpi(p.FlowModel, 'tauc')
-                s = '1/\tau_c (1/s)';
+                s = ['1/' char(964) 'c (1/s)'];
             else
-                s = 'Flow index 1/K^2';
+                s = ['Flow index 1/K' char(178)];
             end
         end
     end

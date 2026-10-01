@@ -1852,17 +1852,30 @@ classdef SignalCharacterizationApp < handle
             k = app.SubjectKeys{find(strcmp(app.SubjectModes, app.SubjectMenu.Value), 1)};
         end
 
-        %% designHintText - One line on how the chosen design compares subjects
+        %% designHintText - One line on how the chosen design and method compare subjects
         function s = designHintText(app)
+            ranks = strcmp(app.methodKey(), 'nonparametric');
             switch app.designKey()
                 case 'paired'
                     s = 'Pairs by subject number: #1 of A with #1 of B, and so on (see the Files tab).';
                 case 'unpaired'
-                    s = 'Independent animals; group sizes may differ. Welch test: unequal SDs allowed.';
+                    if ranks
+                        s = 'Independent animals; group sizes may differ. Mann-Whitney U: compares ranks.';
+                    else
+                        s = 'Independent animals; group sizes may differ. Welch test: unequal SDs allowed.';
+                    end
                 case 'rm'
-                    s = 'Same animals in all groups, matched by # (Files tab); then every pair (paired t, Holm).';
+                    if ranks
+                        s = 'Same animals in all groups, matched by # (Files tab); then every pair (Wilcoxon, Holm).';
+                    else
+                        s = 'Same animals in all groups, matched by # (Files tab); then every pair (paired t, Holm).';
+                    end
                 otherwise
-                    s = 'All groups at once (independent animals), then every pair (Tukey-Kramer).';
+                    if ranks
+                        s = 'All groups at once (independent animals), then every pair (Mann-Whitney, Holm).';
+                    else
+                        s = 'All groups at once (independent animals), then every pair (Tukey-Kramer).';
+                    end
             end
         end
 

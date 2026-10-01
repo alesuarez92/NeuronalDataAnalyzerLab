@@ -17,7 +17,11 @@
 % system, computed here with the idealized spherical construction of
 % Oostenveld R, Praamstra P (2001), Clin Neurophysiol 112:713-719 (10-5
 % system) and Jurcak V, Tsuzuki D, Dan I (2007), NeuroImage 34:1600-1611,
-% with the equator through Nz, T9, Iz and T10 (345 positions).
+% with the equator through Nz, T9, Iz and T10 (345 positions). Next to
+% positions from a file, a 10-5 position (by name or by hand) is put on
+% that head: its angle from the vertex is scaled to fit the channels that
+% have both (most files and real heads have Fpz, T7, Oz and T8 near the
+% equator, the template 18 deg above it).
 %
 %   [labels, pos] = EEGLayout.template()
 %       The 345 positions of the 10-5 system (labels 1 x 345, pos 345 x 3
@@ -205,13 +209,18 @@ classdef EEGLayout
             end
 
             % ---- The other channels by name on the 10-5 system ----
+            % (on the head of the file's positions when there are some)
+            scale = 1;
+            if ~strcmp(L.kind, 'skull')
+                scale = EEGLayout.templateScale(EEGLayout.cleanName(labels), L.pos);
+            end
             if ~strcmp(src, 'file') && ~strcmp(L.kind, 'skull')
                 [names, how] = EEGLayout.cleanName(labels);
                 [tl, tp] = EEGLayout.template();
                 todo = find(~all(isfinite(L.pos), 2)' & ~cellfun(@isempty, names));
                 for k = todo
                     i = find(strcmp(tl, names{k}), 1);
-                    L.pos(k, :) = tp(i, :);
+                    L.pos(k, :) = EEGLayout.scaleTemplate(tp(i, :), scale);
                     L.source{k} = 'template';
                     L.as{k} = names{k};
                     if any(strcmp(how{k}, {'alias', 'cleaned'}))
@@ -221,6 +230,10 @@ classdef EEGLayout
                 end
                 if ~isempty(todo)
                     words = '10-5 positions by name (idealized spherical head; x = right ear, y = nose, z = up)';
+                    if scale ~= 1
+                        words = sprintf(['10-5 positions by name (idealized spherical head, angles from the ' ...
+                            'vertex x %.2f to fit the other positions; x = right ear, y = nose, z = up)'], scale);
+                    end
                     if strcmp(L.kind, 'none')
                         L.kind = 'scalp';
                         L.frame = words;
@@ -232,7 +245,7 @@ classdef EEGLayout
 
             % ---- Placements by hand ----
             if ~isempty(o.Edits)
-                [L, renamed] = EEGLayout.applyEdits(L, o.Edits, renamed);
+                [L, renamed] = EEGLayout.applyEdits(L, o.Edits, renamed, scale);
             end
             L = EEGLayout.review(L, renamed, renamedTo);
         end
@@ -309,10 +322,30 @@ classdef EEGLayout
             labels = [];
             if o.Labels && any(has)
                 i = find(has);
-                dy = 0.04;
-                if strcmp(L.kind, 'skull'), dy = 0.3; end
-                labels = text(ax, xy(i, 1), xy(i, 2) + dy, L.labels(i), 'FontSize', o.FontSize, ...
-                    'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'Color', [0.15 0.15 0.2]);
+                if strcmp(L.kind, 'skull')
+                    at = [xy(i, 1), xy(i, 2) + 0.3];
+                    align = repmat({'center', 'bottom'}, numel(i), 1);
+                else
+                    % Names above the dots; near or beyond the head line, outwards
+                    % from the centre, so that the line, nose and ears do not cross them
+                    at = [xy(i, 1), xy(i, 2) + 0.04];
+                    align = repmat({'center', 'bottom'}, numel(i), 1);
+                    r = sqrt(sum(xy(i, :) .^ 2, 2));
+                    u = xy(i, :) ./ max(r, eps);
+                    edge = r > 0.85;
+                    rr = max(r + 0.06, 1.06);
+                    rr(abs(u(:, 2)) < 0.3) = max(rr(abs(u(:, 2)) < 0.3), 1.11);                          % ears
+                    rr(abs(u(:, 1)) < 0.15 & u(:, 2) > 0) = max(rr(abs(u(:, 1)) < 0.15 & u(:, 2) > 0), 1.13);  % nose
+                    at(edge, :) = u(edge, :) .* rr(edge);
+                    align(edge & u(:, 1) < -0.4, 1) = {'right'};
+                    align(edge & u(:, 1) > 0.4, 1) = {'left'};
+                    align(edge & abs(u(:, 2)) <= 0.4, 2) = {'middle'};
+                    align(edge & u(:, 2) < -0.4, 2) = {'top'};
+                    if any(edge), lim = lim + [-0.15 -0.15; 0.15 0.15]; end   % room for the names outside
+                end
+                labels = text(ax, at(:, 1), at(:, 2), L.labels(i), 'FontSize', o.FontSize, ...
+                    'Color', [0.15 0.15 0.2]);
+                set(labels, {'HorizontalAlignment', 'VerticalAlignment'}, align);
             end
             set(ax, 'DataAspectRatio', [1 1 1], 'XLim', lim(:, 1)', 'YLim', lim(:, 2)');
             if ~wasHeld, hold(ax, 'off'); end
@@ -721,6 +754,35 @@ classdef EEGLayout
             a = median(acos(max(-1, min(1, c))) * 180 / pi);
         end
 
+        %% templateScale - Factor on the 10-5 angles from the vertex that fits the positions given
+        % Least squares of the angle of each position on the angle of its
+        % 10-5 name, over the channels with both that are more than 20 deg
+        % from the vertex (at least 3). 1 when there are fewer, when the
+        % factor is within 1 % of 1, or outside 0.75-1.5 (no common head).
+        % names: the 10-5 name of each channel ('' when none).
+        function s = templateScale(names, pos)
+            s = 1;
+            [tl, tp] = EEGLayout.template();
+            [ok, i] = ismember(EEGLayout.cellRow(names), tl);
+            ok = ok & all(isfinite(pos), 2)';
+            if sum(ok) < 3, return; end
+            d = pos(ok, :) ./ sqrt(sum(pos(ok, :) .^ 2, 2));
+            af = acos(max(-1, min(1, d(:, 3))));
+            at = acos(max(-1, min(1, tp(i(ok), 3))));
+            use = at > 20 * pi / 180;
+            if sum(use) < 3, return; end
+            k = sum(af(use) .* at(use)) / sum(at(use) .^ 2);
+            if abs(k - 1) >= 0.01 && k >= 0.75 && k <= 1.5, s = k; end
+        end
+
+        %% scaleTemplate - 10-5 directions with the angle from the vertex times s (same azimuth)
+        function p = scaleTemplate(p, s)
+            if s == 1 || isempty(p), return; end
+            a = min(pi, s * acos(max(-1, min(1, p(:, 3)))));
+            az = atan2(p(:, 1), p(:, 2));
+            p = [sin(a) .* sin(az), sin(a) .* cos(az), cos(a)];
+        end
+
         %% fromPositions - Positions of a positions file, matched to the channels by name
         function [pos, kind, frame, notes, matchName] = fromPositions(labels, P)
             if ~isstruct(P) || ~isscalar(P) || ~all(isfield(P, {'labels', 'xyz'}))
@@ -780,7 +842,8 @@ classdef EEGLayout
         end
 
         %% applyEdits - Placements by hand: 'as' a 10-5 position (scalp) or ap / ml mm (skull)
-        function [L, renamed] = applyEdits(L, E, renamed)
+        function [L, renamed] = applyEdits(L, E, renamed, scale)
+            if nargin < 4, scale = 1; end
             if ~isstruct(E) || ~isfield(E, 'label')
                 error('NeuroAnalyzer:eeg:badOption', 'Edits must be a struct array with label and as, or ap and ml.');
             end
@@ -813,7 +876,7 @@ classdef EEGLayout
                             'layout is in mm from bregma (give ap and ml).'], lbl, name);
                     end
                     L.kind = 'scalp';
-                    p = tp(strcmp(tl, name), :);
+                    p = EEGLayout.scaleTemplate(tp(strcmp(tl, name), :), scale);
                 elseif skull
                     if strcmp(L.kind, 'scalp')
                         error('NeuroAnalyzer:eeg:badOption', ['%s cannot go at ap %g, ml %g mm: the ' ...

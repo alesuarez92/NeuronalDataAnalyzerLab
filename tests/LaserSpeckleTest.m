@@ -97,7 +97,7 @@ function testFlowIndices(tests)
     x = 20;
     F = LaserSpeckle.flowFromK2(LaserSpeckle.modelK2(x, 1), p);
     tests.verifyEqual(F, x / 0.005, 'RelTol', 1e-4, '1/tau_c in 1/s');
-    tests.verifyEqual(LaserSpeckle.flowLabel(p), '1/\tau_c (1/s)');
+    tests.verifyEqual(LaserSpeckle.flowLabel(p), ['1/' char(964) 'c (1/s)']);
 end
 
 function testOnsetsFromStimulus(tests)

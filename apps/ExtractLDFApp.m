@@ -716,7 +716,9 @@ classdef ExtractLDFApp < handle
             r = app.currentRange();
             if isempty(app.AppData.RawStim) || r(2) <= r(1), return; end
             for ax = [app.AxStim app.AxLDF]
-                yl = ylim(ax);
+                % Limits kept after a zoom; else from the data (not ylim(ax):
+                % before the first draw it can still be [0 1])
+                if strcmp(ax.YLimMode, 'manual'), yl = ax.YLim; else, yl = UIKit.dataLimits(ax, 'y'); end
                 hold(ax, 'on');
                 hp = patch(ax, [r(1) r(2) r(2) r(1)], [yl(1) yl(1) yl(2) yl(2)], T.shadeColor, ...
                     'FaceAlpha', 0.12, 'EdgeColor', T.shadeColor, 'EdgeAlpha', 0.6, ...
@@ -948,6 +950,7 @@ end
 
 %% formatDuration - "612.0 s" or "10 min 12.0 s"
 function s = formatDuration(sec)
+    sec = round(sec * 10) / 10;   % before the split: 299.97 s is "5 min 0.0 s", not "4 min 60.0 s"
     if sec >= 120
         s = sprintf('%d min %.1f s', floor(sec / 60), mod(sec, 60));
     else

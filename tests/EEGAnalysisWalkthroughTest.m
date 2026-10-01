@@ -302,7 +302,7 @@ function testRodentContinuousAndPlainMat(tests)
     tests.verifyEqual(app.Maps{1}.data, 'eeg');
     tests.verifyEqual(app.Maps{1}.dims, {'trial', 'channel', 'time'});
     tests.verifyEqual(size(app.EEGs{2}.data), [32 250 65]);
-    tests.verifyEmpty(app.ChannelsEdit.Value, 'the rodent channels are not in the scalp files');
+    tests.verifyEqual(app.ChannelsEdit.Value, 'Pz', 'the rodent channels are not in the scalp files: a midline channel');
     tests.verifyEmpty(app.MeasureChannelsEdit.Value);
     tests.verifyTrue(logical(app.showERPs()));
     tests.verifyNumElements(app.Grand.conditions, 3);
@@ -596,7 +596,8 @@ function testElectrodeLayout(tests)
     editCell(d.Table, [t7 3], 'FT7');
     D = app.LayoutDlg.L;
     tests.verifyEqual(D.summary, '32 of 32 channels placed: 31 from the positions file, 1 placed by hand.');
-    tests.verifyEqual(D.pos(t7, :), tp(strcmp(tl, 'FT7'), :), 'AbsTol', 1e-12);
+    mid = L.pos(strcmp(L.labels, 'F7'), :) + L.pos(t7, :);
+    tests.verifyLessThan(acosd(D.pos(t7, :) * mid' / norm(mid)), 3, 'FT7 on this head: half-way from F7 to T7');
     tests.verifyEqual(d.Table.Data(t7, 2:4), {'by hand', 'FT7', 'placed'});
     tests.verifyEqual(app.Layout.summary, '32 of 32 channels placed: 32 from the positions file.', 'not used yet');
     editCell(d.Table, [t7 3], 'XYZ');

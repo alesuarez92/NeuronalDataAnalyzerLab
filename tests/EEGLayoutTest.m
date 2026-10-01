@@ -308,14 +308,27 @@ function testSourceOption(tests)
     verifyEqual(tests, L.as, eeg.labels);
     verifyEqual(tests, L.summary, '32 of 32 channels placed: 32 by name (10-5 system).');
 
-    % auto: the file's positions, the channel without one by name
+    % auto: the file's positions, the channel without one by name, on the
+    % file's head (the demo has Fpz, T7, Oz on the equator: Fz at 45 deg
+    % from the vertex where the template has 36 deg)
+    whole = EEGLayout.fromEEG(eeg);
     e = eeg;
     e.chanlocs(5).x = NaN;
     L = EEGLayout.fromEEG(e);
     verifyEqual(tests, L.source{5}, 'template');
-    verifyEqual(tests, L.pos(5, :), templatePos('Fz'), 'AbsTol', 1e-12);
+    verifyEqual(tests, acosd(templatePos('Fz') * whole.pos(5, :)'), 9, 'AbsTol', 1e-6, 'the template is 9 deg off');
+    verifyLessThan(tests, acosd(L.pos(5, :) * whole.pos(5, :)'), 2, 'Fz by name next to where the file has it');
+    verifyEqual(tests, L.pos(5, 1), 0, 'AbsTol', 1e-12, 'still on the midline');
     verifyEqual(tests, L.summary, '32 of 32 channels placed: 31 from the file, 1 by name (10-5 system).');
     verifySubstring(tests, L.frame, 'the other channels: 10-5 positions by name');
+    verifySubstring(tests, L.frame, 'angles from the vertex x 1.21 to fit the other positions');
+    % placed by hand on FT7: half-way from F7 to T7 on this head, not next to FC5
+    L = EEGLayout.fromEEG(eeg, 'Edits', struct('label', 'T7', 'as', 'FT7'));
+    lab = whole.labels;
+    mid = whole.pos(strcmp(lab, 'F7'), :) + whole.pos(strcmp(lab, 'T7'), :);
+    t7 = strcmp(lab, 'T7');
+    verifyLessThan(tests, acosd(L.pos(t7, :) * mid' / norm(mid)), 3, 'FT7 between F7 and T7');
+    verifyGreaterThan(tests, acosd(L.pos(t7, :) * whole.pos(strcmp(lab, 'FC5'), :)'), 15, 'not next to FC5');
     L = EEGLayout.fromEEG(e, 'Source', 'file');
     verifyEqual(tests, L.status{5}, 'none');
     verifyEqual(tests, L.summary, '31 of 32 channels placed: 31 from the file; no position: Fz.');

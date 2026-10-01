@@ -22,6 +22,7 @@
 %   UIKit.alert(fig, msg, title, kind)       uialert with the right icon.
 %   UIKit.styleAxes(ax, ttl, xl, yl)         Consistent axes look.
 %   UIKit.emptyAxes(ax, msg)                 Placeholder text on empty axes.
+%   lim = UIKit.dataLimits(ax, dim)          Data range along 'x' / 'y' (+5%).
 %   UIKit.footer(parent)
 %
 % Sessions and reports (see core/Session.m, core/Report.m):
@@ -290,6 +291,35 @@ classdef UIKit
             text(ax, 0.5, 0.5, msg, 'Units', 'normalized', 'HorizontalAlignment', 'center', ...
                 'Color', T.mutedColor, 'FontSize', T.fontBody, 'Tag', 'emptyHint', 'Interpreter', 'none');
             ax.XTick = []; ax.YTick = [];
+        end
+
+        %% dataLimits - [low high] of the data drawn in ax along 'x' or 'y', 5% margin
+        % Read from the plotted objects, not from the axes: before the first
+        % draw (a new window, a tab not shown yet) ylim(ax) and linkaxes can
+        % still see [0 1] on MATLAB R2026b, and limits frozen from that hide
+        % the data. Error bars count with their bars, bars with their base.
+        function lim = dataLimits(ax, dim)
+            if nargin < 2, dim = 'y'; end
+            P = upper(dim);
+            v = [];
+            for h = findall(ax, '-property', [P 'Data'])'
+                d = double(h.([P 'Data']));
+                v = [v; d(:)]; %#ok<AGROW>
+                if isprop(h, [P 'PositiveDelta']) && numel(h.([P 'PositiveDelta'])) == numel(d)
+                    v = [v; d(:) + double(h.([P 'PositiveDelta'])(:)); ...
+                        d(:) - double(h.([P 'NegativeDelta'])(:))]; %#ok<AGROW>
+                end
+                if strcmp(P, 'Y') && isprop(h, 'BaseValue'), v(end+1, 1) = h.BaseValue; end %#ok<AGROW>
+            end
+            v = v(isfinite(v));
+            if isempty(v), lim = [-1 1]; return; end
+            lo = min(v); hi = max(v);
+            span = hi - lo;
+            if span <= 100 * eps(max(abs([lo hi])))     % flat (or a single value)
+                span = max(abs([lo hi]));
+                if span == 0, span = 1; end
+            end
+            lim = [lo hi] + 0.05 * span * [-1 1];
         end
 
         %% footer - The website on the left; copyright + version, right-aligned

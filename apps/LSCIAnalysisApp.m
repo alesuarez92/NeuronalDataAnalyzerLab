@@ -972,9 +972,8 @@ classdef LSCIAnalysisApp < handle
                 plot(ax, R.t, 100 * (R.roiRel(k, :) - 1), '-', 'Color', roiColor(k), 'LineWidth', 1.2, ...
                     'DisplayName', names{k});
             end
-            yl = ylim(ax);
             for o = R.params.Onsets(:)'
-                plot(ax, [o o], yl, ':', 'Color', T.stimColor, 'HandleVisibility', 'off');
+                xline(ax, o, ':', 'Color', T.stimColor, 'HandleVisibility', 'off');   % full height at any zoom
             end
             hold(ax, 'off');
             UIKit.styleAxes(ax, sprintf('Flow change from %.3g-%.3g s (%s)', R.baselineSec(1), R.baselineSec(2), ...

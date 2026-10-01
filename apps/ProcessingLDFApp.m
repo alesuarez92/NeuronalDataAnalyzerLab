@@ -590,6 +590,10 @@ classdef ProcessingLDFApp < handle
                 plot(app.AxLDF, app.t, app.LDF, 'Color', T.plotColors(1, :));
                 UIKit.styleAxes(app.AxLDF, 'Loaded LDF', 'Time (s)', 'LDF');
             end
+            % X from the data before linking: linkaxes before the first draw
+            % can take [0 1] as the shared limits
+            xr = [min([app.t(1), app.tRaw(1)]), max([app.t(end), app.tRaw(end)])];
+            if xr(2) > xr(1), xlim(app.AxStim, xr); xlim(app.AxLDF, xr); end
             try linkaxes([app.AxStim app.AxLDF], 'x'); catch, end
             app.ThreshLine = [];
             app.drawThreshold();
@@ -903,6 +907,7 @@ end
 
 %% formatDuration - "612.0 s" or "10 min 12.0 s"
 function s = formatDuration(sec)
+    sec = round(sec * 10) / 10;   % before the split: 299.97 s is "5 min 0.0 s", not "4 min 60.0 s"
     if sec >= 120
         s = sprintf('%d min %.1f s', floor(sec / 60), mod(sec, 60));
     else

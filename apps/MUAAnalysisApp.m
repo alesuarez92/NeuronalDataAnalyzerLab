@@ -710,7 +710,7 @@ classdef MUAAnalysisApp < handle
                 plot(ax, app.StimData.time, app.StimData.signal, 'Color', T.stimColor);
                 if ~isempty(segIdx)
                     hold(ax, 'on');
-                    yLims = ylim(ax);
+                    yLims = UIKit.dataLimits(ax, 'y');   % not ylim(ax): can be [0 1] before the first draw
                     for i = 1:size(app.Segments,1)
                         segX = app.Segments(i,:);
                         alpha = 0.10;
@@ -1535,7 +1535,7 @@ classdef MUAAnalysisApp < handle
                 xline(ax2, 0, '-', 'Color', T.stimColor, 'LineWidth', 1.5);
                 hold(ax2, 'off');
                 xlim(ax2, win * 1000);
-                yl = ylim(ax2);
+                yl = UIKit.dataLimits(ax2, 'y');
                 ylim(ax2, [0, max(yl(2), 1)]);   % rates are >= 0; SEM bars must not push the axis below 0
                 [~, iPk] = max(p.rate);
                 UIKit.styleAxes(ax2, sprintf('PSTH  ·  peak at %.0f ms', p.centers(iPk) * 1000), ...
@@ -1876,6 +1876,11 @@ classdef MUAAnalysisApp < handle
             plot(ax, tAxis, mean(alignedWaves(1:N,:), 1), 'Color', T.plotColors(1,:), 'LineWidth', 2);
             hold(ax, 'off');
             UIKit.styleAxes(ax, 'After alignment (on peak)', 'Time (ms)', 'Amplitude (V)');
+            % Shared Y from the data: linkaxes alone can take [0 1] when the
+            % tab has not been drawn yet
+            yb = UIKit.dataLimits(app.AxAlignBefore, 'y'); ya = UIKit.dataLimits(ax, 'y');
+            yl = [min(yb(1), ya(1)), max(yb(2), ya(2))];
+            ylim(app.AxAlignBefore, yl); ylim(ax, yl);
             linkaxes([app.AxAlignBefore, app.AxAlignAfter], 'y');
         end
 

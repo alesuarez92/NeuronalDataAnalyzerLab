@@ -97,6 +97,36 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   window (steps 1 and 2) and the MUA Analysis settings dialogs, a control
   or a label could be drawn over the last row; every label now stays next
   to its control.
+- **Plots stuck at 0 to 1 on MATLAB R2026b**: limits read before a plot
+  was first drawn (a new window, a tab not shown yet) could still be 0 to
+  1 and were kept, hiding the data: the first file in Extract LDF, the
+  time axis in LDF Processing, the alignment waveforms and the stimulus
+  shading in MUA Analysis. The limits now come from the data
+  (`UIKit.dataLimits`); the stimulus lines of Laser Speckle Flowmetry
+  span the whole plot at any zoom.
+- **Batch results table on MATLAB R2026b**: the column names follow the
+  summary (the third column was still called Message).
+- **Recording length**: Extract LDF and LDF Processing showed
+  "4 min 60.0 s" for 299.97 s; the seconds are rounded before the split.
+- **Colour-bar labels**: the CSD and spectrogram labels in LFP Analysis
+  were cut off at the right edge; they are plain text (m², log10) with
+  room next to them.
+- **Laser speckle labels**: titles and checks read "1/K²" and "1/τc"
+  instead of the markup "1/K^2" and "1/\tau_c".
+- **Statistics hint**: in Signal Characterization the line under
+  Statistical test names the post-hoc test of the chosen method
+  (Wilcoxon or Mann-Whitney with Holm for ranks).
+- **ERP channel for new files**: when the channels typed for earlier
+  files are not in the new ones (or none were typed), EEG Analysis fills
+  in Pz, Cz, Fz or Oz when the files have one, instead of the average of
+  all channels, which is flat after an average reference.
+- **10-5 positions next to file positions**: channels placed by name or by
+  hand on the 10-5 system now sit on the head of the file's positions:
+  their angle from the vertex is scaled to fit the channels that have
+  both (most files and real heads have Fpz, T7, Oz and T8 near the
+  equator, the idealized template 18 deg above it). A channel placed by
+  hand on FT7 lands between F7 and T7, not next to FC5. Names of
+  electrodes on or beyond the head line are drawn outside it.
 - **Tests on MATLAB R2026b**: the launcher layout test waits until the
   window has taken its new size before checking the columns.
 
