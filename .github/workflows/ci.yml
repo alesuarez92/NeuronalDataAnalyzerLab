@@ -21,6 +21,7 @@ jobs:
   test:
     name: MATLAB tests and code analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 45          # a full run takes about 20 min; a hung window must not hold the runner for hours
     steps:
       - uses: actions/checkout@v4
 

@@ -64,6 +64,7 @@ classdef BatchApp < handle
         ResultsInfoLabel
         % Right
         Table              % uitable: queued files, then the summary
+        TableData          % the table shown in Table (Table.Data holds it as cells)
         LogArea            % uitextarea: batch log
         % State
         Pipeline = 'ldf'
@@ -186,8 +187,9 @@ classdef BatchApp < handle
                 'Tooltip', 'Outcome of the last batch. Rows: green ok, orange warning, red error, gray skipped');
             app.ResultsInfoLabel.Layout.Row = 2; app.ResultsInfoLabel.Layout.Column = [1 3];
             % Queued files while running; the summary afterwards (rows coloured by Status)
-            app.Table = uitable(rg, 'Data', emptyQueue(), 'RowName', {}, 'FontSize', T.fontSmall);
+            app.Table = uitable(rg, 'RowName', {}, 'FontSize', T.fontSmall);
             app.Table.Layout.Row = 3; app.Table.Layout.Column = [1 3];
+            app.showTable(emptyQueue(), {150, 62, 'auto'});
             lc = UIKit.card(right, 'Log');
             lg = uigridlayout(lc, [1 1], 'Padding', [8 8 8 8], 'BackgroundColor', T.cardBg);
             app.LogArea = uitextarea(lg, 'Value', {''}, 'Editable', 'off', 'FontSize', T.fontSmall, ...
@@ -584,7 +586,7 @@ classdef BatchApp < handle
                 [~, nm, ex] = fileparts(app.Files{i});
                 names{i} = [nm ex];
             end
-            app.newTable(table(names, status(:), messages(:), 'VariableNames', {'File', 'Status', 'Message'}), ...
+            app.showTable(table(names, status(:), messages(:), 'VariableNames', {'File', 'Status', 'Message'}), ...
                 {150, 62, 'auto'});
         end
 
@@ -612,20 +614,18 @@ classdef BatchApp < handle
             w(strcmp(v, 'File')) = {150};
             w(strcmp(v, 'Status')) = {62};
             w(strcmp(v, 'Message')) = {220};
-            app.newTable(d, w);
+            app.showTable(d, w);
         end
 
-        %% newTable - A fresh results table showing d (queue or summary)
-        % Not new Data in the old table: on R2026b a uitable keeps the header
-        % text of the columns it already had (the third column stayed
-        % "Message" over the summary, then the summary's name over the queue).
-        function newTable(app, d, widths)
-            old = app.Table;
-            app.Table = uitable(old.Parent, 'Data', d, 'ColumnName', d.Properties.VariableNames, ...
-                'RowName', {}, 'FontSize', old.FontSize, 'ColumnWidth', widths);
-            app.Table.Layout.Row = old.Layout.Row;
-            app.Table.Layout.Column = old.Layout.Column;
-            delete(old);
+        %% showTable - Show table d (queue or summary) in the results table
+        % As cells with the column names set: with a table as Data, R2026b
+        % kept the header text of the columns shown before (the third column
+        % stayed "Message" over the summary). A new uitable per view hung.
+        function showTable(app, d, widths)
+            app.TableData = d;
+            app.Table.Data = table2cell(d);
+            app.Table.ColumnName = d.Properties.VariableNames;
+            app.Table.ColumnWidth = widths;
             app.colourRows();
         end
 
@@ -635,7 +635,7 @@ classdef BatchApp < handle
             tbl = app.Table;
             try removeStyle(tbl); catch, end
             try addStyle(tbl, uistyle('HorizontalAlignment', 'left')); catch, end   % text and numbers alike
-            d = tbl.Data;
+            d = app.TableData;
             if ~istable(d) || height(d) == 0 || ~ismember('Status', d.Properties.VariableNames), return; end
             kinds = {'ok', T.success; 'warning', T.warning; 'error', T.danger; ...
                 'skipped', T.mutedColor; 'running', T.info};
@@ -653,11 +653,12 @@ classdef BatchApp < handle
 
         %% onProgress - Batch.run callback: status bar, step label, table row
         function onProgress(app, k, n, fileName, status, msg)
-            d = app.Table.Data;
+            d = app.TableData;
             if istable(d) && height(d) >= k && ismember('Status', d.Properties.VariableNames)
                 d.Status{k} = status;
                 d.Message{k} = msg;
-                app.Table.Data = d;
+                app.TableData = d;
+                app.Table.Data = table2cell(d);
                 app.colourRows();
             end
             if strcmp(status, 'running')

@@ -105,8 +105,8 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   (`UIKit.dataLimits`); the stimulus lines of Laser Speckle Flowmetry
   span the whole plot at any zoom.
 - **Batch results table on MATLAB R2026b**: the column names follow the
-  summary (the third column was still called Message): the queue and the
-  summary each get a new table.
+  summary (the third column was still called Message): the table is shown
+  as cells with its column names set.
 - **Recording length**: Extract LDF and LDF Processing showed
   "4 min 60.0 s" for 299.97 s; the seconds are rounded before the split.
 - **Colour-bar labels**: the CSD and spectrogram labels in LFP Analysis
