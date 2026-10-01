@@ -11,7 +11,7 @@
 % next to it that share its name up to '_eeg' are applied:
 %   *_channels.tsv     name, type, status: only type EEG channels are kept
 %                      (the others are named in the notes); channels with
-%                      status 'bad' are listed in the notes
+%                      status 'bad' are marked bad (eeg.bad) and listed in the notes
 %   *_events.tsv       onset (s), duration, trial_type / value: the events
 %                      (they replace the events inside the data file)
 %   *_electrodes.tsv   name, x, y, z (the file of the same subject and
@@ -38,6 +38,7 @@ end
 notes = raw.notes;
 labels = raw.labels;
 keep = true(1, numel(labels));
+bad = {};
 % channels.tsv
 T = readTSV(fullfile(folder, [prefix '_channels.tsv']));
 if isfield(T, 'name') && isfield(T, 'type')
@@ -54,7 +55,7 @@ if isfield(T, 'name') && isfield(T, 'type')
         bad = T.name(strcmpi(T.status, 'bad'));
         bad = bad(ismember(bad, labels(keep)));
         if ~isempty(bad)
-            notes{end + 1} = sprintf('Marked bad in channels.tsv: %s.', strjoin(bad, ', '));
+            notes{end + 1} = sprintf('Marked bad in channels.tsv: %s (left out of the average reference and the trial rejection).', strjoin(bad, ', '));
         end
     end
 end
@@ -118,7 +119,7 @@ if raw.isEpoched, cond = raw.trials.condition; end
 eeg = EEGSource.make(data, raw.fs, 'Times', raw.times, 'Labels', labels, 'Chanlocs', locs, ...
     'CoordSystem', coord, 'Conditions', cond, 'Events', ev, 'Reference', ref, 'History', raw.history, ...
     'Notes', notes, 'Unit', 'uV', 'Source', sprintf('EEG-BIDS (%s)', raw.source), 'Format', 'bids', ...
-    'File', f, 'IsEpoched', raw.isEpoched);
+    'File', f, 'IsEpoched', raw.isEpoched, 'Bad', bad);
 end
 
 function f = dataFile(p)

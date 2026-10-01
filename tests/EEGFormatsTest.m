@@ -320,6 +320,7 @@ function testRodentBIDS(tests)
     verifyEqual(tests, eeg.labels, tr.labels(1:3));
     verifyTrue(tests, any(contains(eeg.notes, 'left out): V1-R')));
     verifyTrue(tests, any(contains(eeg.notes, 'Marked bad in channels.tsv: M1-R')));
+    verifyEqual(tests, eeg.labels(eeg.bad), {'M1-R'}, 'status bad marks the channel bad');
     verifyEqual(tests, {eeg.events.type}, {'7', '8'});
     verifyEqual(tests, [eeg.events.latency], [1.5 4.25]);
     verifyEqual(tests, [eeg.events.duration], [0 0.5]);

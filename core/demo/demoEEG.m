@@ -26,6 +26,25 @@
 %   Hz, 60 s, a light flash every 2 s from 1 s (30 events 'flash'), a
 %   visual evoked potential over V1 (-40 uV at 50 ms, +25 uV at 100 ms;
 %   30% of that over M1), 1/f and white noise, cerebellar reference.
+% Raw (continuous scalp recordings of the same oddball design, before any
+%   cleaning): 3 participants as BrainVision Recorder files (float32, 500
+%   Hz, about 100 s each), the same 32 channels recorded against FCz
+%   (online reference, not in the data; azimuth 0, elevation 67.5 deg on
+%   the sphere), markers 'S  1' / 'S  2' / 'S  3' = Standard (40) / Target
+%   (15) / Novel (15), 1.2-1.5 s apart, from 2 s. The same P1 / N1 / P300 /
+%   alpha as the scalp case (P300 at Pz: Target > Novel > Standard), plus:
+%     electrode offsets (+-400 uV) and linear drift (+-1 uV/s): a high-pass
+%       filter removes them
+%     50 Hz line noise, 5-15 uV per channel: a notch or a low-pass removes it
+%     T7 noisy (150 uV white noise): suggested as bad; unless it is marked
+%       bad, every trial exceeds 100 uV peak-to-peak
+%     blinks (150 uV at Fp1 / Fp2, 50 ms SD) in 8 trials per participant
+%       (truth.raw.participants(p).blinkTrials) and 6 more between trials:
+%       100 uV peak-to-peak rejects exactly the 8 blink trials (after a
+%       0.1-30 Hz band-pass and the average reference without T7)
+%     N1 at Cz: small against FCz (n1CzFCz, about -1.7 uV), about -4.6 uV
+%       against the average of the good channels (n1CzAverage)
+%   Writes only for the brainvision format.
 %
 % Every case is written as:
 %   eeglab     EEGLAB .set with an EEG variable, numbers inside
@@ -57,21 +76,21 @@
 %              data (channels x samples, uV), fs, labels, flashTimes (s)
 %
 % files.folder, files.scalp(p).<format>, files.rodent.<format> ('' for a
-% format not written),
+% format not written), files.raw(p).brainvision,
 % files.truth.scalp / .rodent: design, positions, per-participant
 % conditions, rejected trials, and data (channels x samples x trials,
 % single, uV; only when freshly written, not in the cache).
 %
 % Options (Name, Value):
 %   'Participants'  number of scalp participants (default 8)
-%   'Kinds'         subset of {'scalp', 'rodent'} (default both)
+%   'Kinds'         subset of {'scalp', 'rodent', 'raw'} (default all)
 %   'Formats'       subset of {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision',
 %                   'matrix', 'edf', 'bdf', 'mff', 'xdf', 'bids'} to write
 %                   (default all; edf, bdf, mff, xdf and bids are written for
 %                   the rodent only)
 %   'Force'         true regenerates the cache (demoEEG() only)
 % Deterministic: RandStream('mt19937ar', 'Seed', 20260926 + participant;
-% rodent 20260926 + 100). Requires core/io on the path (EEGSource,
+% rodent 20260926 + 100; raw 20260926 + 200 + participant). Requires core/io on the path (EEGSource,
 % writeEEGLAB, writeFieldTrip, writeBrainVision, writeEDF, writeMFF,
 % writeXDF, writeEEGBIDS).
 % Toolboxes: none.
@@ -79,11 +98,11 @@
 
 function files = demoEEG(folder, varargin)
     allFormats = {'eeglab', 'eeglabfdt', 'fieldtrip', 'brainvision', 'matrix', 'edf', 'bdf', 'mff', 'xdf', 'bids'};
-    o = struct('Participants', 8, 'Kinds', {{'scalp', 'rodent'}}, 'Formats', {allFormats}, 'Force', false);
+    o = struct('Participants', 8, 'Kinds', {{'scalp', 'rodent', 'raw'}}, 'Formats', {allFormats}, 'Force', false);
     for k = 1:2:numel(varargin)
         o.(varargin{k}) = varargin{k + 1};
     end
-    cacheVersion = 2;
+    cacheVersion = 3;
     cached = nargin < 1 || isempty(folder);
     if cached
         folder = fullfile(DemoData.folder(), 'eeg');
@@ -107,6 +126,9 @@ function files = demoEEG(folder, varargin)
     if any(strcmp(o.Kinds, 'rodent'))
         [files.rodent, truth.rodent] = writeRodent(fullfile(folder, 'rodent'), o.Formats);
     end
+    if any(strcmp(o.Kinds, 'raw'))
+        [files.raw, truth.raw] = writeRaw(fullfile(folder, 'raw'), 3, o.Formats);
+    end
     files.truth = truth;
 
     if cached
@@ -115,6 +137,9 @@ function files = demoEEG(folder, varargin)
         end
         if isfield(files.truth, 'rodent')
             files.truth.rodent = rmfield(files.truth.rodent, 'data');
+        end
+        if isfield(files.truth, 'raw') && isfield(files.truth.raw, 'participants')
+            files.truth.raw.participants = rmfield(files.truth.raw.participants, 'data');
         end
         version = cacheVersion; %#ok<NASGU>
         save(fullfile(folder, 'demo_eeg.mat'), 'files', 'version', '-v7');
@@ -361,6 +386,105 @@ function [out, truth] = writeRodent(folder, formats)
     end
     for f = setdiff(fieldnames(out)', formats)
         out.(f{1}) = '';                                         % not written
+    end
+end
+
+%% writeRaw - Raw BrainVision Recorder files of the oddball study (FCz reference, artefacts)
+function [out, truth] = writeRaw(folder, nPart, formats)
+    out = struct('brainvision', {});
+    truth = struct();
+    if ~any(strcmp(formats, 'brainvision')), return; end
+    if ~(exist(folder, 'dir') == 7), mkdir(folder); end
+    labels = {'Fp1', 'Fp2', 'F7', 'F3', 'Fz', 'F4', 'F8', 'FC5', 'FC1', 'FC2', 'FC6', 'T7', ...
+        'C3', 'Cz', 'C4', 'T8', 'TP9', 'CP5', 'CP1', 'CP2', 'CP6', 'TP10', 'P7', 'P3', 'Pz', ...
+        'P4', 'P8', 'PO9', 'O1', 'Oz', 'O2', 'PO10'};
+    azel = [18 0; -18 0; 54 0; 40 42; 0 45; -40 42; -54 0; 69 21; 45 67; -45 67; -69 21; ...
+        90 0; 90 45; 0 90; -90 45; -90 0; 108 -18; 111 21; 135 67; -135 67; -111 21; -108 -18; ...
+        126 0; 140 42; 180 45; -140 42; -126 0; 144 -18; 162 0; 180 0; -162 0; -144 -18];
+    azel = [azel; 0 67.5];                                       % row 33: FCz, the online reference
+    R = 85;
+    az = azel(:, 1) * pi / 180;
+    el = azel(:, 2) * pi / 180;
+    u = [cos(el) .* cos(az), cos(el) .* sin(az), sin(el)];      % x nose, y left, z up
+    posRAS = R * [-u(:, 2), u(:, 1), u(:, 3)];
+    nCh = numel(labels);
+    fs = 500;
+    names = {'Standard', 'Target', 'Novel'};
+    markers = {'S  1', 'S  2', 'S  3'};
+    nPer = [40 15 15];
+    p300 = [2 10 6];
+    nBlinkTrials = 8;
+    nBlinkBetween = 6;
+    ch = @(name) find(strcmp([labels, {'FCz'}], name), 1);
+    w = @(v, sig) exp(-(acos(max(-1, min(1, u * v'))) / sig) .^ 2);
+    wP1 = w(u(ch('Oz'), :), 0.6); wN1 = w(u(ch('Cz'), :), 0.6); wP3 = w(u(ch('Pz'), :), 0.8);
+    wA = w(u(ch('Oz'), :), 0.7);
+    eyes = [cos(-0.3), 0, sin(-0.3)];                            % below the forehead, between the eyes
+    wBlink = w(eyes, 0.5);
+    wBlink = wBlink / max(wBlink([ch('Fp1'), ch('Fp2')]));       % 1 at Fp1 / Fp2
+    good = ~strcmp(labels, 'T7');
+    tk = (-100:400) / fs;                                        % -0.2 to 0.8 s around each event
+    g = @(mu, sd) exp(-0.5 * ((tk - mu) / sd) .^ 2);
+
+    truth = struct('labels', {labels}, 'reference', 'FCz', 'referenceAzEl', azel(end, :), 'fs', fs, ...
+        'conditionNames', {names}, 'markers', {markers}, 'trialsPerCondition', nPer, 'badChannel', 'T7', ...
+        'lineFrequency', 50, 'blinkAmplitude', 150, 'participants', struct('condition', {}, 'onsets', {}, ...
+        'blinkTrials', {}, 'blinkBetween', {}, 'ampScale', {}, 'latShift', {}, 'n1CzFCz', {}, ...
+        'n1CzAverage', {}, 'dc', {}, 'lineAmplitude', {}, 'data', {}));
+    locs = struct('label', labels, 'x', num2cell(R * u(1:nCh, 1)'), 'y', num2cell(R * u(1:nCh, 2)'), ...
+        'z', num2cell(R * u(1:nCh, 3)'), 'theta', NaN, 'radius', NaN);
+    for p = 1:nPart
+        rs = RandStream('mt19937ar', 'Seed', 20260926 + 200 + p);
+        amp = 1 + 0.1 * randn(rs);
+        lat = max(-0.02, min(0.02, 0.01 * randn(rs)));
+        c0 = [ones(1, nPer(1)), 2 * ones(1, nPer(2)), 3 * ones(1, nPer(3))];
+        cond = c0(randperm(rs, numel(c0)));
+        n = numel(cond);
+        isi = 1.2 + 0.3 * rand(rs, 1, n - 1);
+        onsets = 2 + [0, cumsum(isi)];
+        T = ceil(onsets(end) + 2);
+        nS = T * fs;
+        t = (0:nS - 1) / fs;
+        % True potentials at the 32 channels and FCz (against infinity)
+        V = 3 * pinkNoise(rs, nS, nCh + 1)' + randn(rs, nCh + 1, nS) + 4 * wA * sin(2 * pi * 10 * t + 2 * pi * rand(rs));
+        blinkTrials = sort(randperm(rs, n, nBlinkTrials));
+        roomy = find(isi >= 1.4);
+        roomy = roomy(~ismember(roomy, blinkTrials) & ~ismember(roomy + 1, blinkTrials));
+        between = sort(roomy(randperm(rs, numel(roomy), nBlinkBetween)));
+        for k = 1:n
+            erp = amp * (2 * wP1 * g(0.06, 0.012) - 5 * wN1 * g(0.1 + lat, 0.015) ...
+                + p300(cond(k)) * wP3 * g(0.35 + lat, 0.06));
+            i = round(onsets(k) * fs) + 1 + (-100:400);
+            V(:, i) = V(:, i) + erp;
+        end
+        blinkAt = [onsets(blinkTrials) + 0.1 + 0.5 * rand(rs, 1, nBlinkTrials), ...
+            (onsets(between) + 0.8 + onsets(between + 1) - 0.2) / 2];
+        for b = blinkAt
+            V = V + 150 * wBlink * exp(-0.5 * ((t - b) / 0.05) .^ 2);
+        end
+        % Recorded: against FCz, plus electrode offsets, drift, line noise and a noisy T7
+        dc = -400 + 800 * rand(rs, nCh, 1);
+        slope = -1 + 2 * rand(rs, nCh, 1);                       % uV per s
+        lineAmp = 5 + 10 * rand(rs, nCh, 1);
+        X = V(1:nCh, :) - V(end, :) + dc + slope * t + lineAmp * sin(2 * pi * 50 * t);
+        X(ch('T7'), :) = X(ch('T7'), :) + 150 * randn(rs, 1, nS);
+        data = single(X);
+        n1 = -5 * amp * wN1;
+        truth.participants(p) = struct('condition', {names(cond)}, 'onsets', onsets, 'blinkTrials', blinkTrials, ...
+            'blinkBetween', between, 'ampScale', amp, 'latShift', lat, 'n1CzFCz', n1(ch('Cz')) - n1(end), ...
+            'n1CzAverage', n1(ch('Cz')) - mean(n1([good, false])), 'dc', dc', 'lineAmplitude', lineAmp', ...
+            'data', data);
+
+        ev = struct('type', markers(cond), 'latency', num2cell(onsets), 'duration', 0);
+        eeg = EEGSource.make(data, fs, 'Times', t, 'Labels', labels, 'Chanlocs', locs, 'Events', ev, ...
+            'Reference', 'FCz', 'Unit', 'uV', 'IsEpoched', false);
+        out(p).brainvision = fullfile(folder, sprintf('sub-%02d_task-oddball.vhdr', p));
+        amp32 = {'A m p l i f i e r  S e t u p', '============================', ...
+            sprintf('Number of channels: %d', nCh), sprintf('Sampling Rate [Hz]: %d', fs), ...
+            'Reference channel: FCz (not recorded)', '', 'S o f t w a r e  F i l t e r s', ...
+            '==============================', 'Disabled'};
+        writeBrainVision(out(p).brainvision, eeg, 'Positions', posRAS(1:nCh, :), 'Reference', 'FCz', ...
+            'Comment', amp32);
     end
 end
 

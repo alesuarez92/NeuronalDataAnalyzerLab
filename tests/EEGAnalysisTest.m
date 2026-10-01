@@ -7,7 +7,12 @@
 % synthetic study of core/demo/demoEEG: P300 Target > Novel > Standard at
 % Pz, N1 negative at Cz near 100 ms, one table row per participant and
 % condition, and cutting the continuous rodent recording into trials
-% around its light flashes (visual evoked potential over V1). Plain
+% around its light flashes (visual evoked potential over V1). Cleaning
+% raw recordings: filter designs and taps as MNE-Python, drift and line
+% noise removed, exact re-references, bad channels (suggested, left out
+% of the reference, rejection, ERPs and measures), event names and gaps,
+% exact trial rejection, and the raw demo (T7 suggested, exactly the blink
+% trials rejected, N1 at Cz against FCz and the average). Plain
 % errors for unknown channels and conditions, bad windows and data that
 % are not cut into trials yet.
 % =========================================================================
@@ -297,6 +302,199 @@ function testErrors(tests)
     verifyError(tests, @() EEGAnalysis.epoch(raw, 'Window', [0.4 -0.1]), 'NeuroAnalyzer:eeg:badWindow');
     verifyError(tests, @() EEGAnalysis.epoch(raw, 'Window', [-70 0]), 'NeuroAnalyzer:eeg:badWindow');
     verifyError(tests, @() EEGAnalysis.epoch(raw, 'Events', {'tone'}), 'NeuroAnalyzer:eeg:unknownCondition');
+end
+
+%% --------------------------------------------------- Cleaning raw recordings
+
+function testFilterDesignMatchesMNE(tests)
+    % Lengths, edges and taps as MNE-Python 1.13 create_filter(..., fir_design='firwin')
+    d = EEGAnalysis.filterDesign(500, 'HighPass', 0.1, 'LowPass', 30);
+    verifyEqual(tests, d.kind, 'band-pass');
+    verifyEqual(tests, d.length, 16501);
+    verifyEqual(tests, [d.highTransition d.lowTransition], [0.1 7.5], 'AbsTol', 1e-12);
+    verifyEqual(tests, [d.highCutoff d.lowCutoff], [0.05 33.75], 'AbsTol', 1e-12);
+    lp = EEGAnalysis.filterDesign(500, 'LowPass', 40);
+    verifyEqual(tests, lp.length, 165);
+    verifyEqual(tests, lp.h([83 1 71]), [0.17982833336141163 0.0002123807816329227 0.012156937905843782], 'AbsTol', 1e-12);
+    verifyEqual(tests, sum(lp.h), 1, 'AbsTol', 1e-12, 'low-pass: DC gain 1');
+    hp = EEGAnalysis.filterDesign(500, 'HighPass', 1);
+    verifyEqual(tests, hp.length, 1651);
+    verifyEqual(tests, hp.h([826 1]), [0.997990231681618 2.7636500548030848e-05], 'AbsTol', 1e-12);
+    verifyEqual(tests, sum(hp.h), 0, 'AbsTol', 1e-12, 'high-pass: DC gain 0');
+    gain = @(d, f) abs(sum(d.h .* exp(-2i * pi * f * (0:d.length - 1) / 500)));
+    verifyEqual(tests, gain(lp, 20), 1, 'AbsTol', 0.003);
+    verifyEqual(tests, gain(lp, lp.lowCutoff), 0.5, 'AbsTol', 0.01, '-6 dB at the cutoff');
+    verifyLessThan(tests, gain(lp, 60), 0.003);
+    n = EEGAnalysis.notchDesign(500, [50 100]);
+    verifyEqual(tests, n.length, 3301);
+    verifyEqual(tests, n.notchWidth, [0.25 0.5], 'AbsTol', 1e-12);
+    verifyLessThan(tests, [gain(n, 50) gain(n, 100)], [0.01 0.01]);
+    verifyEqual(tests, [gain(n, 45) gain(n, 75)], [1 1], 'AbsTol', 0.003);
+    verifySubstring(tests, EEGAnalysis.describeFilter(d), 'Band-pass filter 0.1-30 Hz');
+    verifySubstring(tests, EEGAnalysis.describeFilter(n), 'Notch filter at 50 and 100 Hz');
+    verifyError(tests, @() EEGAnalysis.filterDesign(500, 'HighPass', 40, 'LowPass', 30), 'NeuroAnalyzer:eeg:badOption');
+    verifyError(tests, @() EEGAnalysis.filterDesign(500, 'LowPass', 300), 'NeuroAnalyzer:eeg:badOption');
+    verifyError(tests, @() EEGAnalysis.notchDesign(500, 250), 'NeuroAnalyzer:eeg:badOption');
+end
+
+function testFilterRemovesDriftAndLineNoise(tests)
+    fs = 250;
+    t = (0:20 * fs - 1) / fs;
+    sig = 10 * sin(2 * pi * 6 * t);
+    x = [sig + 300 + 2 * t + 20 * sin(2 * pi * 50 * t); -sig];
+    eeg = EEGSource.make(single(x), fs, 'Labels', {'A', 'B'}, 'Unit', 'uV', 'IsEpoched', false);
+    [out, info] = EEGAnalysis.filter(eeg, 'HighPass', 1, 'Notch', 50);
+    verifyEqual(tests, info.band.kind, 'high-pass');
+    verifyEqual(tests, info.notch.notch, 50);
+    mid = 7 * fs:13 * fs;                                        % away from the edges (the filter is 6.6 s long)
+    verifyEqual(tests, double(out.data(1, mid)), sig(mid), 'AbsTol', 0.05, 'offset, drift and 50 Hz removed');
+    verifyEqual(tests, double(out.data(2, mid)), -sig(mid), 'AbsTol', 0.05);
+    verifyEqual(tests, numel(out.history), 2);
+    verifySubstring(tests, out.history{1}, 'High-pass filter: passband edge 1 Hz');
+    % Trials are filtered one by one; a filter longer than a trial is noted
+    ep = EEGSource.make(single(randn(2, 100, 3)), fs, 'Labels', {'A', 'B'}, 'Unit', 'uV', 'IsEpoched', true);
+    epf = EEGAnalysis.filter(ep, 'HighPass', 1);
+    verifySize(tests, epf.data, [2 100 3]);
+    verifyTrue(tests, any(contains(epf.notes, 'longer than each trial')));
+end
+
+function testRereferenceExact(tests)
+    x = single([1 2 3; 4 5 6; 7 8 9; 10 20 30]);
+    eeg = EEGSource.make(x, 10, 'Labels', {'Cz', 'TP9', 'TP10', 'T7'}, 'Unit', 'uV', 'IsEpoched', false, ...
+        'Reference', 'FCz', 'Bad', {'T7'});
+    verifyEqual(tests, EEGAnalysis.badChannels(eeg), [false false false true]);
+    a = EEGAnalysis.rereference(eeg, 'average');
+    m = mean(double(x(1:3, :)), 1);
+    verifyEqual(tests, double(a.data(1:3, :)), double(x(1:3, :)) - m, 'AbsTol', 1e-5);
+    verifyEqual(tests, a.data(4, :), x(4, :), 'bad channel as recorded (as MNE-Python)');
+    verifyEqual(tests, a.reference, 'average of the 3 good channels (T7 marked bad and left out)');
+    verifySubstring(tests, a.history{end}, 'was: FCz');
+    l = EEGAnalysis.rereference(eeg, {'tp9', 'TP10'});
+    verifyEqual(tests, double(l.data(1, :)), double(x(1, :)) - mean(double(x(2:3, :)), 1), 'AbsTol', 1e-5);
+    verifyEqual(tests, l.reference, 'mean of TP9 and TP10 (linked mastoids)');
+    c = EEGAnalysis.rereference(eeg, 'Cz');
+    verifyEqual(tests, double(c.data(1, :)), [0 0 0]);
+    verifyEqual(tests, c.reference, 'channel Cz');
+    verifyError(tests, @() EEGAnalysis.rereference(eeg, 'T7'), 'NeuroAnalyzer:eeg:badOption');
+    verifyError(tests, @() EEGAnalysis.rereference(eeg, 'M1'), 'NeuroAnalyzer:eeg:unknownChannel');
+    % Older structs without eeg.bad: no channel is bad
+    verifyEqual(tests, EEGAnalysis.badChannels(rmfield(eeg, 'bad')), false(1, 4));
+end
+
+function testMarkAndSuggestBadChannels(tests)
+    rs = RandStream('mt19937ar', 'Seed', 7);
+    x = 10 * randn(rs, 8, 2000);
+    x(3, :) = 0.01 * randn(rs, 1, 2000);                         % flat
+    x(6, :) = 200 * randn(rs, 1, 2000);                          % very noisy
+    labels = arrayfun(@(k) sprintf('E%d', k), 1:8, 'UniformOutput', false);
+    eeg = EEGSource.make(single(x), 100, 'Labels', labels, 'Unit', 'uV', 'IsEpoched', false);
+    [names, info] = EEGAnalysis.suggestBadChannels(eeg);
+    verifyEqual(tests, names, {'E3', 'E6'});
+    verifySubstring(tests, info.rule, 'robust z-scores');
+    b = EEGAnalysis.markBad(eeg, names);
+    verifyEqual(tests, find(b.bad), [3 6]);
+    verifySubstring(tests, b.history{end}, 'Marked bad: E3 and E6');
+    verifyEqual(tests, EEGAnalysis.markBad(b, {}).bad, false(1, 8));
+    verifyError(tests, @() EEGAnalysis.markBad(eeg, 'X9'), 'NeuroAnalyzer:eeg:unknownChannel');
+end
+
+function testEpochRenameAndGaps(tests)
+    fs = 100;
+    x = single(repmat(0:999, 2, 1));
+    ev = struct('type', {'S  1', 'S  2', 'boundary', 'S  1', 'S 1', 'other'}, ...
+        'latency', {1, 2, 4.5, 4.4, 7, 8}, 'duration', 0);
+    eeg = EEGSource.make(x, fs, 'Labels', {'A', 'B'}, 'Events', ev, 'Unit', 'uV', 'IsEpoched', false, 'Bad', {'B'});
+    ep = EEGAnalysis.epoch(eeg, 'Window', [-0.2 0.5], 'Rename', {'s 1', 'Standard'; 'S 2', 'Target'});
+    verifyEqual(tests, ep.trials.condition, {'Standard', 'Target', 'Standard'}, 'the trial across the gap is left out');
+    verifyTrue(tests, any(contains(ep.notes, 'across a gap')));
+    verifyEqual(tests, ep.bad, [false true], 'bad channels carried over');
+    verifySubstring(tests, ep.history{end}, 'S  1 (Standard)');
+    all = EEGAnalysis.epoch(eeg, 'Window', [-0.2 0.5]);
+    verifyFalse(tests, any(strcmp(all.trials.condition, 'boundary')));
+end
+
+function testRejectTrialsExact(tests)
+    x = zeros(3, 11, 6);
+    x(1, 5, 2) = 80;                                             % p2p 80
+    x(2, 6, 3) = 120;                                            % p2p 120 -> rejected
+    x(3, 6, 4) = 500;                                            % bad channel: ignored
+    x(1, :, 5) = 70;                                             % offset only: p2p 0, absolute 70
+    x(1, 1, 6) = -60; x(1, 11, 6) = 60;                          % p2p 120 at the edges
+    x = x + 0.01 * (0:10);                                       % no trial is flat
+    ep = EEGSource.make(single(x), 10, 'Times', (-5:5) / 10, 'Labels', {'A', 'B', 'C'}, 'Unit', 'uV', ...
+        'IsEpoched', true, 'Conditions', {'X', 'X', 'Y', 'Y', 'X', 'Y'}, 'Bad', {'C'});
+    [out, info] = EEGAnalysis.rejectTrials(ep, 'PeakToPeak', 100);
+    verifyEqual(tests, info.rejected, [3 6]);
+    verifyEqual(tests, [info.before; info.after], [3 3; 3 1]);
+    verifyEqual(tests, info.channels, {'A', 'B'});
+    verifyEqual(tests, size(out.data, 3), 4);
+    verifyEqual(tests, out.trials.condition, {'X', 'X', 'Y', 'X'});
+    verifySubstring(tests, info.sentence, 'Rejected 2 of 6 trials with a peak-to-peak amplitude above 100 uV');
+    verifySubstring(tests, out.history{end}, 'X 0 of 3 and Y 2 of 3');
+    i2 = EEGAnalysis.rejectTrials(ep, 'PeakToPeak', 100, 'Window', [-0.4 0.4]);
+    verifyEqual(tests, size(i2.data, 3), 5, 'edges outside the window');
+    [~, i3] = EEGAnalysis.rejectTrials(ep, 'Absolute', 65);
+    verifyEqual(tests, i3.rejected, [2 3 5]);
+    [~, i4] = EEGAnalysis.rejectTrials(ep, 'Absolute', 65, 'Baseline', [-0.5 0]);
+    verifyEqual(tests, i4.rejected, [2 3 6], 'the offset of trial 5 is removed by the baseline');
+    verifyError(tests, @() EEGAnalysis.rejectTrials(ep, 'PeakToPeak', 1e-3), 'NeuroAnalyzer:eeg:allRejected');
+    verifyError(tests, @() EEGAnalysis.rejectTrials(ep), 'NeuroAnalyzer:eeg:badOption');
+end
+
+function testBadChannelsInERPsAndMeasures(tests)
+    eeg = tinyEEG();
+    eeg = EEGAnalysis.markBad(eeg, 'Fz');
+    erp = EEGAnalysis.conditionERPs(eeg);
+    verifyTrue(tests, all(isnan(erp.mean(1, :))));
+    verifyFalse(tests, any(isnan(erp.mean(2, :))));
+    good = EEGAnalysis.conditionERPs(tinyEEG());
+    r = EEGAnalysis.measure(erp, 'Window', [0.2 0.3]);
+    rc = EEGAnalysis.measure(good, 'Channels', 'Cz', 'Window', [0.2 0.3]);
+    verifyEqual(tests, [r.value], [rc.value], 'AbsTol', 1e-12, 'the bad channel is left out of the average');
+    rf = EEGAnalysis.measure(erp, 'Channels', 'Fz', 'Window', [0.2 0.3]);
+    verifyTrue(tests, all(isnan([rf.value])));
+    ga = EEGAnalysis.grandAverage({erp, good});
+    verifyEqual(tests, ga.mean(1, :, :), good.mean(1, :, :), 'AbsTol', 1e-12, 'Fz from the other participant');
+    verifyEqual(tests, ga.mean(2, :, :), good.mean(2, :, :), 'AbsTol', 1e-12);
+    verifyEqual(tests, ga.bad, [false false]);
+    verifyTrue(tests, any(contains(ga.notes, 'Fz in 1')));
+end
+
+function testRawDemoPipeline(tests)
+    f = tests.TestData.demo;
+    tr = f.truth.raw;
+    verifyNumElements(tests, f.raw, 3);
+    ren = {'S 1', 'Standard'; 'S 2', 'Target'; 'S 3', 'Novel'};
+    erps = cell(1, 3);
+    for p = 1:3
+        eeg = EEGSource.open(f.raw(p).brainvision);
+        verifyEqual(tests, eeg.reference, 'channel FCz');
+        verifyEqual(tests, EEGAnalysis.suggestBadChannels(eeg), {'T7'}, sprintf('participant %d', p));
+        e = EEGAnalysis.filter(eeg, 'HighPass', 0.1, 'LowPass', 30);
+        % Without marking T7 bad, its noise fails every trial
+        verifyError(tests, @() EEGAnalysis.rejectTrials(EEGAnalysis.epoch(EEGAnalysis.rereference(e, ...
+            'average'), 'Rename', ren), 'PeakToPeak', 100), 'NeuroAnalyzer:eeg:allRejected');
+        e = EEGAnalysis.rereference(EEGAnalysis.markBad(e, 'T7'), 'average');
+        ep = EEGAnalysis.epoch(e, 'Window', [-0.2 0.8], 'Rename', ren);
+        verifyEqual(tests, ep.trials.condition, tr.participants(p).condition);
+        [ep, info] = EEGAnalysis.rejectTrials(ep, 'PeakToPeak', 100);
+        verifyEqual(tests, info.rejected, tr.participants(p).blinkTrials, 'exactly the blink trials');
+        erps{p} = EEGAnalysis.conditionERPs(ep, 'Baseline', [-0.2 0]);
+        n1 = EEGAnalysis.measure(erps{p}, 'Channels', 'Cz', 'Window', [0.07 0.13], 'Measure', 'peak', 'Polarity', 'negative');
+        verifyEqual(tests, mean([n1.value]), tr.participants(p).n1CzAverage, 'AbsTol', 1);
+    end
+    ga = EEGAnalysis.grandAverage(erps);
+    r = EEGAnalysis.measure(ga, 'Channels', 'Pz', 'Window', [0.3 0.4]);
+    v = containers.Map({r.condition}, {r.value});
+    verifyGreaterThan(tests, v('Target'), v('Novel'));
+    verifyGreaterThan(tests, v('Novel'), v('Standard'));
+    verifyTrue(tests, all(ga.bad == strcmp(ga.labels, 'T7')));
+    % Against FCz (no re-reference) the N1 at Cz is small
+    e = EEGAnalysis.markBad(EEGAnalysis.filter(EEGSource.open(f.raw(1).brainvision), 'HighPass', 0.1, 'LowPass', 30), 'T7');
+    erp = EEGAnalysis.conditionERPs(EEGAnalysis.epoch(e, 'Rename', ren), 'Baseline', [-0.2 0]);
+    n1 = EEGAnalysis.measure(erp, 'Channels', 'Cz', 'Window', [0.07 0.13], 'Measure', 'peak', 'Polarity', 'negative');
+    verifyEqual(tests, mean([n1.value]), tr.participants(1).n1CzFCz, 'AbsTol', 1);
+    verifyGreaterThan(tests, abs(tr.participants(1).n1CzAverage), 2 * abs(tr.participants(1).n1CzFCz));
 end
 
 %% ---------------------------------------------------------------- Helpers

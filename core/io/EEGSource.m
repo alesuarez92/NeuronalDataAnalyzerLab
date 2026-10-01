@@ -18,6 +18,9 @@
 %   eeg.conditions   condition names in order of first appearance
 %   eeg.events       continuous data: struct array type, latency (s), duration (s)
 %   eeg.reference    plain words, e.g. 'average of all channels', 'unknown'
+%   eeg.bad          1 x channels logical: channels marked bad (left out of the
+%                    average reference, trial rejection, ERPs and measures; see
+%                    EEGAnalysis.badChannels for structs without the field)
 %   eeg.history      1 x n cell of plain sentences: what was already done
 %   eeg.notes        1 x n cell of plain sentences worth knowing (units, ...)
 %   eeg.source, eeg.format, eeg.file
@@ -317,7 +320,8 @@ classdef EEGSource
         function eeg = make(data, fs, varargin)
             o = struct('Times', [], 'Labels', {{}}, 'Chanlocs', [], 'CoordSystem', '', ...
                 'Conditions', {{}}, 'Events', [], 'Reference', 'unknown', 'History', {{}}, ...
-                'Notes', {{}}, 'Unit', 'auto', 'Source', '', 'Format', '', 'File', '', 'IsEpoched', []);
+                'Notes', {{}}, 'Unit', 'auto', 'Source', '', 'Format', '', 'File', '', 'IsEpoched', [], ...
+                'Bad', []);
             o = EEGSource.options(o, varargin);
             if ~isnumeric(data) || isempty(data) || ndims(data) > 3
                 error('NeuroAnalyzer:eeg:invalid', ['The EEG must be a number array of channels x ' ...
@@ -366,6 +370,12 @@ classdef EEGSource
             eeg.conditions = EEGSource.stableUnique(cond);
             eeg.events = ev;
             eeg.reference = o.Reference;
+            eeg.bad = false(1, nCh);
+            if islogical(o.Bad) && numel(o.Bad) == nCh
+                eeg.bad = o.Bad(:)';
+            elseif ~isempty(o.Bad)
+                eeg.bad(ismember(lower(labels), lower(EEGSource.cellRow(o.Bad)))) = true;
+            end
             eeg.history = EEGSource.cellRow(o.History);
             eeg.notes = notes;
             eeg.source = o.Source;
