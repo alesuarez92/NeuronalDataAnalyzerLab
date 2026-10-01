@@ -528,7 +528,7 @@ classdef HelpApp < handle
                 '| Family | Tile: windows, in order | Starts from | Ends with |'
                 '| Blood flow | LDF: 1 Extract → 2 Process → 3 Average; Laser speckle | LabChart .mat export; laser speckle images (raw, contrast or perfusion) | Trials .mat; grand average (mean ± SD); flow maps, flow per ROI, response map |'
                 '| Electrophysiology | LFP: 1 Extract → 2 LFP analysis; MUA: 1 Extract → 2 MUA analysis | TDT tank, Intan .rhd, Open Ephys folder or .nwb | ERP, CSD, time–frequency; spike times, clusters, rasters, rates |'
-                '| EEG | EEG analysis | Cleaned EEG: EEGLAB .set, FieldTrip .mat, BrainVision .vhdr, EDF / BDF, EGI .mff, XDF, EEG-BIDS or plain .mat, one file per participant | ERPs per condition, mean / peak amplitude, statistics |'
+                '| EEG | EEG analysis | Raw or cleaned EEG: BrainVision .vhdr, EDF / BDF, EGI .mff, XDF, EEG-BIDS, EEGLAB .set, FieldTrip .mat or plain .mat, one file per participant | ERPs per condition, mean / peak amplitude, statistics |'
                 '| Imaging | ROI analysis; Histology / culture | Image stack (.mat or TIFF); still images (TIFF, PNG / JPG, .mat) | Brightness, ΔF/F, kymograph, vessel diameter; cell counts, markers, regions |'
                 '| Across techniques | Response features; Batch processing; Sessions and reports | LDF trials, LFP / ERP .mat or any t and y; a folder of files; a saved session | Feature table and group statistics; one summary table and a log; the analysis reopened in its window |'
                 '## Sessions and reports'
@@ -546,7 +546,7 @@ classdef HelpApp < handle
                 '* **TDT MATLAB SDK**: only for Extract Ephys. See README, section "Install the TDT SDK".'
                 'The launcher status bar shows whether the Signal Processing Toolbox and the TDT SDK were found.'
                 '## Where to get help'
-                'Every window has a **? Help** button that opens its topic here. To report a bug or ask for a feature, click **Report a problem** or open https://github.com/alesuarez92/NeuronalDataAnalyzerLab/issues. Include your MATLAB version, the window, what you clicked and the exact message from the status bar or error dialog.'};
+                'Every window has a **? Help** button that opens its topic here; **Learn more** opens the matching page of the website, https://neuroanalyzerlab.com, which is also linked at the bottom of every window. To report a bug or ask for a feature, click **Report a problem** or open https://github.com/alesuarez92/NeuronalDataAnalyzerLab/issues. Include your MATLAB version, the window, what you clicked and the exact message from the status bar or error dialog.'};
             t.trouble = {
                 'Undefined function ''Main'', ''UIKit'' or ''HelpApp''', 'The toolbox is not on the MATLAB path. Run `addpath(genpath(''<toolbox folder>''))`, optionally `savepath`, then launch with `NeuroAnalyzerLab`.'
                 'Launcher warns "Signal Processing Toolbox was not found"', 'Filtering, downsampling and spike detection will fail. Install it from Home → Add-Ons, or check your license with `ver`.'

@@ -290,11 +290,15 @@ classdef UIKit
             ax.XTick = []; ax.YTick = [];
         end
 
-        %% footer - Copyright + version, right-aligned
+        %% footer - The website on the left; copyright + version, right-aligned
         function footer(parent)
             T = UITheme;
             p = uipanel(parent, 'BorderType', 'none', 'BackgroundColor', T.bgGray);
-            g = uigridlayout(p, [1 1], 'Padding', [14 4 14 4], 'BackgroundColor', T.bgGray);
+            g = uigridlayout(p, [1 2], 'ColumnWidth', {'fit', '1x'}, 'Padding', [14 4 14 4], ...
+                'BackgroundColor', T.bgGray);
+            uihyperlink(g, 'Text', strrep(HelpApp.WebsiteURL, 'https://', ''), 'URL', HelpApp.WebsiteURL, ...
+                'FontSize', T.fontSmall, 'FontColor', T.mutedColor, 'HorizontalAlignment', 'left', ...
+                'Tooltip', 'The Neuronal Data Analyzer Lab website: methods, references and walkthroughs');
             uihyperlink(g, 'Text', sprintf('© Alejandro Suarez, Ph.D.  ·  Noncommercial licence  ·  v%s', T.version), ...
                 'URL', 'https://github.com/alesuarez92', 'FontSize', T.fontSmall, ...
                 'FontColor', T.mutedColor, 'HorizontalAlignment', 'right');

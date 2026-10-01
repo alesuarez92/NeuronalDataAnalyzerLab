@@ -10,6 +10,8 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-01
+
 ### Added
 
 - **EEG Analysis: raw recordings** (ROADMAP EEG step 6). Two new steps in
@@ -81,6 +83,9 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   during development against MNE-Python `read_custom_montage` (within
   2e-6 degrees). The writer writes every format in its own convention
   (used by the tests). `tests/ElectrodesFileTest.m`.
+- **Website in every window**: the footer of the launcher and of every
+  window links to [neuroanalyzerlab.com](https://neuroanalyzerlab.com)
+  (methods, references and walkthroughs), next to the copyright.
 
 ### Fixed
 
@@ -88,6 +93,8 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   positions, `readEEGBIDS` takes the positions only from it; channels it
   leaves out no longer keep the positions of the data file, which were
   in another frame.
+- **Tests on MATLAB R2026b**: the launcher layout test waits until the
+  window has taken its new size before checking the columns.
 
 ## [0.6.0] - 2026-09-30
 
@@ -625,7 +632,8 @@ formats, but the public surface is not yet stable. Expect tightening
 of error handling, more validation around input formats, and additional
 analyses in 0.2.x.
 
-[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.6.0...HEAD
+[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.7.0
 [0.6.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.6.0
 [0.5.2]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.5.2
 [0.5.1]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.5.1
