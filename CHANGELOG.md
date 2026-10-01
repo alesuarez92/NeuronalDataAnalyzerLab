@@ -125,8 +125,9 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   their angle from the vertex is scaled to fit the channels that have
   both (most files and real heads have Fpz, T7, Oz and T8 near the
   equator, the idealized template 18 deg above it). A channel placed by
-  hand on FT7 lands between F7 and T7, not next to FC5. Names of
-  electrodes on or beyond the head line are drawn outside it.
+  hand on FT7 lands between F7 and T7, not next to FC5. The Positions
+  line and the methods text give the factor. Names of electrodes on or
+  beyond the head line are drawn outside it.
 - **Tests on MATLAB R2026b**: the launcher layout test waits until the
   window has taken its new size before checking the columns.
 
