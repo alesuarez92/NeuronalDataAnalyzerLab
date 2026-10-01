@@ -1340,13 +1340,16 @@ classdef MethodsWriter
             bad = MethodsWriter.getf(cl, 'bad', {});
             if ~iscell(bad), bad = {}; end
             nBad = cellfun(@(b) numel(cellstr(b)) * ~isempty(b), bad);
+            mode = lower(char(MethodsWriter.getf(cl, 'referenceMode', 'as recorded')));
             if any(nBad > 0)
                 every = cellfun(@(b) cellstr(b), bad(nBad > 0), 'UniformOutput', false);
                 every = unique([every{:}], 'stable');
+                what = 'the trial rejection and the ERPs';
+                if strcmp(mode, 'average'), what = ['the average reference, ' what]; end
                 parts{end+1} = sprintf(['Channels with flat or excessively noisy signals were marked as bad ' ...
-                    '(%s; %s of %s) and left out of the average reference, the trial rejection and the ERPs.'], ...
+                    '(%s; %s of %s) and left out of %s.'], ...
                     MethodsWriter.listText(every), MethodsWriter.plural(sum(nBad > 0), 'participant'), ...
-                    MethodsWriter.num(numel(bad)));
+                    MethodsWriter.num(numel(bad)), what);
             end
             ft = cellstr(MethodsWriter.getf(cl, 'filterText', {}));
             ft = ft(~cellfun(@isempty, ft));
@@ -1355,7 +1358,6 @@ classdef MethodsWriter
                     'designed as in MNE-Python ({{gramfort2013}}; see {{widmann2015}}): %s.'], ...
                     strjoin(cellfun(@(f) regexprep(strtrim(f), '\.$', ''), ft, 'UniformOutput', false), '; '));
             end
-            mode = lower(char(MethodsWriter.getf(cl, 'referenceMode', 'as recorded')));
             if ~any(strcmp(mode, {'as recorded', ''}))
                 ref = char(MethodsWriter.getf(s, 'settings.reference', ''));
                 parts{end+1} = sprintf('They were re-referenced offline to the %s.', ref);
@@ -1408,7 +1410,10 @@ classdef MethodsWriter
             if any(strcmp(src, 'FieldTrip')), tools{end+1} = 'FieldTrip ({{oostenveld2011}})'; end
             t = sprintf(['EEG was recorded from %s [please add: recording system, electrodes and montage, ' ...
                 'sampling and online filters]'], MethodsWriter.plural(nP, 'participant'));
-            if isempty(tools)
+            cleanedHere = logical(MethodsWriter.getf(st, 'cleaning.applied', false));
+            if isempty(tools) && cleanedHere
+                t = [t '.'];        % the cleaning follows (eegCleaning)
+            elseif isempty(tools)
                 t = [t ' and cleaned before the analysis [please add: cleaning steps and software].'];
             else
                 t = sprintf('%s and cleaned in %s before the analysis.', t, MethodsWriter.listText(tools));
@@ -1416,7 +1421,7 @@ classdef MethodsWriter
             parts = {t};
             nCh = MethodsWriter.getf(st, 'nChannels', NaN);
             fs = MethodsWriter.getf(st, 'fs', NaN);
-            ref = char(MethodsWriter.getf(st, 'reference', ''));
+            ref = char(MethodsWriter.getf(st, 'recordedReference', MethodsWriter.getf(st, 'reference', '')));
             if MethodsWriter.isNum(nCh) && MethodsWriter.isNum(fs)
                 t = sprintf('The data comprised %s at %s Hz', MethodsWriter.plural(nCh, 'channel'), MethodsWriter.num(fs));
                 if ~isempty(ref) && ~strcmpi(ref, 'unknown'), t = sprintf('%s, referenced to the %s', t, ref); end

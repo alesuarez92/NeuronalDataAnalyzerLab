@@ -341,8 +341,10 @@ function testRawDemoCleaning(tests)
     end
     tests.verifyEqual(size(app.EEGs{1}.data, 2), 501, '-200 to 800 ms at 500 Hz');
     tests.verifyEqual(app.TrialWindow, [-0.2 0.8], 'AbsTol', 1e-12);
+    tests.verifyTrue(contains(app.CutInfo.Text, 'Cut from -200 to 800 ms: 70, 70, 70 trials.'));
     tests.verifyTrue(contains(app.CutInfo.Text, 'Rejected 24 of 210'));
     tests.verifyTrue(contains(app.CutInfo.Text, 'most often on Fp'));
+    tests.verifyTrue(contains(app.CutInfo.Text, '62, 62, 62 kept.'));
     tests.verifyEqual(app.BaselineFromEdit.Value, -200);
     shot(tests, app, 'EEGAnalysisApp_12_raw_trials');
 
@@ -391,8 +393,15 @@ function testRawDemoCleaning(tests)
     tests.verifyEqual(tr.window, [-0.2 0.8], 'AbsTol', 1e-12);
     tests.verifyEqual(s.settings.trialWindow, [-0.2 0.8], 'AbsTol', 1e-12);
     tests.verifyTrue(startsWith(s.settings.reference, 'average of the 31 good channels'));
+    tests.verifyEqual(s.settings.recordedReference, 'channel FCz');
     tests.verifyNumElements(s.results.rejection, 3);
     tests.verifyEqual([s.results.rejection.kept], [62 62 62]);
+    % Methods text: recorded against FCz, then cleaned here (not as steps done before the window)
+    txt = MethodsWriter.fromSession(s);
+    tests.verifyTrue(contains(txt, 'referenced to the channel FCz.'));
+    tests.verifyTrue(contains(txt, 'They were re-referenced offline to the average of the 31 good channels'));
+    tests.verifyFalse(contains(txt, 'earlier processing steps'), 'steps of the window listed as earlier steps');
+    tests.verifyFalse(contains(txt, 'cleaned before the analysis'));
     b = EEGAnalysisApp(); cb = onCleanup(@() delete(b.UIFig));
     tests.verifyTrue(logical(b.openSession(p)), 'session not reopened');
     tests.verifyEqual(b.Generator, 'demoEEGraw');
@@ -413,4 +422,24 @@ function testRawDemoCleaning(tests)
     tests.verifyEmpty(app.EEGs);
     tests.verifyTrue(startsWith(app.StatusLabel.Text, [char(10007) ' Not cut into trials']));
     tests.verifyTrue(contains(app.StatusLabel.Text, 'T7'));
+
+    % 9. Cut without Apply: the bad channels of step 2 still count
+    tests.verifyTrue(logical(app.loadRawDemo()));
+    tests.verifyEqual(app.NotchDrop.Value, app.NotchItems{1}, 'the notch of step 8 is not kept');
+    app.setRejection(false);
+    tests.verifyTrue(logical(app.cutIntoTrials()));
+    tests.verifyEmpty(app.Cleaned);
+    for p = 1:3
+        tests.verifyEqual(app.EEGs{p}.labels(EEGAnalysis.badChannels(app.EEGs{p})), {'T7'});
+        tests.verifyEqual(size(app.EEGs{p}.data, 3), 70);
+    end
+
+    % 10. Other files start from the default settings of steps 2 and 3
+    tests.verifyTrue(logical(app.loadDemo()));
+    tests.verifyEqual([app.HighPassEdit.Value app.LowPassEdit.Value], [0 0], 'already cut into trials: no filter');
+    tests.verifyEqual(app.NotchDrop.Value, app.NotchItems{1});
+    tests.verifyEqual(app.ReferenceDrop.Value, app.ReferenceModes{1});
+    tests.verifyEmpty(app.EventsEdit.Value);
+    tests.verifyFalse(logical(app.RejectCb.Value));
+    tests.verifyEqual(app.PeakToPeakEdit.Value, 100);
 end

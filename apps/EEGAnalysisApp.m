@@ -2,10 +2,12 @@
 % =========================================================================
 % EEG ANALYSIS - ERPs PER CONDITION, AMPLITUDE MEASURES AND STATISTICS
 % =========================================================================
-% Opened from the launcher (EEG card). For EEG that was already cleaned in
-% EEGLAB, FieldTrip, BrainVision Analyzer or MATLAB, or recorded with
-% BrainVision Recorder: one file per participant (EEGLAB .set, FieldTrip
-% .mat, BrainVision .vhdr or a plain .mat array), scalp or rodent.
+% Opened from the launcher (EEG card). For raw recordings (BrainVision
+% Recorder, EDF / BDF, EGI .mff, XDF, EEG-BIDS), cleaned here with basic
+% steps, and for EEG already cleaned in EEGLAB, FieldTrip, BrainVision
+% Analyzer or MATLAB: one file per participant (EEGLAB .set, FieldTrip
+% .mat, BrainVision .vhdr, EDF / BDF, .mff, .xdf or a plain .mat array),
+% scalp or rodent.
 %
 % Layout (UIKit.window): numbered step cards on the left
 %   1 Load EEG      (one or several files; a plain .mat file gets a short
@@ -152,7 +154,7 @@ classdef EEGAnalysisApp < handle
         function buildUI(app)
             T = UITheme;
             app.W = UIKit.window('EEG Analysis', ...
-                'ERPs per condition, amplitude measures and statistics for cleaned EEG (scalp or rodent)', ...
+                'Cleaning, ERPs per condition, amplitude measures and statistics for scalp or rodent EEG', ...
                 'EEG Analysis', [1320 900]);
             app.UIFig = app.W.Fig;
             app.StatusLabel = app.W.Status;
@@ -211,8 +213,9 @@ classdef EEGAnalysisApp < handle
                 [0 10000]);
             app.LowPassEdit.ValueChangedFcn = @(~,~)app.updateControls();
             app.NotchDrop = addField(g, 7, 'Notch', 'dropdown', {app.NotchItems, app.NotchItems{1}}, ...
-                ['Removes the mains line noise (50 Hz in Europe, 60 Hz in the Americas) and its multiples below ' ...
-                 'half the sampling rate (and below the low-pass). Not needed when the low-pass is already below it.']);
+                ['Removes the mains line noise (50 Hz in Europe, 60 Hz in the Americas) and those of its multiples ' ...
+                 'that lie below half the sampling rate and below the low-pass. Usually not needed when the ' ...
+                 'low-pass is well below it.']);
             app.NotchDrop.ValueChangedFcn = @(~,~)app.updateControls();
             app.ReferenceDrop = addField(g, 8, 'Reference', 'dropdown', {app.ReferenceModes, app.ReferenceModes{1}}, ...
                 ['As recorded: keep the reference of the file. Average: the mean of the good channels (needs many ' ...
@@ -524,8 +527,17 @@ classdef EEGAnalysisApp < handle
             app.HighPassEdit.Value = highPass;
             app.LowPassEdit.Value = lowPass;
             if nargin >= 4
-                if ischar(notch) && ~strcmpi(notch, 'off'), notch = str2double(notch); end
-                app.NotchDrop.Value = app.NotchItems{1 + isequal(notch, 50) + 2 * isequal(notch, 60)};
+                if isstring(notch), notch = char(notch); end
+                if ischar(notch) && strcmpi(strtrim(notch), 'off'), notch = 0;
+                elseif ischar(notch), notch = str2double(notch);
+                elseif isempty(notch), notch = 0;
+                end
+                k = find(isequal(notch, 0), 1);
+                if isempty(k), k = 1 + find([50 60] == notch, 1); end
+                if isempty(k)
+                    error('NeuroAnalyzer:eeg:badOption', 'Unknown notch: use ''off'', 50 or 60 (Hz).');
+                end
+                app.NotchDrop.Value = app.NotchItems{k};
             end
             app.updateControls();
         end
@@ -653,7 +665,8 @@ classdef EEGAnalysisApp < handle
         end
 
         %% cutIntoTrials - Cut every continuous recording around its events, then reject trials
-        % Starts from the cleaned data (step 2) when it was applied, else from the files as read.
+        % Starts from the cleaned data (step 2) when it was applied, else from the files as read
+        % with the bad channels of step 2 marked.
         function ok = cutIntoTrials(app)
             ok = false;
             if isempty(app.Loaded), return; end
@@ -669,13 +682,15 @@ classdef EEGAnalysisApp < handle
                     'Reject trials.'], 'warning');
                 return;
             end
-            eegs = app.Cleaned;
-            if isempty(eegs), eegs = app.Loaded; end
+            cleaned = ~isempty(app.Cleaned);
+            if cleaned, eegs = app.Cleaned; else, eegs = app.Loaded; end
             continuous = ~eegs{1}.isEpoched;
             rej = [];
             dlg = UIKit.busy(app.UIFig, 'Making the trials…');
             try
                 for k = 1:numel(eegs)
+                    % Step 2 not applied: its bad channels still count
+                    if ~cleaned, eegs{k} = EEGAnalysis.markBad(eegs{k}, app.BadChannels{k}); end
                     if ~eegs{k}.isEpoched
                         eegs{k} = EEGAnalysis.epoch(eegs{k}, 'Window', ts.window, 'Events', ts.events, ...
                             'Rename', ts.rename);
@@ -993,7 +1008,8 @@ classdef EEGAnalysisApp < handle
             st.settings.fs = e1.fs;
             st.settings.nChannels = numel(e1.labels);
             st.settings.reference = ea.reference;          % of the analysed data
-            st.settings.history = ea.history;
+            st.settings.recordedReference = e1.reference;  % of the files as read
+            st.settings.history = e1.history;              % what was done before the window
             st.settings.baselineOn = logical(app.BaselineCb.Value);
             st.settings.baseline = [app.BaselineFromEdit.Value app.BaselineToEdit.Value] / 1000;
             st.settings.channels = channelList(app.ChannelsEdit.Value);
@@ -1162,6 +1178,12 @@ classdef EEGAnalysisApp < handle
             app.CleanParticipantDrop.Items = names;
             app.CleanParticipantDrop.Value = names{1};
             app.showBadChannels();
+            % Steps 2 and 3 start from their defaults (no filter for trials already cut)
+            if all(kinds), app.setFilters(0, 0, 'off'); else, app.setFilters(0.1, 30, 'off'); end
+            app.setReference('as recorded', {});
+            app.setEvents('');
+            app.setTrialWindow([-0.2 0.8]);
+            app.setRejection(false, 100, 0);
             e1 = eegs{1};
             if e1.isEpoched
                 n = cellfun(@(e) size(e.data, 3), eegs);
@@ -1965,6 +1987,7 @@ end
 %% trialsText - Trials per participant and, after a rejection, what it left out
 function t = trialsText(eegs, rej, w)
     n = cellfun(@(e) size(e.data, 3), eegs);
+    if ~isempty(rej), n = [rej.total]; end          % before the rejection
     nText = strjoin(arrayfun(@num2str, n, 'UniformOutput', false), ', ');
     if isempty(w)
         t = sprintf('Trials per participant: %s.', nText);
@@ -1990,12 +2013,11 @@ function t = trialsText(eegs, rej, w)
     end
     per = arrayfun(@(c) sprintf('%s %d', conds{c}, out(c)), 1:numel(conds), 'UniformOutput', false);
     t = sprintf('%s Rejected %d of %d (%s)', t, sum([rej.total]) - sum([rej.kept]), sum([rej.total]), strjoin(per, ', '));
-    if isempty(names)
-        t = [t '.'];
-    else
+    if ~isempty(names)
         [~, order] = sort(counts, 'descend');
-        t = sprintf('%s, most often on %s.', t, strjoin(names(order(1:min(3, end))), ', '));
+        t = sprintf('%s, most often on %s', t, strjoin(names(order(1:min(3, end))), ', '));
     end
+    t = sprintf('%s; %s kept.', t, strjoin(arrayfun(@num2str, [rej.kept], 'UniformOutput', false), ', '));
 end
 
 %% parseEvents - 'S 1 = Standard, S 2' -> events {'S 2'}, rename {'S 1', 'Standard'}; problems: bad entries

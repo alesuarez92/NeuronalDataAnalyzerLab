@@ -473,6 +473,7 @@ function testEEGAnalysisCleaning(tests)
     s.settings.participants = {'sub-01', 'sub-02', 'sub-03'};
     s.settings.sources = repmat({'BrainVision Recorder'}, 1, 3);
     s.settings.reference = 'average of the 31 good channels (T7 marked bad and left out)';
+    s.settings.recordedReference = 'channel FCz';
     s.settings.history = {};
     s.settings.trialWindow = [-0.2 0.8];
     s.settings.cleaning = struct('bad', {{{'T7'}, {'T7'}, {}}}, 'highPass', 0.1, 'lowPass', 30, 'notch', 'off', ...
@@ -488,6 +489,11 @@ function testEEGAnalysisCleaning(tests)
         'after', {[35 27], [36 26], [34 27]}, 'sentence', '');
     [txt, refs] = MethodsWriter.fromSession(s);
     checkClean(tests, txt, refs);
+    % Recorded as read, then cleaned here: no placeholder for cleaning done elsewhere
+    verifyHas(tests, txt, ['EEG was recorded from 3 participants [please add: recording system, electrodes and ' ...
+        'montage, sampling and online filters].']);
+    tests.verifyFalse(contains(txt, 'cleaned before the analysis'), 'Cleaned elsewhere although cleaned here');
+    verifyHas(tests, txt, 'The data comprised 32 channels at 250 Hz, referenced to the channel FCz.');
     verifyHas(tests, txt, ['marked as bad (T7; 2 participants of 3) and left out of the average reference, ' ...
         'the trial rejection and the ERPs.']);
     verifyHas(tests, txt, ['filtered with zero-phase windowed-sinc FIR filters designed as in MNE-Python ' ...
@@ -499,6 +505,12 @@ function testEEGAnalysisCleaning(tests)
         'rejected (Standard 15 of 120 and Target 10 of 90; 8 to 9 per participant).']);
     tests.verifyTrue(any(startsWith(refs, 'Widmann A')));
     tests.verifyTrue(any(startsWith(refs, 'Gramfort A')));
+    % Linked mastoids: bad channels are not part of the reference
+    s.settings.cleaning.referenceMode = 'linked mastoids';
+    s.settings.reference = 'mean of TP9 and TP10 (linked mastoids)';
+    txt = MethodsWriter.fromSession(s);
+    verifyHas(tests, txt, 'marked as bad (T7; 2 participants of 3) and left out of the trial rejection and the ERPs.');
+    verifyHas(tests, txt, 'They were re-referenced offline to the mean of TP9 and TP10 (linked mastoids).');
 end
 
 %% eegSession - Session like EEGAnalysisApp.sessionState on the EEG demo (P300 at Pz)

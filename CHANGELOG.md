@@ -31,7 +31,7 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   across EEGLAB `boundary` gaps are left out. ERPs, Measure, Statistics and
   Save are now steps 4-7. ICA and advanced cleaning stay in EEGLAB /
   FieldTrip (Help explains how to load their result).
-- **Raw EEG demo** (`demoEEG`, *Try raw demo*): 3 BrainVision Recorder
+- **Raw EEG demo** (`demoEEG`, *Try raw demo (continuous, not cleaned)*): 3 BrainVision Recorder
   recordings of the oddball study against FCz with electrode offsets,
   drift, 50 Hz line noise, a noisy T7 and blinks in known trials; a
   100 uV peak-to-peak rejection after a 0.1-30 Hz band-pass and the
