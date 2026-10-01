@@ -562,6 +562,14 @@ function testEEGLayout(tests)
     tests.verifyTrue(any(startsWith(refs, ['Jurcak V, Tsuzuki D, Dan I (2007). 10/20, 10/10, and 10/5 systems ' ...
         'revisited: their validity as relative head-surface-based positioning systems. NeuroImage ' ...
         '34(4):1600' char(8211) '1611.'])));
+    tests.verifyFalse(contains(txt, 'scaling their angles'), 'nothing scaled: nothing said');
+    % The 10-5 positions put on the head of the file's positions (EEGLayout.templateScale)
+    s.settings.layout.frame = [s.settings.layout.frame '; the 10-5 positions on this head: angles from the ' ...
+        'vertex x 1.21 (fitted on the channels with both)'];
+    txt = MethodsWriter.fromSession(s);
+    verifyHas(tests, txt, ['The 10-5 positions were put on the head of the measured positions by scaling their ' ...
+        'angles from the vertex by 1.21 (least-squares fit on the channels that had both).']);
+    tests.verifyFalse(contains(txt, 'on this head'), 'the frame clause is not repeated');
 
     % By name only (EEGLayout on the channel names): old names T3 / T4, a cleaned name, no-position channels
     eeg = struct('labels', {{'Fp1', 'Fz', 'T3', 'T4', 'EEG Cz-REF', 'VEOG', 'A1'}}, 'chanlocs', struct([]));

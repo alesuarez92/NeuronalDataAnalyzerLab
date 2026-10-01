@@ -230,10 +230,6 @@ classdef EEGLayout
                 end
                 if ~isempty(todo)
                     words = '10-5 positions by name (idealized spherical head; x = right ear, y = nose, z = up)';
-                    if scale ~= 1
-                        words = sprintf(['10-5 positions by name (idealized spherical head, angles from the ' ...
-                            'vertex x %.2f to fit the other positions; x = right ear, y = nose, z = up)'], scale);
-                    end
                     if strcmp(L.kind, 'none')
                         L.kind = 'scalp';
                         L.frame = words;
@@ -246,6 +242,10 @@ classdef EEGLayout
             % ---- Placements by hand ----
             if ~isempty(o.Edits)
                 [L, renamed] = EEGLayout.applyEdits(L, o.Edits, renamed, scale);
+            end
+            if scale ~= 1 && any(strcmp(L.source, 'template') | (strcmp(L.source, 'edited') & ~cellfun(@isempty, L.as)))
+                L.frame = sprintf(['%s; the 10-5 positions on this head: angles from the vertex x %.2f ' ...
+                    '(fitted on the channels with both)'], L.frame, scale);
             end
             L = EEGLayout.review(L, renamed, renamedTo);
         end

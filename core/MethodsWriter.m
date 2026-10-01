@@ -1405,8 +1405,16 @@ classdef MethodsWriter
                 parts{end+1} = [t '.'];
             end
 
+            % ---- 10-5 positions put on the head of the measured ones (EEGLayout.templateScale) ----
+            frAll = char(MethodsWriter.getf(ly, 'frame', ''));
+            tok = regexp(frAll, 'the 10-5 positions on this head: angles from the vertex x ([\d.]+)', 'tokens', 'once');
+            if ~skull && ~isempty(tok) && (n.file > 0 || n.positionsFile > 0)
+                parts{end+1} = sprintf(['The 10-5 positions were put on the head of the measured positions by ' ...
+                    'scaling their angles from the vertex by %s (least-squares fit on the channels that had both).'], tok{1});
+            end
+
             % ---- How the file's coordinates were read, when assumed or turned ----
-            fr = regexprep(char(MethodsWriter.getf(ly, 'frame', '')), ';\s*the other channels:.*$', '');
+            fr = regexprep(frAll, ';\s*(the other channels|the 10-5 positions on this head):.*$', '');
             fr = regexprep(strtrim(regexprep(fr, '^positions file(.*?\))?:\s*', '')), '\.$', '');
             if (n.file > 0 || n.positionsFile > 0) && ~isempty(regexp(fr, 'turned|not stated|guessed|assumed', 'once'))
                 where = 'the recording files';
