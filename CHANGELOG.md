@@ -108,7 +108,8 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   annotations can be the stimulus), and EEG analysis reads them as
   continuous EEG (the channels in volts, annotations and BioSemi trigger
   codes as events); the LDF demo and the rodent EEG demo are also written
-  as EDF+ (and BDF).
+  as EDF+ (and BDF). Values and annotations were checked during development
+  against pyedflib and MNE-Python.
 - **EGI .mff** (`core/io/readMFF.m`, `writeMFF.m`): Net Station
   recordings (the `.mff` folder or its `info.xml`): float32 blocks,
   channel gains, pauses placed at their times, events, sensor positions
@@ -128,8 +129,6 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   with `coordsystem.json`, and the reference and line frequency of
   `eeg.json`. The rodent demo is also written as a BIDS dataset. Checked
   during development both ways with MNE-BIDS.
-  Values and annotations were checked during development against pyedflib
-  and MNE-Python.
 
 ### Changed
 
