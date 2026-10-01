@@ -1147,8 +1147,7 @@ end
 %% rowField - UIKit.field placed in row r (label column 1, control column 2)
 function c = rowField(g, r, label, kind, value, tooltip, limits)
     if nargin < 7, limits = []; end
-    c = UIKit.field(g, label, kind, value, tooltip, limits);
-    lbl = g.Children(2);                 % UIKit.field made the label just before the control
+    [c, lbl] = UIKit.field(g, label, kind, value, tooltip, limits);
     lbl.Layout.Row = r; lbl.Layout.Column = 1;
     c.Layout.Row = r; c.Layout.Column = 2;
 end

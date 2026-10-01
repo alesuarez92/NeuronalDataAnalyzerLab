@@ -2187,8 +2187,7 @@ end
 %% placeField - UIKit.field placed explicitly on one row (label | control)
 function c = placeField(grid, row, labelText, kind, value, tooltip, limits)
     if nargin < 7, limits = []; end
-    c = UIKit.field(grid, labelText, kind, value, tooltip, limits);
-    lbl = grid.Children(2);  % UIKit.field creates the label just before the control
+    [c, lbl] = UIKit.field(grid, labelText, kind, value, tooltip, limits);
     lbl.Layout.Row = row; lbl.Layout.Column = 1;
     c.Layout.Row = row; c.Layout.Column = 2;
 end

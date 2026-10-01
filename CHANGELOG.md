@@ -93,6 +93,10 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   positions, `readEEGBIDS` takes the positions only from it; channels it
   leaves out no longer keep the positions of the data file, which were
   in another frame.
+- **Settings rows on MATLAB R2026b**: in the Laser Speckle Flowmetry
+  window (steps 1 and 2) and the MUA Analysis settings dialogs, a control
+  or a label could be drawn over the last row; every label now stays next
+  to its control.
 - **Tests on MATLAB R2026b**: the launcher layout test waits until the
   window has taken its new size before checking the columns.
 

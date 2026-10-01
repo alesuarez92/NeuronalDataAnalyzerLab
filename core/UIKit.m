@@ -187,11 +187,13 @@ classdef UIKit
         %% field - Label in one grid cell, control in the next
         % kind: 'numeric' | 'text' | 'dropdown' | 'checkbox'. For dropdown,
         % value = {items, selected}. limits (numeric only): [min max].
-        function c = field(grid, labelText, kind, value, tooltip, limits)
+        % lbl is the label (to place it; grid.Children order differs
+        % between MATLAB releases).
+        function [c, lbl] = field(grid, labelText, kind, value, tooltip, limits)
             T = UITheme;
             if nargin < 5, tooltip = ''; end
             if nargin < 6, limits = []; end
-            uilabel(grid, 'Text', labelText, 'FontSize', T.fontBody, ...
+            lbl = uilabel(grid, 'Text', labelText, 'FontSize', T.fontBody, ...
                 'FontColor', T.sectionTitleColor, 'Tooltip', tooltip);
             switch kind
                 case 'numeric'
