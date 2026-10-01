@@ -25,7 +25,11 @@
 %     exposure model (Bandyopadhyay et al.) only when used;
 %   - EEG analysis (demo-like session): participants, EEGLAB cited, the
 %     history read from the files, baseline, the measure and the
-%     repeated-measures test on it; a continuous recording's epochs;
+%     repeated-measures test on it; a continuous recording's epochs; the
+%     electrode layout once confirmed (from the files, by name on the 10-5
+%     system with Oostenveld & Praamstra / Jurcak et al. cited, a
+%     positions file with its format, mm from bregma; old names T3 / T4,
+%     channels without a position);
 %   - several sessions given in any order come out in pipeline order,
 %     with one placeholder, one software paragraph and one reference list;
 %   - write() saves UTF-8 with a byte-order mark; a saved session file
@@ -513,6 +517,125 @@ function testEEGAnalysisCleaning(tests)
     verifyHas(tests, txt, 'They were re-referenced offline to the mean of TP9 and TP10 (linked mastoids).');
 end
 
+function testEEGLayout(tests)
+    % Electrode layout (step 1): where the positions came from, only once the layout is confirmed
+    s = eegSession();
+    txt = MethodsWriter.fromSession(s);
+    tests.verifyFalse(contains(txt, 'Electrode positions'), 'Session without a layout: no sentence');
+
+    % From the files only (EEGLAB demo): the turn to one orientation is said
+    s.settings.layout = layoutSettings('scalp', struct('file', 32, 'template', 0, 'positionsFile', 0, ...
+        'edited', 0, 'none', 0, 'total', 32), {}, ['EEGLAB (x = nose, y = left ear, z = up), turned to x = ' ...
+        'right ear, y = nose, z = up; directions from the centre of a sphere fitted to the positions'], ...
+        '32 of 32 channels placed: 32 from the file.');
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['The data comprised 32 channels at 250 Hz, referenced to the average of all channels. ' ...
+        'Electrode positions were taken from the recording files. The coordinates in the recording files were ' ...
+        'interpreted as follows: EEGLAB (x = nose, y = left ear, z = up), turned to x = right ear, y = nose, ' ...
+        'z = up; directions from the centre of a sphere fitted to the positions. The data files recorded']);
+    tests.verifyFalse(contains(txt, '10-5'), 'Nothing placed by name');
+    tests.verifyFalse(any(startsWith(refs, 'Jurcak')), 'Template not used, not cited');
+    % Positions stored in this orientation (BrainVision): nothing more to say
+    s.settings.layout.frame = ['BrainVision (x = right ear, y = nose, z = up); directions from the centre of ' ...
+        'a sphere fitted to the positions'];
+    txt = MethodsWriter.fromSession(s);
+    verifyHas(tests, txt, 'Electrode positions were taken from the recording files. The data files recorded');
+    % Not confirmed: no sentence
+    s.settings.layout.confirmed = false;
+    txt = MethodsWriter.fromSession(s);
+    tests.verifyFalse(contains(txt, 'Electrode positions'), 'Layout not confirmed: no sentence');
+
+    % From the files and by name, with the counts; one channel without a position
+    s.settings.layout = layoutSettings('scalp', struct('file', 30, 'template', 2, 'positionsFile', 0, ...
+        'edited', 0, 'none', 1, 'total', 33), {}, ['BrainVision (x = right ear, y = nose, z = up); directions ' ...
+        'from the centre of a sphere fitted to the positions; the other channels: 10-5 positions by name ' ...
+        '(idealized spherical head; x = right ear, y = nose, z = up)'], ...
+        '32 of 33 channels placed: 30 from the file, 2 by name (10-5 system); no position: VEOG.');
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['Electrode positions were taken for 30 channels from the recording files and for 2 ' ...
+        'from their names on the 10-5 system (Oostenveld & Praamstra, 2001; idealized positions on a sphere, ' ...
+        'Jurcak et al., 2007). Channel VEOG had no position.']);
+    tests.verifyTrue(any(startsWith(refs, ['Oostenveld R, Praamstra P (2001). The five percent electrode ' ...
+        'system for high-resolution EEG and ERP measurements. Clin Neurophysiol 112(4):713' char(8211) '719.'])));
+    tests.verifyTrue(any(startsWith(refs, ['Jurcak V, Tsuzuki D, Dan I (2007). 10/20, 10/10, and 10/5 systems ' ...
+        'revisited: their validity as relative head-surface-based positioning systems. NeuroImage ' ...
+        '34(4):1600' char(8211) '1611.'])));
+
+    % By name only (EEGLayout on the channel names): old names T3 / T4, a cleaned name, no-position channels
+    eeg = struct('labels', {{'Fp1', 'Fz', 'T3', 'T4', 'EEG Cz-REF', 'VEOG', 'A1'}}, 'chanlocs', struct([]));
+    L = EEGLayout.fromEEG(eeg, 'Source', 'template');
+    s.settings.layout = layoutOf(L, 'template', '', '');
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['Electrode positions were assigned from the channel names on the 10-5 system ' ...
+        '(Oostenveld & Praamstra, 2001; idealized positions on a sphere, Jurcak et al., 2007). Channels T3 and ' ...
+        'T4 were treated as T7 and T8 (old 10-20 names). Channels VEOG and A1 had no position.']);
+    tests.verifyFalse(contains(txt, 'EEG Cz-REF'), 'A cleaned name is not an old 10-20 name');
+    tests.verifyFalse(contains(txt, 'The coordinates in'), 'No file positions, no frame');
+    s.settings.layout.renamed = {'T5', 'P7'};
+    txt = MethodsWriter.fromSession(s);
+    verifyHas(tests, txt, 'Channel T5 was treated as P7 (old 10-20 name).');
+    % Many channels without a position: the summary shortens the list
+    s.settings.layout.summary = ['2 of 12 channels placed: 2 by name (10-5 system); no position: E1, E2, E3, ' ...
+        'E4, E5, E6, 4 more.'];
+    s.settings.layout.counts = struct('file', 0, 'template', 2, 'positionsFile', 0, 'edited', 0, 'none', 10, ...
+        'total', 12);
+    txt = MethodsWriter.fromSession(s);
+    verifyHas(tests, txt, 'Channels E1, E2, E3, E4, E5, E6 and 4 others had no position.');
+
+    % A positions file (as readElectrodes returns it) with its format; T3 found as T7; one channel by hand
+    [tl, tp] = EEGLayout.template();
+    names = {'Fp1', 'Fp2', 'Fz', 'Cz', 'Pz', 'Oz', 'T7', 'T8'};
+    [~, i] = ismember(names, tl);
+    P = struct('labels', {names}, 'xyz', 85 * tp(i, :), 'unit', 'mm', 'kind', 'scalp', 'format', 'ASA .elc', ...
+        'frame', 'x = right ear, y = nose, z = up, as stored (assumed: .elc files do not state their axes)', ...
+        'notes', {{}}, 'fiducials', struct('label', {}, 'xyz', {}), 'file', 'cap32.elc');
+    eeg = struct('labels', {{'Fp1', 'Fp2', 'Fz', 'Cz', 'Pz', 'Oz', 'T3', 'T8', 'VEOG'}}, 'chanlocs', struct([]));
+    L = EEGLayout.fromEEG(eeg, 'Positions', P);
+    s.settings.layout = layoutOf(L, 'auto', 'C:\Users\lab\caps\cap32.elc', P.format);
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['Electrode positions were read from cap32.elc (ASA .elc). The coordinates in ' ...
+        'cap32.elc were interpreted as follows: x = right ear, y = nose, z = up, as stored (assumed: .elc files ' ...
+        'do not state their axes); directions from']);
+    verifyHas(tests, txt, 'Channel T3 was treated as T7 (old 10-20 name). Channel VEOG had no position.');
+    tests.verifyFalse(any(startsWith(refs, 'Jurcak')), 'Template not used, not cited');
+    L = EEGLayout.fromEEG(eeg, 'Positions', P, 'Edits', struct('label', 'VEOG', 'as', 'Iz'));
+    s.settings.layout = layoutOf(L, 'auto', '/home/lab/caps/cap32.elc', P.format);
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['Electrode positions were taken for 8 channels from cap32.elc (ASA .elc); 1 channel ' ...
+        'was placed by hand on the 10-5 system (Oostenveld & Praamstra, 2001; idealized positions on a sphere, ' ...
+        'Jurcak et al., 2007).']);
+    tests.verifyFalse(contains(txt, 'had no position'), 'Every channel placed');
+
+    % Rodent skull screws (mm from bregma), from the files; then one moved by hand
+    s.settings.layout = layoutSettings('skull', struct('file', 4, 'template', 0, 'positionsFile', 0, ...
+        'edited', 0, 'none', 0, 'total', 4), {}, ['EEGLAB (x = front, y = left), turned to mm from bregma ' ...
+        '(x = right, y = front)'], '4 of 4 channels placed: 4 from the file.');
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['Electrode positions were taken from the recording files and given in mm from bregma ' ...
+        '(anterior-posterior, medial-lateral). The coordinates in the recording files were interpreted as ' ...
+        'follows: EEGLAB (x = front, y = left), turned to mm from bregma (x = right, y = front).']);
+    tests.verifyFalse(contains(txt, '10-5'), 'No 10-5 system on a skull');
+    s.settings.layout.counts.file = 3;
+    s.settings.layout.counts.edited = 1;
+    s.settings.layout.frame = 'mm from bregma (x = right, y = front)';
+    txt = MethodsWriter.fromSession(s);
+    verifyHas(tests, txt, ['Electrode positions were taken for 3 channels from the recording files; 1 channel was ' ...
+        'placed by hand. All electrode positions were given in mm from bregma (anterior-posterior, medial-lateral).']);
+
+    % Confirmed but without any position: nothing to say
+    L = EEGLayout.fromEEG(struct('labels', {{'VEOG', 'ECG'}}, 'chanlocs', struct([])));
+    s.settings.layout = layoutOf(L, 'auto', '', '');
+    txt = MethodsWriter.fromSession(s);
+    tests.verifyFalse(contains(txt, 'Electrode positions'), 'No position at all: no sentence');
+    tests.verifyFalse(contains(txt, 'had no position'), 'No position at all: no sentence');
+end
+
 %% eegSession - Session like EEGAnalysisApp.sessionState on the EEG demo (P300 at Pz)
 function [s, res] = eegSession()
     Y = [1.8 6.9 2.8; 1.8 7.3 4.1; 1.6 8.0 5.1; 1.7 6.6 4.7; 1.2 7.2 3.9; 0.6 8.5 4.4; 1.3 6.2 4.4; 0.3 6.4 3.3];
@@ -531,6 +654,25 @@ function [s, res] = eegSession()
         'measured', true, 'statsMethod', 'parametric', 'tested', true);
     s.results = struct('conditions', {names}, 'trials', [320 120 80], 'groupTest', res);
     s.summary = {'8 participant(s): ...', sprintf('Test: %s', res.summary)};
+end
+
+%% layoutSettings - Confirmed st.settings.layout as the EEG window saves it (source auto, no file, no edits)
+function ly = layoutSettings(kind, counts, renamed, frame, summary)
+    if isempty(renamed), renamed = cell(0, 2); end
+    ly = struct('source', 'auto', 'positionsFile', '', 'edits', struct('label', {}, 'as', {}, 'ap', {}, 'ml', {}), ...
+        'confirmed', true, 'kind', kind, 'counts', counts, 'renamed', {renamed}, 'frame', frame, 'format', '', ...
+        'summary', summary);
+end
+
+%% layoutOf - st.settings.layout of an EEGLayout result, confirmed
+function ly = layoutOf(L, source, positionsFile, format)
+    count = @(what) sum(strcmp(L.source, what));
+    counts = struct('file', count('file'), 'template', count('template'), 'positionsFile', ...
+        count('positions file'), 'edited', count('edited'), 'none', numel(L.check.missing), 'total', numel(L.labels));
+    ly = layoutSettings(L.kind, counts, L.check.renamed, L.frame, L.summary);
+    ly.source = source;
+    ly.positionsFile = positionsFile;
+    ly.format = format;
 end
 
 %% histologySession - Session like HistologyApp.sessionState on the histology demo

@@ -39,6 +39,55 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 - **Methods text**: filters (edges, transitions, -6 dB cutoffs, order;
   MNE-Python and Widmann et al., 2015), bad channels, offline reference,
   event names and the trials rejected per condition.
+- **EEG Analysis: electrode layouts** (ROADMAP EEG step 3). A new
+  *Electrode layout…* button in step 1 (with a line saying how many
+  channels are placed and whether the layout is confirmed) opens the
+  *Electrode layout* window: every electrode drawn on the head (nose up)
+  or, for rodents, on a skull outline with bregma; a table of the
+  channels (Channel, Placed from, As, Status; for skull layouts AP and
+  ML in mm); the summary and notes; *Cancel* and *Use this layout*.
+  *Source*: positions from the files with the other channels by name
+  (default), by name only (10-5 system), or from a positions file
+  (*Positions file…*). The 10-5 template (345 positions) is computed with
+  the idealized spherical construction (equator through Nz, T9, Iz and
+  T10; Oostenveld & Praamstra, 2001; Jurcak et al., 2007) and was checked
+  during development against eeg_positions as shipped with MNE-Python.
+  Names match in any case; the old names T3 / T4 / T5 / T6 are read as
+  T7 / T8 / P7 / P8, and an `EEG ` prefix and reference suffixes (-REF,
+  -LE, -AR, -AVG, -A1, -A2, -M1, -M2) are dropped; A1 / A2 / M1 / M2, EOG
+  and other non-scalp channels get no position. Every position is turned
+  to one orientation (x = right ear, y = nose, z = up) from the frame its
+  file states (EEGLAB, FieldTrip, BrainVision, EGI, BIDS), so the same
+  electrode from different files lands in the same place; an orientation
+  check against the template turns files read 90 degrees off and reports
+  the others. Rodent skull layouts in mm from bregma (AP anterior +, ML
+  right +). The check lists the channels placed, renamed ("T3 treated as
+  T7"), without a position, in the same place or outside the head; a
+  10-5 name typed in *As* (or AP / ML on a skull) places a channel by
+  hand. The layout is kept in sessions, listed in the Overview and, once
+  confirmed, described in the methods text (citing Oostenveld & Praamstra
+  2001 and Jurcak et al. 2007). Without positions everything except scalp
+  maps (a later step) works as before. The Help topic has a new
+  *Electrode layout* section with the demo's answers. `core/EEGLayout.m`,
+  `tests/EEGLayoutTest.m`.
+- **Electrode position files** (`core/io/readElectrodes.m`,
+  `writeElectrodes.m`): EEGLAB .loc / .locs / .ced / .xyz, BESA .elp /
+  .sfp, ASA / FieldTrip / MNE .elc, EGI .sfp, BrainVision .bvef, EasyCap /
+  BioSemi `Site Theta Phi` lists, .csv / .tsv / .txt tables (x / y / z,
+  theta / phi, theta / radius, or ap / ml in mm from bregma) and BIDS
+  `electrodes.tsv` (with its `coordsystem.json`), all read into the one
+  orientation with the fiducials kept apart; Polhemus digitizer .elp
+  files are refused with a hint. The angles and positions were checked
+  during development against MNE-Python `read_custom_montage` (within
+  2e-6 degrees). The writer writes every format in its own convention
+  (used by the tests). `tests/ElectrodesFileTest.m`.
+
+### Fixed
+
+- **EEG-BIDS positions in one frame**: when `electrodes.tsv` gives
+  positions, `readEEGBIDS` takes the positions only from it; channels it
+  leaves out no longer keep the positions of the data file, which were
+  in another frame.
 
 ## [0.6.0] - 2026-09-30
 

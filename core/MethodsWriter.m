@@ -183,6 +183,12 @@ classdef MethodsWriter
                     '(2013). MEG and EEG data analysis with MNE-Python. Front Neurosci 7:267.']
                 'widmann2015', 'Widmann et al., 2015', ['Widmann A, Schr' char(246) 'ger E, Maess B (2015). Digital ' ...
                     'filter design for electrophysiological data - a practical approach. J Neurosci Methods 250:34-46.']
+                'oostenveld2001', 'Oostenveld & Praamstra, 2001', ['Oostenveld R, Praamstra P (2001). The five ' ...
+                    'percent electrode system for high-resolution EEG and ERP measurements. Clin Neurophysiol ' ...
+                    '112(4):713-719.']
+                'jurcak2007', 'Jurcak et al., 2007', ['Jurcak V, Tsuzuki D, Dan I (2007). 10/20, 10/10, and 10/5 ' ...
+                    'systems revisited: their validity as relative head-surface-based positioning systems. ' ...
+                    'NeuroImage 34(4):1600-1611.']
                 'student1908', 'Student, 1908', 'Student (1908). The probable error of a mean. Biometrika 6(1):1-25.'
                 'welch1947', 'Welch, 1947', ['Welch BL (1947). The generalization of ''Student''s'' problem when ' ...
                     'several different population variances are involved. Biometrika 34(1-2):28-35.']
@@ -1332,6 +1338,120 @@ classdef MethodsWriter
             end
         end
 
+        %% eegLayout - Where the electrode positions came from (confirmed layouts only)
+        % s.settings.layout as the EEG window saves it: channels per source
+        % (counts.file / template / positionsFile / edited / none), the
+        % positions file and its format, the frame, the renamed channels
+        % ({channel, as}) and the summary line (EEGLayout). Nothing for
+        % sessions without a layout, a layout not confirmed or one without
+        % any position. The counts are read from the summary when missing.
+        function parts = eegLayout(s)
+            parts = {};
+            ly = MethodsWriter.getf(s, 'settings.layout', struct());
+            ok = MethodsWriter.getf(ly, 'confirmed', false);
+            if ~MethodsWriter.isNum(ok) || ~logical(ok), return; end
+            sm = char(MethodsWriter.getf(ly, 'summary', ''));
+            keys = {'file', 'template', 'positionsFile', 'edited'};
+            words = {'from the file', 'by name', 'from the positions file', 'placed by hand'};
+            n = struct();
+            for k = 1:numel(keys)
+                v = MethodsWriter.getf(ly, ['counts.' keys{k}], NaN);
+                if ~MethodsWriter.isNum(v)
+                    tok = regexp(sm, ['(\d+) ' words{k}], 'tokens', 'once');
+                    v = 0;
+                    if ~isempty(tok), v = str2double(tok{1}); end
+                end
+                n.(keys{k}) = double(v);
+            end
+            kind = lower(char(MethodsWriter.getf(ly, 'kind', 'scalp')));
+            if strcmp(kind, 'none') || n.file + n.template + n.positionsFile + n.edited == 0, return; end
+            skull = strcmp(kind, 'skull');
+            cite = '({{oostenveld2001}}; idealized positions on a sphere, {{jurcak2007}})';
+            pfName = regexprep(char(MethodsWriter.getf(ly, 'positionsFile', '')), '^.*[\\/]', '');
+            pf = pfName;
+            if isempty(pf), pf = 'a positions file'; end
+            fmt = char(MethodsWriter.getf(ly, 'format', ''));
+            if ~isempty(fmt), pf = sprintf('%s (%s)', pf, fmt); end
+
+            % ---- Sources: one sentence, with the channels per source when mixed ----
+            src = {n.file, 'from the recording files', 'were taken from the recording files'
+                n.positionsFile, ['from ' pf], ['were read from ' pf]
+                n.template, ['from their names on the 10-5 system ' cite], ...
+                ['were assigned from the channel names on the 10-5 system ' cite]};
+            use = find([src{:, 1}] > 0);
+            byHand = '';
+            if ~skull && n.template == 0, byHand = [' on the 10-5 system ' cite]; end
+            if isempty(use)
+                t = ['Electrode positions were placed by hand' byHand];
+            elseif numel(use) == 1 && n.edited == 0
+                t = ['Electrode positions ' src{use, 3}];
+            else
+                each = arrayfun(@(i) sprintf('for %s %s', MethodsWriter.num(src{i, 1}), src{i, 2}), use, ...
+                    'UniformOutput', false);
+                each{1} = sprintf('for %s %s', MethodsWriter.plural(src{use(1), 1}, 'channel'), src{use(1), 2});
+                t = ['Electrode positions were taken ' MethodsWriter.listText(each)];
+                if n.edited > 0
+                    verb = 'were';
+                    if n.edited == 1, verb = 'was'; end
+                    t = sprintf('%s; %s %s placed by hand%s', t, MethodsWriter.plural(n.edited, 'channel'), verb, byHand);
+                end
+            end
+            bregma = 'in mm from bregma (anterior-posterior, medial-lateral)';
+            if skull && numel(use) + (n.edited > 0) == 1
+                parts{end+1} = sprintf('%s and given %s.', t, bregma);
+            elseif skull
+                parts{end+1} = sprintf('%s. All electrode positions were given %s.', t, bregma);
+            else
+                parts{end+1} = [t '.'];
+            end
+
+            % ---- How the file's coordinates were read, when assumed or turned ----
+            fr = regexprep(char(MethodsWriter.getf(ly, 'frame', '')), ';\s*the other channels:.*$', '');
+            fr = regexprep(strtrim(regexprep(fr, '^positions file(.*?\))?:\s*', '')), '\.$', '');
+            if (n.file > 0 || n.positionsFile > 0) && ~isempty(regexp(fr, 'turned|not stated|guessed|assumed', 'once'))
+                where = 'the recording files';
+                if n.positionsFile > 0 && ~isempty(pfName), where = pfName; end
+                parts{end+1} = sprintf('The coordinates in %s were interpreted as follows: %s.', where, fr);
+            end
+
+            % ---- Old 10-20 names (T3 -> T7 ...) and channels without a position ----
+            rn = MethodsWriter.getf(ly, 'renamed', cell(0, 2));
+            if iscell(rn) && size(rn, 2) == 2
+                rn = cellfun(@char, rn, 'UniformOutput', false);
+                old = ~cellfun(@isempty, regexpi(rn(:, 1), '(^|[^a-z0-9])T[3-6]([^a-z0-9]|$)', 'once')) & ...
+                    ismember(upper(rn(:, 2)), {'T7', 'T8', 'P7', 'P8'});
+                from = rn(old, 1)';
+                to = rn(old, 2)';
+                if numel(from) == 1
+                    parts{end+1} = sprintf('Channel %s was treated as %s (old 10-20 name).', from{1}, to{1});
+                elseif numel(from) > 1
+                    parts{end+1} = sprintf('Channels %s were treated as %s (old 10-20 names).', ...
+                        MethodsWriter.listText(from), MethodsWriter.listText(to));
+                end
+            end
+            miss = cellstr(MethodsWriter.getf(ly, 'missing', {}));
+            if isempty(miss)
+                tok = regexp(sm, 'no position: (.*)\.\s*$', 'tokens', 'once');
+                if ~isempty(tok), miss = strsplit(tok{1}, ', '); end
+            end
+            others = 0;
+            if ~isempty(miss)
+                tok = regexp(miss{end}, '^(\d+) more$', 'tokens', 'once');
+                if ~isempty(tok), others = str2double(tok{1}); miss(end) = []; end
+            end
+            nNone = MethodsWriter.getf(ly, 'counts.none', 0);
+            if others > 0
+                parts{end+1} = sprintf('Channels %s and %s others had no position.', strjoin(miss, ', '), ...
+                    MethodsWriter.num(others));
+            elseif numel(miss) == 1
+                parts{end+1} = sprintf('Channel %s had no position.', miss{1});
+            elseif numel(miss) > 1
+                parts{end+1} = sprintf('Channels %s had no position.', MethodsWriter.listText(miss));
+            elseif MethodsWriter.isNum(nNone) && nNone > 0
+                parts{end+1} = sprintf('%s had no position.', MethodsWriter.capital(MethodsWriter.plural(nNone, 'channel')));
+            end
+        end
+
         %% eegCleaning - Bad channels, filters and re-reference applied in the EEG window
         function parts = eegCleaning(s)
             parts = {};
@@ -1427,6 +1547,7 @@ classdef MethodsWriter
                 if ~isempty(ref) && ~strcmpi(ref, 'unknown'), t = sprintf('%s, referenced to the %s', t, ref); end
                 parts{end+1} = [t '.'];
             end
+            parts = [parts, MethodsWriter.eegLayout(s)];
             hist = cellstr(MethodsWriter.getf(st, 'history', {}));
             hist = hist(~cellfun(@isempty, hist));
             if ~isempty(hist)

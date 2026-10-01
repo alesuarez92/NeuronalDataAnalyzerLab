@@ -36,7 +36,7 @@ them exposed two limits, which are now fixed.
 | ✅ | Session files and reports | Reproducibility | Save settings, input-file provenance (with checksums) and results together; a one-page PDF report per analysis for the lab notebook. |
 | ✅ | CSD methods | LFP | Inverse CSD (delta, step, spline) and kernel CSD next to the standard CSD, tested against laminar data with a known CSD. |
 | ✅ | Repeated-measures statistics | Response features | Repeated-measures ANOVA with sphericity checks and corrections, and the Friedman test, for the same animals in several conditions. |
-| 🔨 | EEG | New pipeline | Scalp and rodent EEG, first from data already cleaned in MATLAB (done in v0.4.0: EEG Analysis window), then from raw recordings of the most used systems (readers and basic cleaning done). Plan below. |
+| 🔨 | EEG | New pipeline | Scalp and rodent EEG, first from data already cleaned in MATLAB (done in v0.4.0: EEG Analysis window), then from raw recordings of the most used systems (readers, basic cleaning and electrode layouts done). Plan below. |
 
 ## EEG
 
@@ -71,25 +71,37 @@ NWB recordings are already read by Extract Ephys.
 
 ### Electrode layouts (any convention)
 
+Done in step 3 (*Electrode layout…* in the EEG window; `core/EEGLayout.m`,
+`core/io/readElectrodes.m`, `core/io/writeElectrodes.m`):
+
 - Positions stored in the file are used first (EEGLAB `chanlocs`, FieldTrip
-  `elec`, BrainVision coordinates, EGI sensor layouts, BIDS `electrodes.tsv`,
-  NWB electrode tables).
-- Otherwise a template is matched to the channel names: 10-20, 10-10 and
-  10-5 (computed from the system's definition; old and new names such as
-  T3 / T7 both accepted, any case), BioSemi A1–D32 and EGI HydroCel
-  (manufacturers' published coordinates, after checking their licence),
-  EasyCap / actiCAP.
+  `elec`, BrainVision coordinates, EGI sensor layouts, BIDS `electrodes.tsv`).
+- Otherwise the channels are placed by name on the 10-5 system (345
+  positions, which include the 10-20 and 10-10 ones), computed from the
+  system's definition on an idealized sphere; old and new names such as
+  T3 / T7 are both accepted, in any case, and `EEG ` prefixes and reference
+  suffixes are dropped. actiCAP and EasyCap caps use these names.
 - Your own layout: a positions file (`.elc`, `.sfp`, `.loc` / `.locs`,
-  `.ced`, `.xyz`, `.elp`, `.bvef`, or a CSV of name and x / y / z or angle
-  / radius), or a small editor.
+  `.ced`, `.xyz`, `.elp`, `.bvef`, EasyCap / BioSemi `Site Theta Phi`
+  lists, a CSV / TSV of name and x / y / z, angles or ap / ml, BIDS
+  `electrodes.tsv`), or the table of the layout window (a 10-5 name per
+  channel, or AP / ML in mm).
 - Rodent and other skull montages: positions in mm from bregma
   (anterior–posterior, medial–lateral), drawn on a skull outline.
-- Every format's coordinates are converted to one orientation; tests check
-  that the same electrode from different files lands in the same place.
+- Every format's coordinates are converted to one orientation (x = right
+  ear, y = nose, z = up), with a check against the template for files
+  whose axes are unclear; tests check that the same electrode from
+  different files lands in the same place.
 - A layout check draws every electrode on the head (or skull) and lists
   the channels matched, renamed (for example "T3 treated as T7"), without
-  a position, duplicated or outside the head. It is confirmed before any
-  map is drawn. Without positions, everything except scalp maps still works.
+  a position, duplicated or outside the head. *Use this layout* confirms
+  it; scalp maps (step 4) will use the confirmed layout. Without
+  positions, everything except scalp maps still works.
+
+| | Still open | Notes |
+|---|---|---|
+| 📅 | BioSemi A1–D32 and EGI HydroCel templates | From the manufacturers' published coordinates, once their licence is checked. Until then, load the manufacturer's coordinate file as a positions file. |
+| 🟢 | NWB electrode tables | When the EEG window reads NWB recordings (Extract Ephys reads them today). |
 
 ### Steps (one pull request each, with tests, demo data and Help)
 
@@ -97,7 +109,7 @@ NWB recordings are already read by Extract Ephys.
 |---|---|---|
 | ✅ | 1. Data model and MATLAB importers | `core/io/EEGSource.m`, `core/demo/demoEEG.m`, `tests/EEGFormatsTest.m`; the form for plain `.mat` files is in the window (step 2). EEGLAB, FieldTrip, plain `.mat`. Synthetic demo with known answers: 32 channels on 10-20 positions, three conditions, a known P1 / N1 / P300 and scalp distribution, known alpha, some trials already rejected; a rodent version with a few skull electrodes. The demo is written in every supported format, so each importer is tested against the same data. |
 | ✅ | 2. EEG Analysis window | In v0.4.0 (`apps/EEGAnalysisApp.m`, `core/EEGAnalysis.m`, tests, Help, launcher card, sessions and methods text): Overview (channels, trials per condition, what was already done), the form for plain `.mat` files, continuous recordings cut into trials, ERP per condition (butterfly, chosen channels, difference waves, grand average), peak and mean amplitude in a window per participant, and the repeated-measures statistics of Groups & statistics run in the window itself on those values (they stay in the EEG window; not sent to Signal Characterization). |
-| 📅 | 3. Electrode layouts | Templates, position files, bregma coordinates and the layout check. |
+| ✅ | 3. Electrode layouts | `core/EEGLayout.m` (the 10-5 template computed, name matching, one orientation, skull layouts in mm from bregma, the check), `core/io/readElectrodes.m` / `writeElectrodes.m` (position files), the *Electrode layout…* window in step 1, sessions and methods text; `tests/EEGLayoutTest.m`, `tests/ElectrodesFileTest.m`, walkthrough. BioSemi and EGI HydroCel templates wait for the licence check (above). |
 | 📅 | 4. Scalp maps | Topography at a time or window: spherical spline on scalp layouts, flat interpolation on skull layouts; tested on the demo's known distribution. |
 | 📅 | 5. Time–frequency per condition | ERSP / ITPC and band power from the existing time–frequency code. |
 | ✅ | 6. Raw recordings | BrainVision read first (the author's lab records with Brain Products); EDF / BDF, EGI `.mff` and EEG-BIDS done, each with a tested writer. Basic steps in the window (steps 2 and 3): bad channels (suggested, left out of the reference, rejection and ERPs), zero-phase FIR filters as MNE-Python (high-pass, low-pass, notch), re-reference (average, linked mastoids, chosen channels), trials cut at named events, trials rejected by peak-to-peak or absolute amplitude; a raw demo with known artefacts. ICA and advanced cleaning stay in EEGLAB / FieldTrip; Help explains how to bring their result back. |
