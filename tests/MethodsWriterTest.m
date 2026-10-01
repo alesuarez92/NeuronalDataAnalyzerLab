@@ -466,6 +466,41 @@ function [s, res] = rmStatsSession()
     s.summary = {sprintf('Group test: %s', res.summary)};
 end
 
+function testEEGAnalysisCleaning(tests)
+    % Raw recordings cleaned in the EEG window: bad channel, filters, re-reference, events, rejection
+    s = eegSession();
+    s.settings.generator = 'demoEEGraw';
+    s.settings.participants = {'sub-01', 'sub-02', 'sub-03'};
+    s.settings.sources = repmat({'BrainVision Recorder'}, 1, 3);
+    s.settings.reference = 'average of the 31 good channels (T7 marked bad and left out)';
+    s.settings.history = {};
+    s.settings.trialWindow = [-0.2 0.8];
+    s.settings.cleaning = struct('bad', {{{'T7'}, {'T7'}, {}}}, 'highPass', 0.1, 'lowPass', 30, 'notch', 'off', ...
+        'notchFreqs', [], 'referenceMode', 'average', 'referenceChannels', {{}}, 'applied', true, 'filterText', ...
+        {{['Band-pass filter 0.1-30 Hz: transitions 0.1 and 7.5 Hz, -6 dB cutoffs 0.05 and 33.75 Hz; zero-phase ' ...
+        'FIR filter (Hamming-windowed sinc, 16501 taps, order 16500, as in MNE-Python and EEGLAB pop_eegfiltnew).']}}, ...
+        'suggestRule', '');
+    s.settings.trials = struct('eventsText', 'S 1 = Standard, S 2 = Target', 'events', {{}}, 'rename', ...
+        {{'S  1', 'Standard'; 'S  2', 'Target'}}, 'window', [-0.2 0.8], 'reject', true, 'peakToPeak', 100, ...
+        'absolute', 0, 'cut', true);
+    s.results.rejection = struct('participant', {'sub-01', 'sub-02', 'sub-03'}, 'total', {70, 70, 70}, ...
+        'kept', {62, 62, 61}, 'conditions', {{'Standard', 'Target'}}, 'before', {[40 30], [40 30], [40 30]}, ...
+        'after', {[35 27], [36 26], [34 27]}, 'sentence', '');
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['marked as bad (T7; 2 participants of 3) and left out of the average reference, ' ...
+        'the trial rejection and the ERPs.']);
+    verifyHas(tests, txt, ['filtered with zero-phase windowed-sinc FIR filters designed as in MNE-Python ' ...
+        '(Gramfort et al., 2013; see Widmann et al., 2015): Band-pass filter 0.1-30 Hz']);
+    verifyHas(tests, txt, 'order 16500');
+    verifyHas(tests, txt, 'They were re-referenced offline to the average of the 31 good channels');
+    verifyHas(tests, txt, 'around each event (S 1 = Standard and S 2 = Target)');
+    verifyHas(tests, txt, ['Epochs with a peak-to-peak amplitude above 100 microvolts on any good channel were ' ...
+        'rejected (Standard 15 of 120 and Target 10 of 90; 8 to 9 per participant).']);
+    tests.verifyTrue(any(startsWith(refs, 'Widmann A')));
+    tests.verifyTrue(any(startsWith(refs, 'Gramfort A')));
+end
+
 %% eegSession - Session like EEGAnalysisApp.sessionState on the EEG demo (P300 at Pz)
 function [s, res] = eegSession()
     Y = [1.8 6.9 2.8; 1.8 7.3 4.1; 1.6 8.0 5.1; 1.7 6.6 4.7; 1.2 7.2 3.9; 0.6 8.5 4.4; 1.3 6.2 4.4; 0.3 6.4 3.3];

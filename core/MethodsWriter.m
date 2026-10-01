@@ -178,6 +178,11 @@ classdef MethodsWriter
                 'oostenveld2011', 'Oostenveld et al., 2011', ['Oostenveld R, Fries P, Maris E, Schoffelen JM (2011). ' ...
                     'FieldTrip: open source software for advanced analysis of MEG, EEG, and invasive ' ...
                     'electrophysiological data. Comput Intell Neurosci 2011:156869.']
+                'gramfort2013', 'Gramfort et al., 2013', ['Gramfort A, Luessi M, Larson E, Engemann DA, Strohmeier D, ' ...
+                    'Brodbeck C, Goj R, Jas M, Brooks T, Parkkonen L, H' char(228) 'm' char(228) 'l' char(228) 'inen M ' ...
+                    '(2013). MEG and EEG data analysis with MNE-Python. Front Neurosci 7:267.']
+                'widmann2015', 'Widmann et al., 2015', ['Widmann A, Schr' char(246) 'ger E, Maess B (2015). Digital ' ...
+                    'filter design for electrophysiological data - a practical approach. J Neurosci Methods 250:34-46.']
                 'student1908', 'Student, 1908', 'Student (1908). The probable error of a mean. Biometrika 6(1):1-25.'
                 'welch1947', 'Welch, 1947', ['Welch BL (1947). The generalization of ''Student''s'' problem when ' ...
                     'several different population variances are involved. Biometrika 34(1-2):28-35.']
@@ -1327,6 +1332,69 @@ classdef MethodsWriter
             end
         end
 
+        %% eegCleaning - Bad channels, filters and re-reference applied in the EEG window
+        function parts = eegCleaning(s)
+            parts = {};
+            cl = MethodsWriter.getf(s, 'settings.cleaning', struct());
+            if ~isstruct(cl) || ~logical(MethodsWriter.getf(cl, 'applied', false)), return; end
+            bad = MethodsWriter.getf(cl, 'bad', {});
+            if ~iscell(bad), bad = {}; end
+            nBad = cellfun(@(b) numel(cellstr(b)) * ~isempty(b), bad);
+            if any(nBad > 0)
+                every = cellfun(@(b) cellstr(b), bad(nBad > 0), 'UniformOutput', false);
+                every = unique([every{:}], 'stable');
+                parts{end+1} = sprintf(['Channels with flat or excessively noisy signals were marked as bad ' ...
+                    '(%s; %s of %s) and left out of the average reference, the trial rejection and the ERPs.'], ...
+                    MethodsWriter.listText(every), MethodsWriter.plural(sum(nBad > 0), 'participant'), ...
+                    MethodsWriter.num(numel(bad)));
+            end
+            ft = cellstr(MethodsWriter.getf(cl, 'filterText', {}));
+            ft = ft(~cellfun(@isempty, ft));
+            if ~isempty(ft)
+                parts{end+1} = sprintf(['The recordings were filtered with zero-phase windowed-sinc FIR filters ' ...
+                    'designed as in MNE-Python ({{gramfort2013}}; see {{widmann2015}}): %s.'], ...
+                    strjoin(cellfun(@(f) regexprep(strtrim(f), '\.$', ''), ft, 'UniformOutput', false), '; '));
+            end
+            mode = lower(char(MethodsWriter.getf(cl, 'referenceMode', 'as recorded')));
+            if ~any(strcmp(mode, {'as recorded', ''}))
+                ref = char(MethodsWriter.getf(s, 'settings.reference', ''));
+                parts{end+1} = sprintf('They were re-referenced offline to the %s.', ref);
+            end
+        end
+
+        %% eegRejection - Trials rejected by amplitude, per condition over the participants
+        function t = eegRejection(rj, trials)
+            rules = {};
+            pp = MethodsWriter.getf(trials, 'peakToPeak', []);
+            ab = MethodsWriter.getf(trials, 'absolute', []);
+            if MethodsWriter.isNum(pp) && pp > 0
+                rules{end+1} = sprintf('a peak-to-peak amplitude above %s microvolts', MethodsWriter.num(pp));
+            end
+            if MethodsWriter.isNum(ab) && ab > 0
+                rules{end+1} = sprintf('an absolute amplitude above %s microvolts', MethodsWriter.num(ab));
+            end
+            conds = {};
+            for p = 1:numel(rj), conds = [conds, cellstr(rj(p).conditions)]; end %#ok<AGROW>
+            conds = unique(conds, 'stable');
+            per = cell(1, numel(conds));
+            for c = 1:numel(conds)
+                b = 0; a = 0;
+                for p = 1:numel(rj)
+                    k = find(strcmp(rj(p).conditions, conds{c}), 1);
+                    if ~isempty(k), b = b + rj(p).before(k); a = a + rj(p).after(k); end
+                end
+                per{c} = sprintf('%s %s of %s', conds{c}, MethodsWriter.num(b - a), MethodsWriter.num(b));
+            end
+            n = [rj.total] - [rj.kept];
+            span = MethodsWriter.num(min(n));
+            if max(n) > min(n), span = sprintf('%s to %s', span, MethodsWriter.num(max(n))); end
+            t = sprintf('Epochs with %s on any good channel were rejected (%s; %s per participant).', ...
+                strjoin(rules, ' or '), MethodsWriter.listText(per), span);
+            if isempty(rules)
+                t = sprintf('Epochs were rejected by amplitude (%s).', MethodsWriter.listText(per));
+            end
+        end
+
         %% eegAnalysis - EEG files, earlier processing, epochs, ERPs, measure, statistics
         function paras = eegAnalysis(s)
             st = MethodsWriter.getf(s, 'settings', struct());
@@ -1361,11 +1429,22 @@ classdef MethodsWriter
                     strjoin(cellfun(@(h) regexprep(strtrim(h), '\.$', ''), hist, 'UniformOutput', false), '; '));
                 parts{end} = [parts{end} '.'];
             end
+            parts = [parts, MethodsWriter.eegCleaning(s)];
             tw = MethodsWriter.getf(st, 'trialWindow', []);
             if isnumeric(tw) && numel(tw) == 2
+                ren = MethodsWriter.getf(st, 'trials.rename', cell(0, 2));
+                ev = '';
+                if iscell(ren) && size(ren, 2) == 2 && ~isempty(ren)
+                    ev = sprintf(' (%s)', MethodsWriter.listText(cellfun(@(a, b) sprintf('%s = %s', ...
+                        regexprep(strtrim(a), '\s+', ' '), b), ren(:, 1)', ren(:, 2)', 'UniformOutput', false)));
+                end
                 parts{end+1} = sprintf(['The continuous recordings were cut into epochs from %s to %s ms around ' ...
-                    'each event; events too close to the start or end of a recording were left out.'], ...
-                    MethodsWriter.num(tw(1) * 1000), MethodsWriter.num(tw(2) * 1000));
+                    'each event%s; events too close to the start or end of a recording were left out.'], ...
+                    MethodsWriter.num(tw(1) * 1000), MethodsWriter.num(tw(2) * 1000), ev);
+            end
+            rj = MethodsWriter.getf(s, 'results.rejection', []);
+            if isstruct(rj) && ~isempty(rj) && isfield(rj, 'sentence')
+                parts{end+1} = MethodsWriter.eegRejection(rj, MethodsWriter.getf(st, 'trials', struct()));
             end
             paras = {strjoin(parts, ' ')};
             if ~logical(MethodsWriter.getf(st, 'erpsShown', false)), return; end

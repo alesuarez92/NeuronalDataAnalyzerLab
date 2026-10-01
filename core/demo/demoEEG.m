@@ -42,7 +42,7 @@
 %       (truth.raw.participants(p).blinkTrials) and 6 more between trials:
 %       100 uV peak-to-peak rejects exactly the 8 blink trials (after a
 %       0.1-30 Hz band-pass and the average reference without T7)
-%     N1 at Cz: small against FCz (n1CzFCz, about -1.7 uV), about -4.6 uV
+%     N1 at Cz: small against FCz (n1CzFCz, about -2 uV), about -4 to -5 uV
 %       against the average of the good channels (n1CzAverage)
 %   Writes only for the brainvision format.
 %

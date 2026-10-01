@@ -10,6 +10,36 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+### Added
+
+- **EEG Analysis: raw recordings** (ROADMAP EEG step 6). Two new steps in
+  the window, rebuilt from the files in a fixed order on every click (so
+  sessions replay them): **2 Clean recordings** (bad channels per
+  participant, with *Suggest* for flat or very noisy channels; high-pass,
+  low-pass and notch filters; reference as recorded, average of the good
+  channels, linked mastoids or chosen channels) and **3 Trials** (events
+  renamed to conditions, e.g. `S 1 = Standard`; trial window; trials
+  rejected by peak-to-peak or absolute amplitude on any good channel, with
+  the counts per condition and the channels that caused them). The filters
+  are zero-phase Hamming-windowed sinc FIR filters designed and applied as
+  MNE-Python `raw.filter` / `notch_filter` with their defaults; filter
+  taps, filtered data and the re-references were checked during
+  development against MNE-Python 1.13. Bad channels are left out of the
+  average reference, the rejection, the ERPs, the measures and the
+  butterfly view; the grand average uses the participants where a channel
+  is good. EEG-BIDS `channels.tsv` status `bad` marks channels bad. Trials
+  across EEGLAB `boundary` gaps are left out. ERPs, Measure, Statistics and
+  Save are now steps 4-7. ICA and advanced cleaning stay in EEGLAB /
+  FieldTrip (Help explains how to load their result).
+- **Raw EEG demo** (`demoEEG`, *Try raw demo*): 3 BrainVision Recorder
+  recordings of the oddball study against FCz with electrode offsets,
+  drift, 50 Hz line noise, a noisy T7 and blinks in known trials; a
+  100 uV peak-to-peak rejection after a 0.1-30 Hz band-pass and the
+  average reference removes exactly the blink trials.
+- **Methods text**: filters (edges, transitions, -6 dB cutoffs, order;
+  MNE-Python and Widmann et al., 2015), bad channels, offline reference,
+  event names and the trials rejected per condition.
+
 ## [0.6.0] - 2026-09-30
 
 ### Added

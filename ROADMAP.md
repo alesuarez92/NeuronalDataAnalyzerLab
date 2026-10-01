@@ -36,7 +36,7 @@ them exposed two limits, which are now fixed.
 | ✅ | Session files and reports | Reproducibility | Save settings, input-file provenance (with checksums) and results together; a one-page PDF report per analysis for the lab notebook. |
 | ✅ | CSD methods | LFP | Inverse CSD (delta, step, spline) and kernel CSD next to the standard CSD, tested against laminar data with a known CSD. |
 | ✅ | Repeated-measures statistics | Response features | Repeated-measures ANOVA with sphericity checks and corrections, and the Friedman test, for the same animals in several conditions. |
-| 🔨 | EEG | New pipeline | Scalp and rodent EEG, first from data already cleaned in MATLAB (done in v0.4.0: EEG Analysis window), then from raw recordings of the most used systems. Plan below. |
+| 🔨 | EEG | New pipeline | Scalp and rodent EEG, first from data already cleaned in MATLAB (done in v0.4.0: EEG Analysis window), then from raw recordings of the most used systems (readers and basic cleaning done). Plan below. |
 
 ## EEG
 
@@ -100,7 +100,7 @@ NWB recordings are already read by Extract Ephys.
 | 📅 | 3. Electrode layouts | Templates, position files, bregma coordinates and the layout check. |
 | 📅 | 4. Scalp maps | Topography at a time or window: spherical spline on scalp layouts, flat interpolation on skull layouts; tested on the demo's known distribution. |
 | 📅 | 5. Time–frequency per condition | ERSP / ITPC and band power from the existing time–frequency code. |
-| 🔨 | 6. Raw recordings | BrainVision read first (the author's lab records with Brain Products); EDF / BDF, EGI `.mff` and EEG-BIDS done, each with a tested writer. Basic steps only: filter, re-reference, cut trials at events, reject trials by amplitude, mark bad channels. ICA and advanced cleaning stay in EEGLAB / FieldTrip; Help explains how to bring their result back. |
+| ✅ | 6. Raw recordings | BrainVision read first (the author's lab records with Brain Products); EDF / BDF, EGI `.mff` and EEG-BIDS done, each with a tested writer. Basic steps in the window (steps 2 and 3): bad channels (suggested, left out of the reference, rejection and ERPs), zero-phase FIR filters as MNE-Python (high-pass, low-pass, notch), re-reference (average, linked mastoids, chosen channels), trials cut at named events, trials rejected by peak-to-peak or absolute amplitude; a raw demo with known artefacts. ICA and advanced cleaning stay in EEGLAB / FieldTrip; Help explains how to bring their result back. |
 | 📅 | 7. Batch, sessions, methods text, website | Same as the other pipelines, plus a walkthrough. |
 
 ## Direction: understand, check and teach
