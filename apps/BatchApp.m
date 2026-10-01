@@ -584,10 +584,8 @@ classdef BatchApp < handle
                 [~, nm, ex] = fileparts(app.Files{i});
                 names{i} = [nm ex];
             end
-            app.Table.Data = table(names, status(:), messages(:), 'VariableNames', {'File', 'Status', 'Message'});
-            app.Table.ColumnName = {'File', 'Status', 'Message'};   % R2026b keeps the old headers otherwise
-            app.Table.ColumnWidth = {150, 62, 'auto'};
-            app.colourRows();
+            app.newTable(table(names, status(:), messages(:), 'VariableNames', {'File', 'Status', 'Message'}), ...
+                {150, 62, 'auto'});
         end
 
         %% resetResults - Forget the last run: queue table, result lines and log
@@ -614,9 +612,20 @@ classdef BatchApp < handle
             w(strcmp(v, 'File')) = {150};
             w(strcmp(v, 'Status')) = {62};
             w(strcmp(v, 'Message')) = {220};
-            app.Table.Data = d;
-            app.Table.ColumnName = v;          % R2026b keeps the queue's headers otherwise
-            app.Table.ColumnWidth = w;
+            app.newTable(d, w);
+        end
+
+        %% newTable - A fresh results table showing d (queue or summary)
+        % Not new Data in the old table: on R2026b a uitable keeps the header
+        % text of the columns it already had (the third column stayed
+        % "Message" over the summary, then the summary's name over the queue).
+        function newTable(app, d, widths)
+            old = app.Table;
+            app.Table = uitable(old.Parent, 'Data', d, 'ColumnName', d.Properties.VariableNames, ...
+                'RowName', {}, 'FontSize', old.FontSize, 'ColumnWidth', widths);
+            app.Table.Layout.Row = old.Layout.Row;
+            app.Table.Layout.Column = old.Layout.Column;
+            delete(old);
             app.colourRows();
         end
 

@@ -462,8 +462,10 @@ classdef ExtractLDFApp < handle
             N = numel(app.AppData.RawLDF);
             blocks = '';
             if rec.nBlocks > 1, blocks = sprintf(', %d blocks', rec.nBlocks); end
-            txt = sprintf('%s\n%s\n%g Hz  ·  %s  ·  %d channels%s', fileName, rec.info.label, Fs, ...
-                formatDuration(N / Fs), rec.nChannels, blocks);
+            chans = sprintf('%d channels', rec.nChannels);
+            if rec.nChannels == 1, chans = '1 channel'; end
+            txt = sprintf('%s\n%s\n%g Hz  ·  %s  ·  %s%s', fileName, rec.info.label, Fs, ...
+                formatDuration(N / Fs), chans, blocks);
         end
 
         %% askRate - Ask for the sampling rate of a file without a time column ([] if cancelled)
