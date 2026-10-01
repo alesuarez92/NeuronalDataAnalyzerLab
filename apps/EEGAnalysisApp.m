@@ -9,25 +9,38 @@
 %
 % Layout (UIKit.window): numbered step cards on the left
 %   1 Load EEG      (one or several files; a plain .mat file gets a short
-%                    form saying what its variables are; a continuous
-%                    recording is cut into trials around its events)
-%   2 ERPs          (baseline, channels to look at)
-%   3 Measure       (mean or peak amplitude in a time window, per
+%                    form saying what its variables are; two demos: the
+%                    cleaned study and 3 raw continuous recordings)
+%   2 Clean recordings (bad channels per participant, with a suggestion;
+%                    high-pass, low-pass and notch filters; re-reference to
+%                    the average, linked mastoids or chosen channels)
+%   3 Trials        (events and condition names, trial window; a
+%                    continuous recording is cut into trials around its
+%                    events; trials with too large amplitudes left out)
+%   4 ERPs          (baseline, channels to look at)
+%   5 Measure       (mean or peak amplitude in a time window, per
 %                    participant and condition; warns about edge peaks)
-%   4 Statistics    (conditions compared within participants: paired
+%   6 Statistics    (conditions compared within participants: paired
 %                    t-test / Wilcoxon for two, repeated-measures ANOVA /
 %                    Friedman for more; core/GroupStats.m)
-%   5 Save          (measures as .csv, everything as .mat; sessions)
+%   7 Save          (measures as .csv, everything as .mat; sessions)
 % and on the right the ERP plot (conditions, all channels, or a
 % difference wave; one participant or the grand average) above the tabs
-% Overview (what each file holds and what was already done to it) |
+% Overview (what each file holds and what was done to it) |
 % Measures | Statistics. The computations are in core/EEGAnalysis.m.
+% Step 2 always starts again from the files as read and step 3 from the
+% result of step 2 (or the files when step 2 was not applied), in the
+% order bad channels -> filters -> reference -> trials -> rejection, so a
+% session replays them exactly.
 %
 % Scriptable (CI walkthroughs, no dialogs): openFiles(paths, maps),
-% loadDemo(), setTrialWindow([from to] s), cutIntoTrials(),
-% setBaseline(on, [from to] s), setChannels(names), showERPs(),
-% setView(participant, view, condA, condB), setMeasure(kind, polarity,
-% [from to] s, channels), measure(), setStatsMethod(m),
+% loadDemo(), loadRawDemo(), setBadChannels(participant, names),
+% suggestBadChannels(participant), setFilters(highPass, lowPass, notch),
+% setReference(mode, channels), applyCleaning(), setEvents(text),
+% setTrialWindow([from to] s), setRejection(on, peakToPeak, absolute),
+% cutIntoTrials(), setBaseline(on, [from to] s), setChannels(names),
+% showERPs(), setView(participant, view, condA, condB), setMeasure(kind,
+% polarity, [from to] s, channels), measure(), setStatsMethod(m),
 % compareConditions(), exportResultsTo(path). Sessions:
 % saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
 % sessionState(), restoreSession(s).
@@ -42,19 +55,36 @@ classdef EEGAnalysisApp < handle
         % Step 1
         LoadBtn
         DemoBtn
+        RawDemoBtn
         FileInfo
+        % Step 2
+        CleanParticipantDrop    % whose bad channels the field shows
+        BadEdit             % text: 'T7' or 'T7, FT9'
+        SuggestBtn
+        HighPassEdit        % Hz, 0 = off
+        LowPassEdit         % Hz, 0 = off
+        NotchDrop
+        ReferenceDrop
+        ReferenceChannelsEdit
+        ApplyCleanBtn
+        CleanInfo
+        % Step 3
+        EventsEdit          % text: 'S 1 = Standard, S 2 = Target'
         TrialFromEdit       % ms
         TrialToEdit         % ms
+        RejectCb
+        PeakToPeakEdit      % uV, 0 = off
+        AbsoluteEdit        % uV, 0 = off
         CutBtn
         CutInfo
-        % Step 2
+        % Step 4
         BaselineCb
         BaselineFromEdit    % ms
         BaselineToEdit      % ms
         ChannelsEdit        % text: 'Pz' or 'Cz, FCz'
         ShowBtn
         ErpInfo
-        % Step 3
+        % Step 5
         MeasureDrop
         PolarityDrop
         WindowFromEdit      % ms
@@ -62,11 +92,11 @@ classdef EEGAnalysisApp < handle
         MeasureChannelsEdit
         MeasureBtn
         MeasureInfo
-        % Step 4
+        % Step 6
         MethodDrop
         StatsBtn
         StatsInfo
-        % Step 5
+        % Step 7
         ExportBtn
         SessionBtns
         % Right side
@@ -85,9 +115,15 @@ classdef EEGAnalysisApp < handle
         Maps = {}           % plain .mat: the map used for each file ([] otherwise)
         Names = {}          % participant names (file names)
         Loaded = {}         % EEG structs as read (core/io/EEGSource.m)
+        BadChannels = {}    % 1 x P cell of channel names marked bad (step 2)
+        Cleaned = {}        % Loaded after step 2 ({} = step 2 not applied)
         EEGs = {}           % the same cut into trials (what is analysed)
-        Generator = ''      % 'demoEEG' when the demo was loaded
+        Generator = ''      % 'demoEEG' / 'demoEEGraw' when a demo was loaded
+        CleanSettings = []  % step 2 settings used for Cleaned
+        SuggestRule = ''    % how the last bad channel suggestion was made
+        TrialSettings = []  % step 3 settings used for EEGs
         TrialWindow = []    % [from to] s used to cut continuous recordings
+        Rejections = []     % 1 x P rejectTrials info ([] when no rejection ran)
         ERPs = {}           % conditionERPs per participant (all channels)
         Grand = []          % grandAverage of ERPs (several participants)
         ERPSettings = []    % baseline and channels of the ERPs shown
@@ -100,6 +136,8 @@ classdef EEGAnalysisApp < handle
         GrandLabel = 'All participants (grand average)'
         Views = {'Conditions', 'All channels (butterfly)', 'Difference wave'}
         MeasureKinds = {'Mean amplitude', 'Peak amplitude'}
+        NotchItems = {'Off', '50 Hz (+ harmonics)', '60 Hz (+ harmonics)'}
+        ReferenceModes = {'As recorded', 'Average', 'Linked mastoids', 'Channels'}
     end
 
     methods
@@ -121,14 +159,14 @@ classdef EEGAnalysisApp < handle
             app.W.Body.RowHeight = {'1x'};
             app.W.Body.ColumnWidth = {360, '1x'};
 
-            left = uigridlayout(app.W.Body, [6 1], 'Padding', [0 0 0 0], 'RowSpacing', 10, ...
+            left = uigridlayout(app.W.Body, [8 1], 'Padding', [0 0 0 0], 'RowSpacing', 10, ...
                 'BackgroundColor', T.bgGray, 'Scrollable', 'on');
             left.Layout.Row = 1; left.Layout.Column = 1;
-            heights = cell(1, 6);
+            heights = cell(1, 8);
             ch = T.controlHeight; bh = T.buttonHeight;
 
             % --- 1 Load EEG ---
-            [p, g, heights{1}] = stepCard(left, 1, 'Load EEG', {bh, 48, ch, ch, bh, 34});
+            [p, g, heights{1}] = stepCard(left, 1, 'Load EEG', {bh, bh, 48});
             p.Layout.Row = 1;
             app.LoadBtn = UIKit.button(g, ['Load EEG files' char(8230)], @(~,~)app.loadDialog(), 'primary', ...
                 ['One file per participant: EEGLAB .set, FieldTrip .mat, BrainVision .vhdr (Brain Products Recorder or ' ...
@@ -139,25 +177,91 @@ classdef EEGAnalysisApp < handle
             app.LoadBtn.Layout.Row = 2; app.LoadBtn.Layout.Column = 1;
             app.DemoBtn = UIKit.button(g, 'Try demo data', @(~,~)app.loadDemo(), 'secondary', ...
                 ['An oddball study: 8 participants, 32 channels, Standard / Target / Novel trials with a P300 at Pz ' ...
-                 '(Target 10 > Novel 6 > Standard 2 uV); see Help for every answer']);
+                 '(Target 10 > Novel 6 > Standard 2 uV), already cleaned and cut into trials; see Help for every answer']);
             app.DemoBtn.Layout.Row = 2; app.DemoBtn.Layout.Column = 2;
+            app.RawDemoBtn = UIKit.button(g, 'Try raw demo (continuous, not cleaned)', @(~,~)app.loadRawDemo(), ...
+                'secondary', ['The same oddball design as 3 raw BrainVision Recorder recordings (500 Hz, 32 channels ' ...
+                 'against FCz) with drift, 50 Hz line noise, a noisy T7 and blinks in 8 trials per participant: ' ...
+                 'practise steps 2 and 3. The suggested settings are filled in; nothing is applied yet.']);
+            app.RawDemoBtn.Layout.Row = 3; app.RawDemoBtn.Layout.Column = [1 2];
             app.FileInfo = infoLabel(g, 'Nothing loaded', 'Participants, channels and trials');
-            app.FileInfo.Layout.Row = 3; app.FileInfo.Layout.Column = [1 2];
-            app.TrialFromEdit = addField(g, 4, 'Trial from (ms)', 'numeric', -200, ...
+            app.FileInfo.Layout.Row = 4; app.FileInfo.Layout.Column = [1 2];
+
+            % --- 2 Clean recordings ---
+            [p, g, heights{2}] = stepCard(left, 2, 'Clean recordings', {ch, ch, bh, ch, ch, ch, ch, ch, bh, 48});
+            p.Layout.Row = 2;
+            app.CleanParticipantDrop = addField(g, 2, 'Participant', 'dropdown', {{'(none)'}, '(none)'}, ...
+                'Whose bad channels the field below shows (each participant has their own)');
+            app.CleanParticipantDrop.ValueChangedFcn = @(~,~)app.showBadChannels();
+            app.BadEdit = addField(g, 3, 'Bad channels', 'text', '', ...
+                ['Channels of this participant to leave out (flat, very noisy or detached), separated by commas, ' ...
+                 'e.g. T7 or T7, FT9 (any case). They are left out of the average reference, the trial rejection, ' ...
+                 'the ERPs and the measures. Empty = none.']);
+            app.BadEdit.ValueChangedFcn = @(~,~)app.onBadEdited();
+            app.SuggestBtn = UIKit.button(g, 'Suggest', @(~,~)app.suggestBadChannels(), 'secondary', ...
+                ['Fill in the flat or very noisy channels of this participant (their spread lies far from that of ' ...
+                 'the other channels). Only a suggestion: look at the data and change the list if needed.']);
+            app.SuggestBtn.Layout.Row = 4; app.SuggestBtn.Layout.Column = 2;
+            app.HighPassEdit = addField(g, 5, 'High-pass (Hz)', 'numeric', 0.1, ...
+                ['Removes slow drifts and electrode offsets below this frequency (0 = off). 0.1 Hz is usual for ERPs; ' ...
+                 'higher values can distort slow components such as the P300.'], [0 10000]);
+            app.HighPassEdit.ValueChangedFcn = @(~,~)app.updateControls();
+            app.LowPassEdit = addField(g, 6, 'Low-pass (Hz)', 'numeric', 30, ...
+                'Removes fast activity and line noise above this frequency (0 = off). 30 or 40 Hz is usual for ERPs.', ...
+                [0 10000]);
+            app.LowPassEdit.ValueChangedFcn = @(~,~)app.updateControls();
+            app.NotchDrop = addField(g, 7, 'Notch', 'dropdown', {app.NotchItems, app.NotchItems{1}}, ...
+                ['Removes the mains line noise (50 Hz in Europe, 60 Hz in the Americas) and its multiples below ' ...
+                 'half the sampling rate (and below the low-pass). Not needed when the low-pass is already below it.']);
+            app.NotchDrop.ValueChangedFcn = @(~,~)app.updateControls();
+            app.ReferenceDrop = addField(g, 8, 'Reference', 'dropdown', {app.ReferenceModes, app.ReferenceModes{1}}, ...
+                ['As recorded: keep the reference of the file. Average: the mean of the good channels (needs many ' ...
+                 'channels over the whole head). Linked mastoids: the mean of TP9 and TP10 (or M1 and M2, A1 and A2). ' ...
+                 'Channels: the mean of the channels typed below.']);
+            app.ReferenceDrop.ValueChangedFcn = @(~,~)app.updateControls();
+            app.ReferenceChannelsEdit = addField(g, 9, 'Reference channels', 'text', '', ...
+                'Only for Reference = Channels: channel names separated by commas, e.g. Cz or TP9, TP10 (their mean)');
+            app.ReferenceChannelsEdit.ValueChangedFcn = @(~,~)app.updateControls();
+            app.ApplyCleanBtn = UIKit.button(g, 'Apply', @(~,~)app.applyCleaning(), 'secondary', ...
+                ['Mark the bad channels, filter and re-reference every participant, always starting again from the ' ...
+                 'files as read. The trials (step 3) and every later result are made again afterwards.']);
+            app.ApplyCleanBtn.Layout.Row = 10; app.ApplyCleanBtn.Layout.Column = [1 2];
+            app.CleanInfo = infoLabel(g, '', 'What cleaning did');
+            app.CleanInfo.Layout.Row = 11; app.CleanInfo.Layout.Column = [1 2];
+
+            % --- 3 Trials ---
+            [p, g, heights{3}] = stepCard(left, 3, 'Trials', {ch, ch, ch, ch, ch, ch, bh, 48});
+            p.Layout.Row = 3;
+            app.EventsEdit = addField(g, 2, 'Events and names', 'text', '', ...
+                ['Only for continuous recordings: the events to cut trials around, separated by commas, each with ' ...
+                 'its condition name, e.g. S 1 = Standard, S 2 = Target (any case and spacing). An event without ' ...
+                 '"= name" keeps its type as the condition. Empty = every event, named by its type.']);
+            app.EventsEdit.ValueChangedFcn = @(~,~)app.updateControls();
+            app.TrialFromEdit = addField(g, 3, 'Trial from (ms)', 'numeric', -200, ...
                 ['Only for continuous recordings: where each trial starts, relative to its event (negative = before ' ...
                  'the event, so there is a baseline)'], [-60000 60000]);
-            app.TrialToEdit = addField(g, 5, 'Trial to (ms)', 'numeric', 800, ...
+            app.TrialToEdit = addField(g, 4, 'Trial to (ms)', 'numeric', 800, ...
                 'Only for continuous recordings: where each trial ends, relative to its event', [-60000 60000]);
+            app.RejectCb = addField(g, 5, 'Reject trials', 'checkbox', false, ...
+                ['Leave out the trials whose amplitude is too large on any good channel (blinks, movements, ' ...
+                 'electrode pops). Mark noisy channels bad first (step 2), or they reject every trial.']);
+            app.RejectCb.ValueChangedFcn = @(~,~)app.updateControls();
+            app.PeakToPeakEdit = addField(g, 6, 'Peak-to-peak (uV)', 'numeric', 100, ...
+                ['Reject a trial when the largest minus the smallest value of a good channel exceeds this (0 = off). ' ...
+                 '100 uV is usual for scalp EEG after filtering.'], [0 1e6]);
+            app.AbsoluteEdit = addField(g, 7, 'Absolute (uV)', 'numeric', 0, ...
+                'Reject a trial when any value of a good channel lies further than this from 0 uV (0 = off)', [0 1e6]);
             app.CutBtn = UIKit.button(g, 'Cut into trials', @(~,~)app.cutIntoTrials(), 'secondary', ...
-                ['Cut every continuous recording into trials around its events. The condition of a trial is the name ' ...
-                 'of its event. Events too close to the start or end are left out (the Overview says how many).']);
-            app.CutBtn.Layout.Row = 6; app.CutBtn.Layout.Column = [1 2];
-            app.CutInfo = infoLabel(g, '', 'What cutting into trials did');
-            app.CutInfo.Layout.Row = 7; app.CutInfo.Layout.Column = [1 2];
+                ['Cut every continuous recording into trials around its events (after step 2 when it was applied), ' ...
+                 'then reject trials when ticked. The condition of a trial is the name of its event. Events too ' ...
+                 'close to the start or end are left out (the Overview says how many).']);
+            app.CutBtn.Layout.Row = 8; app.CutBtn.Layout.Column = [1 2];
+            app.CutInfo = infoLabel(g, '', 'Trials per participant and what the rejection left out');
+            app.CutInfo.Layout.Row = 9; app.CutInfo.Layout.Column = [1 2];
 
-            % --- 2 ERPs ---
-            [p, g, heights{2}] = stepCard(left, 2, 'ERPs', {ch, ch, ch, ch, bh, 34});
-            p.Layout.Row = 2;
+            % --- 4 ERPs ---
+            [p, g, heights{4}] = stepCard(left, 4, 'ERPs', {ch, ch, ch, ch, bh, 34});
+            p.Layout.Row = 4;
             app.BaselineCb = addField(g, 2, 'Subtract a baseline', 'checkbox', true, ...
                 ['Subtract, in every trial and channel, the mean of the baseline window, so the ERP starts at 0 uV. ' ...
                  'Untick when the data were already baseline-corrected and you want them unchanged.']);
@@ -176,9 +280,9 @@ classdef EEGAnalysisApp < handle
             app.ErpInfo = infoLabel(g, '', 'What the ERPs are made of');
             app.ErpInfo.Layout.Row = 7; app.ErpInfo.Layout.Column = [1 2];
 
-            % --- 3 Measure ---
-            [p, g, heights{3}] = stepCard(left, 3, 'Measure', {ch, ch, ch, ch, ch, bh, 48});
-            p.Layout.Row = 3;
+            % --- 5 Measure ---
+            [p, g, heights{5}] = stepCard(left, 5, 'Measure', {ch, ch, ch, ch, ch, bh, 48});
+            p.Layout.Row = 5;
             app.MeasureDrop = addField(g, 2, 'Measure', 'dropdown', {app.MeasureKinds, app.MeasureKinds{1}}, ...
                 ['Mean amplitude: the average voltage in the window (robust to noise; recommended for most components). ' ...
                  'Peak amplitude: the largest value in the window, with its latency (sensitive to noise).']);
@@ -191,16 +295,16 @@ classdef EEGAnalysisApp < handle
             app.WindowToEdit = addField(g, 5, 'Window to (ms)', 'numeric', 400, 'End of the time window to measure in', ...
                 [-60000 60000]);
             app.MeasureChannelsEdit = addField(g, 6, 'Channels', 'text', '', ...
-                'Channels to measure at, separated by commas (averaged). Empty = the channels of step 2.');
+                'Channels to measure at, separated by commas (averaged). Empty = the channels of step 4.');
             app.MeasureBtn = UIKit.button(g, 'Measure', @(~,~)app.measure(), 'secondary', ...
                 'One number per participant and condition, in the Measures tab; the window is shaded on the plot');
             app.MeasureBtn.Layout.Row = 7; app.MeasureBtn.Layout.Column = [1 2];
             app.MeasureInfo = infoLabel(g, '', 'Result of the measure and its checks');
             app.MeasureInfo.Layout.Row = 8; app.MeasureInfo.Layout.Column = [1 2];
 
-            % --- 4 Statistics ---
-            [p, g, heights{4}] = stepCard(left, 4, 'Statistics', {ch, bh, 48});
-            p.Layout.Row = 4;
+            % --- 6 Statistics ---
+            [p, g, heights{6}] = stepCard(left, 6, 'Statistics', {ch, bh, 48});
+            p.Layout.Row = 6;
             app.MethodDrop = addField(g, 2, 'Method', 'dropdown', {{'Parametric', 'Nonparametric'}, 'Parametric'}, ...
                 ['Parametric: paired t-test (2 conditions) or repeated-measures ANOVA (3 or more). Nonparametric: ' ...
                  'Wilcoxon signed-rank or Friedman test (fewer assumptions, less power). The other is run as a check.']);
@@ -211,16 +315,16 @@ classdef EEGAnalysisApp < handle
             app.StatsInfo = infoLabel(g, '', 'Result of the test');
             app.StatsInfo.Layout.Row = 4; app.StatsInfo.Layout.Column = [1 2];
 
-            % --- 5 Save ---
-            [p, g, heights{5}] = stepCard(left, 5, 'Save', {bh, UIKit.sessionButtonsHeight()});
-            p.Layout.Row = 5;
+            % --- 7 Save ---
+            [p, g, heights{7}] = stepCard(left, 7, 'Save', {bh, UIKit.sessionButtonsHeight()});
+            p.Layout.Row = 7;
             app.ExportBtn = UIKit.button(g, ['Export results' char(8230)], @(~,~)app.exportDialog(), 'secondary', ...
                 ['.csv: one row per participant and condition (value in uV, latency in s, trials, edge warning), ' ...
                  'ready for a spreadsheet or statistics program; .mat: everything (ERPs, measures, statistics)']);
             app.ExportBtn.Layout.Row = 2; app.ExportBtn.Layout.Column = [1 2];
             app.SessionBtns = UIKit.sessionButtons(g, app);
             app.SessionBtns.Grid.Layout.Row = 3; app.SessionBtns.Grid.Layout.Column = [1 2];
-            heights{6} = '1x';
+            heights{8} = '1x';
             left.RowHeight = heights;
 
             % --- Right: plot bar, ERP plot and tabs ---
@@ -262,7 +366,7 @@ classdef EEGAnalysisApp < handle
             ts = uitab(app.Tabs, 'Title', 'Statistics', 'BackgroundColor', T.cardBg);
             g3 = uigridlayout(ts, [2 1], 'RowHeight', {'1x', '1x'}, 'Padding', [6 6 6 6], 'RowSpacing', 6, ...
                 'BackgroundColor', T.cardBg);
-            app.StatsText = uitextarea(g3, 'Value', {'Measure (step 3), then Compare conditions (step 4).'}, ...
+            app.StatsText = uitextarea(g3, 'Value', {'Measure (step 5), then Compare conditions (step 6).'}, ...
                 'Editable', 'off', 'FontSize', T.fontBody, 'FontColor', T.sectionTitleColor);
             app.StatsTable = uitable(g3, 'RowName', {}, 'FontSize', T.fontSmall + 1, 'ColumnName', ...
                 {'Comparison', 'Difference (uV)', '95% CI', 'p (Holm)', 'Test'});
@@ -344,8 +448,188 @@ classdef EEGAnalysisApp < handle
             app.Generator = 'demoEEG';
             app.setChannels({'Pz'});
             app.setMeasure('mean', 'positive', [0.3 0.4], {'Pz'});
-            UIKit.setStatus(app.StatusLabel, ['Demo loaded: 8 participants, already cut into trials. Next: Show ERPs ' ...
-                '(step 2), then Measure the P300 at Pz from 300 to 400 ms (step 3).'], 'success');
+            UIKit.setStatus(app.StatusLabel, ['Demo loaded: 8 participants, already cleaned and cut into trials. ' ...
+                'Next: Show ERPs (step 4), then Measure the P300 at Pz from 300 to 400 ms (step 5).'], 'success');
+        end
+
+        %% loadRawDemo - 3 raw continuous BrainVision recordings (core/demo/demoEEG)
+        % Fills in the suggested cleaning and trial settings without applying them.
+        function ok = loadRawDemo(app)
+            DemoData.ensureDemoPath();
+            dlg = UIKit.busy(app.UIFig, 'Making the demo EEG (the first time takes a few seconds)…');
+            try
+                f = demoEEG();
+            catch ME
+                UIKit.done(dlg);
+                UIKit.setStatus(app.StatusLabel, sprintf('Demo not made: %s', ME.message), 'error');
+                ok = false;
+                return;
+            end
+            UIKit.done(dlg);
+            ok = app.openFiles({f.raw.brainvision});
+            if ~ok, return; end
+            app.Generator = 'demoEEGraw';
+            for k = 1:numel(app.Loaded)
+                app.suggestBadChannels(k);
+            end
+            app.CleanParticipantDrop.Value = app.Names{1};
+            app.showBadChannels();
+            app.setFilters(0.1, 30, 'off');
+            app.setReference('average');
+            app.setEvents('S 1 = Standard, S 2 = Target, S 3 = Novel');
+            app.setTrialWindow([-0.2 0.8]);
+            app.setRejection(true, 100, 0);
+            app.setChannels({'Pz'});
+            app.setMeasure('mean', 'positive', [0.3 0.4], {'Pz'});
+            bad = unique([app.BadChannels{:}]);
+            if isempty(bad), badText = 'no channel'; else, badText = EEGSource.listText(bad); end
+            UIKit.setStatus(app.StatusLabel, sprintf(['Raw demo loaded: %d continuous recordings; %s suggested as ' ...
+                'bad. Next: check the settings and Apply (step 2), then Cut into trials (step 3).'], ...
+                numel(app.Loaded), badText), 'success');
+        end
+
+        %% ----------------------------------------------------------------
+        %% Step 2: clean recordings
+        %% setBadChannels - Bad channels of one participant (index or name; names cell or 'T7, FT9')
+        function setBadChannels(app, participant, names)
+            k = app.participantIndex(participant);
+            app.BadChannels{k} = channelList(names);
+            if app.cleanIndex() == k, app.BadEdit.Value = channelText(app.BadChannels{k}); end
+            app.updateControls();
+        end
+
+        %% suggestBadChannels - Fill in the flat or noisy channels of one participant (default: the shown one)
+        function names = suggestBadChannels(app, participant)
+            names = {};
+            if isempty(app.Loaded), return; end
+            if nargin < 2 || isempty(participant), k = app.cleanIndex(); else, k = app.participantIndex(participant); end
+            try
+                [names, info] = EEGAnalysis.suggestBadChannels(app.Loaded{k});
+            catch ME
+                UIKit.setStatus(app.StatusLabel, sprintf('No suggestion (%s): %s', app.Names{k}, ME.message), 'error');
+                return;
+            end
+            names = channelList(names);
+            app.SuggestRule = info.rule;
+            app.CleanParticipantDrop.Value = app.Names{k};
+            app.setBadChannels(k, names);
+            if isempty(names), found = 'none'; else, found = EEGSource.listText(names); end
+            UIKit.setStatus(app.StatusLabel, sprintf('Suggested for %s: %s. %s', app.Names{k}, found, info.rule), 'info');
+        end
+
+        %% setFilters - High-pass and low-pass (Hz, 0 or [] = off); notch 'off' | 50 | 60
+        function setFilters(app, highPass, lowPass, notch)
+            if isempty(highPass), highPass = 0; end
+            if isempty(lowPass), lowPass = 0; end
+            app.HighPassEdit.Value = highPass;
+            app.LowPassEdit.Value = lowPass;
+            if nargin >= 4
+                if ischar(notch) && ~strcmpi(notch, 'off'), notch = str2double(notch); end
+                app.NotchDrop.Value = app.NotchItems{1 + isequal(notch, 50) + 2 * isequal(notch, 60)};
+            end
+            app.updateControls();
+        end
+
+        %% setReference - 'as recorded' | 'average' | 'linked mastoids' | 'channels' (+ names)
+        function setReference(app, mode, channels)
+            k = find(strcmpi(app.ReferenceModes, strtrim(mode)), 1);
+            if isempty(k)
+                error('NeuroAnalyzer:eeg:badOption', 'Unknown reference "%s": use %s.', mode, ...
+                    EEGSource.listText(lower(app.ReferenceModes)));
+            end
+            app.ReferenceDrop.Value = app.ReferenceModes{k};
+            if nargin >= 3, app.ReferenceChannelsEdit.Value = channelText(channels); end
+            app.updateControls();
+        end
+
+        %% applyCleaning - Bad channels, filters and reference, from the files as read
+        function ok = applyCleaning(app)
+            ok = false;
+            if isempty(app.Loaded)
+                UIKit.setStatus(app.StatusLabel, 'Load EEG files first (step 1).', 'warning');
+                return;
+            end
+            cs = app.currentCleaning();
+            cs.notchFreqs = [];
+            cs.filterText = {};
+            cs.suggestRule = app.SuggestRule;
+            cs.applied = true;
+            eegs = app.Loaded;
+            dlg = UIKit.busy(app.UIFig, 'Cleaning the recordings (filtering takes a few seconds)…');
+            try
+                for k = 1:numel(eegs)
+                    e = EEGAnalysis.markBad(eegs{k}, cs.bad{k});
+                    nf = notchFrequencies(cs.notch, e.fs, cs.lowPass);
+                    if cs.highPass > 0 || cs.lowPass > 0 || ~isempty(nf)
+                        [e, info] = EEGAnalysis.filter(e, 'HighPass', positiveOrEmpty(cs.highPass), ...
+                            'LowPass', positiveOrEmpty(cs.lowPass), 'Notch', nf);
+                        if k == 1
+                            cs.notchFreqs = nf;
+                            d = [info.band, info.notch];
+                            cs.filterText = arrayfun(@(x) EEGAnalysis.describeFilter(x), d, 'UniformOutput', false);
+                        end
+                    end
+                    switch cs.referenceMode
+                        case 'average'
+                            e = EEGAnalysis.rereference(e, 'average');
+                        case 'linked mastoids'
+                            e = EEGAnalysis.rereference(e, mastoidChannels(e.labels));
+                        case 'channels'
+                            if isempty(cs.referenceChannels)
+                                error('NeuroAnalyzer:eeg:badOption', 'Type the reference channels (e.g. Cz or TP9, TP10).');
+                            end
+                            e = EEGAnalysis.rereference(e, cs.referenceChannels);
+                    end
+                    eegs{k} = e;
+                end
+            catch ME
+                UIKit.done(dlg);
+                UIKit.setStatus(app.StatusLabel, sprintf('Not cleaned (%s): %s', app.Names{k}, ME.message), 'error');
+                return;
+            end
+            UIKit.done(dlg);
+            app.Cleaned = eegs;
+            app.CleanSettings = cs;
+            % Trials and every later result are made again from the cleaned data
+            epoched = eegs{1}.isEpoched;
+            if epoched, app.EEGs = eegs; else, app.EEGs = {}; end
+            app.TrialSettings = [];
+            app.TrialWindow = [];
+            app.Rejections = [];
+            app.clearResults();
+            app.CleanInfo.Text = cleaningText(cs, numel(eegs));
+            app.CleanInfo.FontColor = UITheme.success;
+            if epoched && ~isempty(cs.filterText)
+                app.CleanInfo.Text = [app.CleanInfo.Text ' Filtered trial by trial: filtering the continuous ' ...
+                    'recording before cutting it is better (the Overview says when a filter is longer than a trial).'];
+                app.CleanInfo.FontColor = UITheme.warning;
+            end
+            if epoched
+                app.CutInfo.Text = ['Cleaned trials in use. Tick Reject trials and Apply rejection to leave out ' ...
+                    'noisy trials.'];
+            else
+                app.CutInfo.Text = 'Cleaned: cut the recordings into trials again.';
+            end
+            app.CutInfo.FontColor = UITheme.warning;
+            app.fillOverview();
+            app.fillConditionDrops();
+            app.plotERP();
+            app.updateControls();
+            if epoched
+                UIKit.setStatus(app.StatusLabel, ['Trials cleaned. Next: reject trials (step 3, optional) or ' ...
+                    'Show ERPs (step 4).'], 'success');
+            else
+                UIKit.setStatus(app.StatusLabel, 'Recordings cleaned. Next: Cut into trials (step 3).', 'success');
+            end
+            ok = true;
+        end
+
+        %% ----------------------------------------------------------------
+        %% Step 3: trials
+        %% setEvents - 'S 1 = Standard, S 2 = Target' ('' = every event, named by its type)
+        function setEvents(app, txt)
+            app.EventsEdit.Value = char(txt);
+            app.updateControls();
         end
 
         %% setTrialWindow - [from to] in s around each event (continuous recordings)
@@ -354,39 +638,85 @@ classdef EEGAnalysisApp < handle
             app.TrialToEdit.Value = w(2) * 1000;
         end
 
-        %% cutIntoTrials - Cut every continuous recording around its events
+        %% setRejection - Reject trials on / off; thresholds in uV (0 or [] = off)
+        function setRejection(app, on, peakToPeak, absolute)
+            app.RejectCb.Value = logical(on);
+            if nargin >= 3
+                if isempty(peakToPeak), peakToPeak = 0; end
+                app.PeakToPeakEdit.Value = peakToPeak;
+            end
+            if nargin >= 4
+                if isempty(absolute), absolute = 0; end
+                app.AbsoluteEdit.Value = absolute;
+            end
+            app.updateControls();
+        end
+
+        %% cutIntoTrials - Cut every continuous recording around its events, then reject trials
+        % Starts from the cleaned data (step 2) when it was applied, else from the files as read.
         function ok = cutIntoTrials(app)
             ok = false;
             if isempty(app.Loaded), return; end
-            w = [app.TrialFromEdit.Value app.TrialToEdit.Value] / 1000;
-            eegs = app.Loaded;
+            ts = app.currentTrials();
+            if ~isempty(ts.problems)
+                UIKit.setStatus(app.StatusLabel, sprintf(['Write each event as "type = name" (e.g. S 1 = ' ...
+                    'Standard): %s.'], EEGSource.listText(strcat('"', ts.problems, '"'))), 'error');
+                return;
+            end
+            ts = rmfield(ts, 'problems');
+            if ts.reject && ts.peakToPeak <= 0 && ts.absolute <= 0
+                UIKit.setStatus(app.StatusLabel, ['Give a peak-to-peak or an absolute threshold, or untick ' ...
+                    'Reject trials.'], 'warning');
+                return;
+            end
+            eegs = app.Cleaned;
+            if isempty(eegs), eegs = app.Loaded; end
+            continuous = ~eegs{1}.isEpoched;
+            rej = [];
+            dlg = UIKit.busy(app.UIFig, 'Making the trials…');
             try
                 for k = 1:numel(eegs)
                     if ~eegs{k}.isEpoched
-                        eegs{k} = EEGAnalysis.epoch(eegs{k}, 'Window', w);
+                        eegs{k} = EEGAnalysis.epoch(eegs{k}, 'Window', ts.window, 'Events', ts.events, ...
+                            'Rename', ts.rename);
+                    end
+                    if ts.reject
+                        [eegs{k}, info] = EEGAnalysis.rejectTrials(eegs{k}, 'PeakToPeak', positiveOrEmpty(ts.peakToPeak), ...
+                            'Absolute', positiveOrEmpty(ts.absolute));
+                        if k == 1, rej = info; else, rej(k) = info; end
                     end
                 end
             catch ME
+                UIKit.done(dlg);
                 UIKit.setStatus(app.StatusLabel, sprintf('Not cut into trials (%s): %s', app.Names{k}, ME.message), 'error');
                 return;
             end
+            UIKit.done(dlg);
+            ts.cut = true;
             app.EEGs = eegs;
-            app.TrialWindow = w;
+            app.TrialSettings = ts;
+            app.Rejections = rej;
+            if continuous, app.TrialWindow = ts.window; else, app.TrialWindow = []; end
             app.clearResults();
-            if w(1) < 0, app.BaselineFromEdit.Value = w(1) * 1000; end
-            n = cellfun(@(e) size(e.data, 3), eegs);
-            app.CutInfo.Text = sprintf('Cut from %g to %g ms: %s trials.', w(1) * 1000, w(2) * 1000, ...
-                strjoin(arrayfun(@num2str, n, 'UniformOutput', false), ', '));
+            if continuous && ts.window(1) < 0, app.BaselineFromEdit.Value = ts.window(1) * 1000; end
+            app.CutInfo.Text = trialsText(eegs, rej, ifelse(continuous, ts.window, []));
             app.CutInfo.FontColor = UITheme.success;
             app.fillOverview();
             app.fillConditionDrops();
+            app.plotERP();
             app.updateControls();
-            UIKit.setStatus(app.StatusLabel, 'Cut into trials. Next: Show ERPs (step 2).', 'success');
+            if isempty(rej)
+                what = ifelse(continuous, 'Cut into trials.', 'Every trial kept.');
+            else
+                what = sprintf('%s; %d of %d trials rejected.', ifelse(continuous, 'Cut into trials', ...
+                    'Rejection applied'), sum([rej.total]) - sum([rej.kept]), sum([rej.total]));
+            end
+            UIKit.setStatus(app.StatusLabel, [what ' Next: Show ERPs (step 4).'], 'success');
             ok = true;
         end
 
         %% ----------------------------------------------------------------
-        %% Step 2: ERPs
+        %% Step 4: ERPs
         %% setBaseline - Baseline on / off and [from to] in s
         function setBaseline(app, on, w)
             app.BaselineCb.Value = logical(on);
@@ -444,11 +774,12 @@ classdef EEGAnalysisApp < handle
                 app.ErpInfo.FontColor = UITheme.warning;
             end
             if isempty(app.MeasureChannelsEdit.Value), app.MeasureChannelsEdit.Value = channelText(chans); end
-            app.plotERP();
+            plotted = app.plotERP();
             app.updateControls();
-            UIKit.setStatus(app.StatusLabel, ['ERPs ready. Look at the grand average to choose the time window, ' ...
-                'then Measure (step 3).'], 'success');
             ok = true;
+            if ~plotted, return; end    % the status says why the plot is empty
+            UIKit.setStatus(app.StatusLabel, ['ERPs ready. Look at the grand average to choose the time window, ' ...
+                'then Measure (step 5).'], 'success');
         end
 
         %% setView - participant: name, index or 'grand'; view: text of the Show list
@@ -468,7 +799,7 @@ classdef EEGAnalysisApp < handle
         end
 
         %% ----------------------------------------------------------------
-        %% Step 3: measure
+        %% Step 5: measure
         %% setMeasure - kind 'mean' | 'peak', polarity, [from to] s, channels
         function setMeasure(app, kind, polarity, w, chans)
             app.MeasureDrop.Value = app.MeasureKinds{1 + strcmpi(kind, 'peak')};
@@ -487,7 +818,7 @@ classdef EEGAnalysisApp < handle
         function ok = measure(app)
             ok = false;
             if isempty(app.ERPs)
-                UIKit.setStatus(app.StatusLabel, 'Show the ERPs first (step 2).', 'warning');
+                UIKit.setStatus(app.StatusLabel, 'Show the ERPs first (step 4).', 'warning');
                 return;
             end
             o = app.currentMeasure();
@@ -517,9 +848,9 @@ classdef EEGAnalysisApp < handle
             app.plotERP();
             app.updateControls();
             if numel(app.ERPs) > 1
-                next = 'Next: Compare conditions (step 4).';
+                next = 'Next: Compare conditions (step 6).';
             else
-                next = 'Statistics need two or more participants; export the values (step 5).';
+                next = 'Statistics need two or more participants; export the values (step 7).';
             end
             UIKit.setStatus(app.StatusLabel, sprintf('Measured %d participant(s). %s', numel(r), next), ...
                 ifelse(nEdge > 0, 'warning', 'success'));
@@ -527,7 +858,7 @@ classdef EEGAnalysisApp < handle
         end
 
         %% ----------------------------------------------------------------
-        %% Step 4: statistics
+        %% Step 6: statistics
         %% setStatsMethod - 'parametric' | 'nonparametric'
         function setStatsMethod(app, m)
             app.MethodDrop.Value = ifelse(strncmpi(m, 'non', 3), 'Nonparametric', 'Parametric');
@@ -537,7 +868,7 @@ classdef EEGAnalysisApp < handle
         function ok = compareConditions(app)
             ok = false;
             if isempty(app.Measures)
-                UIKit.setStatus(app.StatusLabel, 'Measure first (step 3).', 'warning');
+                UIKit.setStatus(app.StatusLabel, 'Measure first (step 5).', 'warning');
                 return;
             end
             [Y, conds] = app.valueMatrix();
@@ -558,12 +889,12 @@ classdef EEGAnalysisApp < handle
             app.fillStats();
             app.selectTab('Statistics');
             app.updateControls();
-            UIKit.setStatus(app.StatusLabel, [res.summary ' Next: Save (step 5).'], 'success');
+            UIKit.setStatus(app.StatusLabel, [res.summary ' Next: Save (step 7).'], 'success');
             ok = true;
         end
 
         %% ----------------------------------------------------------------
-        %% Step 5: save
+        %% Step 7: save
         %% exportDialog - Choose .csv or .mat
         function exportDialog(app)
             start = ProjectManager.getExportDir();
@@ -579,7 +910,7 @@ classdef EEGAnalysisApp < handle
         function ok = exportResultsTo(app, filePath)
             ok = false;
             if isempty(app.Measures)
-                UIKit.setStatus(app.StatusLabel, 'Measure first (step 3).', 'warning');
+                UIKit.setStatus(app.StatusLabel, 'Measure first (step 5).', 'warning');
                 return;
             end
             [~, name, ext] = fileparts(filePath);
@@ -615,7 +946,7 @@ classdef EEGAnalysisApp < handle
             ok = Report.forApp(app, pdfPath);
         end
 
-        %% sessionState - Files, settings (trials, baseline, measure, test) and results
+        %% sessionState - Files, settings (cleaning, trials, baseline, measure, test) and results
         function st = sessionState(app)
             st.inputs = [];
             st.settings = struct();
@@ -624,6 +955,9 @@ classdef EEGAnalysisApp < handle
             if isempty(app.Loaded), return; end
             if strcmp(app.Generator, 'demoEEG')
                 st.inputs = Session.fileInfo('', 'EEG demo (demoEEG), 8 participants');
+            elseif strcmp(app.Generator, 'demoEEGraw')
+                st.inputs = Session.fileInfo('', sprintf('EEG demo (demoEEG), %d raw continuous recordings', ...
+                    numel(app.Loaded)));
             else
                 for k = 1:numel(app.Files)
                     info = Session.fileInfo(app.Files{k}, sprintf('EEG, participant %s', app.Names{k}));
@@ -631,16 +965,35 @@ classdef EEGAnalysisApp < handle
                 end
             end
             e1 = app.Loaded{1};
+            ea = app.analysedData(1);
             st.settings.generator = app.Generator;
             st.settings.participants = app.Names;
             st.settings.maps = app.Maps;
             st.settings.sources = cellfun(@(e) e.source, app.Loaded, 'UniformOutput', false);
             st.settings.continuous = ~e1.isEpoched;
-            st.settings.trialWindow = app.TrialWindow;
+            % Step 2: the settings applied (or those in the window when not applied)
+            if isempty(app.CleanSettings)
+                cl = app.currentCleaning();
+                cl.notchFreqs = [];
+                cl.filterText = {};
+                cl.suggestRule = app.SuggestRule;
+                cl.applied = false;
+            else
+                cl = app.CleanSettings;
+            end
+            st.settings.cleaning = cl;
+            % Step 3: the settings used (or those in the window when not run)
+            if isempty(app.TrialSettings)
+                tr = rmfield(app.currentTrials(), 'problems');
+            else
+                tr = app.TrialSettings;
+            end
+            st.settings.trials = tr;
+            st.settings.trialWindow = app.TrialWindow;    % also in trials.window (kept for older readers)
             st.settings.fs = e1.fs;
             st.settings.nChannels = numel(e1.labels);
-            st.settings.reference = e1.reference;
-            st.settings.history = e1.history;
+            st.settings.reference = ea.reference;          % of the analysed data
+            st.settings.history = ea.history;
             st.settings.baselineOn = logical(app.BaselineCb.Value);
             st.settings.baseline = [app.BaselineFromEdit.Value app.BaselineToEdit.Value] / 1000;
             st.settings.channels = channelList(app.ChannelsEdit.Value);
@@ -651,9 +1004,24 @@ classdef EEGAnalysisApp < handle
             st.settings.tested = ~isempty(app.StatsResult);
             st.summary{end + 1} = sprintf('%d participant(s): %s; %d channels at %g Hz (%s)', numel(app.Names), ...
                 strjoin(app.Names, ', '), numel(e1.labels), e1.fs, strjoin(EEGSource.stableUnique(st.settings.sources), ', '));
+            if cl.applied
+                st.summary{end + 1} = ['Cleaning: ' cleaningText(cl, numel(app.Names))];
+                for i = 1:numel(cl.filterText)
+                    st.summary{end + 1} = ['  ' cl.filterText{i}];
+                end
+                st.summary{end + 1} = sprintf('Reference of the analysed data: %s', ea.reference);
+            end
             if ~isempty(app.TrialWindow)
                 st.summary{end + 1} = sprintf('Continuous recordings cut into trials from %g to %g ms around the events', ...
                     app.TrialWindow * 1000);
+            end
+            if ~isempty(app.Rejections)
+                r = app.Rejections;
+                rj = struct('participant', app.Names, 'total', {r.total}, 'kept', {r.kept}, ...
+                    'conditions', {r.conditions}, 'before', {r.before}, 'after', {r.after}, 'sentence', {r.sentence});
+                st.results.rejection = rj;
+                st.summary{end + 1} = sprintf('Trial rejection: %d of %d trials rejected (%s per participant)', ...
+                    sum([r.total]) - sum([r.kept]), sum([r.total]), rangeText([r.total] - [r.kept]));
             end
             if ~isempty(app.ERPs)
                 e = app.analysisERP(1);
@@ -680,11 +1048,17 @@ classdef EEGAnalysisApp < handle
         end
 
         %% restoreSession - Reload the files, re-apply the settings, re-run each step
+        % Sessions saved before steps 2 and 3 existed have no cleaning / trials
+        % settings: their continuous recordings are cut with trialWindow only.
         function ok = restoreSession(app, s)
             ok = false;
             cfg = s.settings;
-            if isfield(cfg, 'generator') && strcmp(cfg.generator, 'demoEEG')
+            gen = '';
+            if isfield(cfg, 'generator'), gen = cfg.generator; end
+            if strcmp(gen, 'demoEEG')
                 if ~app.loadDemo(), return; end
+            elseif strcmp(gen, 'demoEEGraw')
+                if ~app.loadRawDemo(), return; end
             elseif isempty(s.inputs)
                 ok = true; return;
             else
@@ -692,7 +1066,25 @@ classdef EEGAnalysisApp < handle
                 if isfield(cfg, 'maps'), maps = cfg.maps; end
                 if ~app.openFiles({s.inputs.path}, maps), return; end
             end
-            if ~isempty(cfg.trialWindow)
+            if isfield(cfg, 'cleaning') && isstruct(cfg.cleaning)
+                cl = cfg.cleaning;
+                for k = 1:min(numel(cl.bad), numel(app.Names))
+                    app.setBadChannels(k, cl.bad{k});
+                end
+                app.SuggestRule = cl.suggestRule;
+                app.setFilters(cl.highPass, cl.lowPass, cl.notch);
+                app.setReference(cl.referenceMode, cl.referenceChannels);
+                if cl.applied && ~app.applyCleaning(), return; end
+            end
+            if isfield(cfg, 'trials') && isstruct(cfg.trials)
+                tr = cfg.trials;
+                app.setEvents(tr.eventsText);
+                app.setTrialWindow(tr.window);
+                app.setRejection(tr.reject, tr.peakToPeak, tr.absolute);
+                if tr.cut && ~app.cutIntoTrials(), return; end
+            elseif ~isempty(cfg.trialWindow)
+                app.setEvents('');
+                app.setRejection(false);
                 app.setTrialWindow(cfg.trialWindow);
                 if ~app.cutIntoTrials(), return; end
             end
@@ -758,21 +1150,40 @@ classdef EEGAnalysisApp < handle
             app.Names = names;
             app.TrialWindow = [];
             if all(kinds), app.EEGs = eegs; else, app.EEGs = {}; end
+            % Step 2 starts from the bad channels the files already mark
+            app.BadChannels = cellfun(@(e) channelList(e.labels(EEGAnalysis.badChannels(e))), eegs, ...
+                'UniformOutput', false);
+            app.Cleaned = {};
+            app.CleanSettings = [];
+            app.SuggestRule = '';
+            app.TrialSettings = [];
+            app.Rejections = [];
             app.clearResults();
+            app.CleanParticipantDrop.Items = names;
+            app.CleanParticipantDrop.Value = names{1};
+            app.showBadChannels();
             e1 = eegs{1};
             if e1.isEpoched
                 n = cellfun(@(e) size(e.data, 3), eegs);
                 app.FileInfo.Text = sprintf('%d participant(s)  ·  %d channels at %g Hz  ·  trials %g to %g ms  ·  %s trials', ...
                     numel(eegs), numel(e1.labels), e1.fs, e1.times(1) * 1000, e1.times(end) * 1000, rangeText(n));
-                app.CutInfo.Text = 'Already cut into trials.';
+                app.CleanInfo.Text = ['Already cut into trials: filters run on each trial, which is less accurate ' ...
+                    'than filtering the continuous recording (the edges of short trials). Often nothing to do here.'];
+                app.CleanInfo.FontColor = UITheme.bodyColor;
+                app.CutInfo.Text = ['Already cut into trials. Tick Reject trials and Apply rejection to leave out ' ...
+                    'noisy trials.'];
                 app.CutInfo.FontColor = UITheme.bodyColor;
+                app.CutBtn.Text = 'Apply rejection';
                 app.BaselineFromEdit.Value = e1.times(1) * 1000;
             else
                 nEv = cellfun(@(e) numel(e.events), eegs);
                 app.FileInfo.Text = sprintf('%d participant(s)  ·  %d channels at %g Hz  ·  continuous, %s events', ...
                     numel(eegs), numel(e1.labels), e1.fs, rangeText(nEv));
-                app.CutInfo.Text = 'Continuous: choose the trial window and Cut into trials.';
+                app.CleanInfo.Text = 'Mark bad channels, choose the filters and the reference, then Apply (optional).';
+                app.CleanInfo.FontColor = UITheme.bodyColor;
+                app.CutInfo.Text = 'Continuous: say the events and the trial window, then Cut into trials.';
                 app.CutInfo.FontColor = UITheme.warning;
+                app.CutBtn.Text = 'Cut into trials';
             end
             app.FileInfo.FontColor = UITheme.sectionTitleColor;
             % Channels typed for earlier files: keep only those the new files have
@@ -784,14 +1195,14 @@ classdef EEGAnalysisApp < handle
             app.ParticipantDrop.Value = items{1};
             app.fillOverview();
             app.fillConditionDrops();
-            UIKit.emptyAxes(app.AxERP, 'Click Show ERPs (step 2)');
+            app.plotERP();
             app.updateControls();
             if e1.isEpoched
                 UIKit.setStatus(app.StatusLabel, sprintf(['Loaded %d participant(s). Read the Overview tab (what ' ...
-                    'was already done to the data), then Show ERPs (step 2).'], numel(eegs)), 'success');
+                    'was already done to the data), then Show ERPs (step 4).'], numel(eegs)), 'success');
             else
-                UIKit.setStatus(app.StatusLabel, sprintf(['Loaded %d continuous recording(s). Next: choose the ' ...
-                    'trial window and Cut into trials (step 1).'], numel(eegs)), 'success');
+                UIKit.setStatus(app.StatusLabel, sprintf(['Loaded %d continuous recording(s). Next: clean them ' ...
+                    '(step 2, optional), then Cut into trials (step 3).'], numel(eegs)), 'success');
             end
             ok = true;
         end
@@ -815,8 +1226,88 @@ classdef EEGAnalysisApp < handle
             if isempty(app.Loaded)
                 UIKit.setStatus(app.StatusLabel, 'Load EEG files first (step 1).', 'warning');
             else
-                UIKit.setStatus(app.StatusLabel, 'Cut the recordings into trials first (step 1).', 'warning');
+                UIKit.setStatus(app.StatusLabel, 'Cut the recordings into trials first (step 3).', 'warning');
             end
+        end
+
+        %% analysedData - What is analysed for participant k: trials, else cleaned, else as read
+        function e = analysedData(app, k)
+            if ~isempty(app.EEGs)
+                e = app.EEGs{k};
+            elseif ~isempty(app.Cleaned)
+                e = app.Cleaned{k};
+            else
+                e = app.Loaded{k};
+            end
+        end
+
+        %% participantIndex - Index of a participant given as index or name
+        function k = participantIndex(app, participant)
+            if isnumeric(participant)
+                k = participant;
+            else
+                k = find(strcmpi(app.Names, participant), 1);
+            end
+            if isempty(k) || k < 1 || k > numel(app.Names)
+                error('NeuroAnalyzer:eeg:badOption', 'No participant %s. Participants: %s.', ...
+                    num2str(participant), EEGSource.listText(app.Names));
+            end
+        end
+
+        %% cleanIndex - Participant shown in step 2
+        function k = cleanIndex(app)
+            k = find(strcmp(app.CleanParticipantDrop.Items, app.CleanParticipantDrop.Value), 1);
+            if isempty(k), k = 1; end
+        end
+
+        %% showBadChannels - The bad channels of the participant shown in step 2
+        function showBadChannels(app)
+            k = app.cleanIndex();
+            if k <= numel(app.BadChannels)
+                app.BadEdit.Value = channelText(app.BadChannels{k});
+            else
+                app.BadEdit.Value = '';
+            end
+        end
+
+        %% onBadEdited - Bad channels typed for the participant shown in step 2
+        function onBadEdited(app)
+            if isempty(app.Loaded), return; end
+            k = app.cleanIndex();
+            app.BadChannels{k} = channelList(app.BadEdit.Value);
+            app.BadEdit.Value = channelText(app.BadChannels{k});
+            app.updateControls();
+        end
+
+        %% currentCleaning - Step 2 settings from the controls
+        % highPass / lowPass in Hz (0 = off), notch 'off' | 50 | 60, referenceMode lower case.
+        function cs = currentCleaning(app)
+            notch = 'off';
+            if strcmp(app.NotchDrop.Value, app.NotchItems{2}), notch = 50; end
+            if strcmp(app.NotchDrop.Value, app.NotchItems{3}), notch = 60; end
+            cs = struct('bad', {app.BadChannels}, 'highPass', app.HighPassEdit.Value, ...
+                'lowPass', app.LowPassEdit.Value, 'notch', notch, 'referenceMode', lower(app.ReferenceDrop.Value), ...
+                'referenceChannels', {channelList(app.ReferenceChannelsEdit.Value)});
+        end
+
+        %% cleaningChanged - Step 2 controls differ from the settings applied
+        function tf = cleaningChanged(app)
+            tf = false;
+            if isempty(app.CleanSettings), return; end
+            cur = app.currentCleaning();
+            for f = fieldnames(cur)'
+                if ~isequal(cur.(f{1}), app.CleanSettings.(f{1})), tf = true; return; end
+            end
+        end
+
+        %% currentTrials - Step 3 settings from the controls (window in s, thresholds in uV, 0 = off)
+        % problems: entries of the events text that are not 'type' or 'type = name'.
+        function ts = currentTrials(app)
+            [events, rename, problems] = parseEvents(app.EventsEdit.Value);
+            ts = struct('eventsText', strtrim(app.EventsEdit.Value), 'events', {events}, 'rename', {rename}, ...
+                'window', [app.TrialFromEdit.Value app.TrialToEdit.Value] / 1000, ...
+                'reject', logical(app.RejectCb.Value), 'peakToPeak', app.PeakToPeakEdit.Value, ...
+                'absolute', app.AbsoluteEdit.Value, 'cut', false, 'problems', {problems});
         end
 
         %% currentMeasure - Measure settings from the controls (s, names)
@@ -857,9 +1348,18 @@ classdef EEGAnalysisApp < handle
                 eeg = app.EEGs{idx(i)};
                 ch = 1:numel(eeg.labels);
                 if ~isempty(chans), ch = EEGAnalysis.channelIndex(eeg.labels, chans); end
+                bad = EEGAnalysis.badChannels(eeg);
+                ch = ch(~bad(ch));      % bad channels are left out of the average
+                if isempty(ch), continue; end
                 eeg.data = mean(eeg.data(ch, :, :), 1);
                 eeg.labels = {'mean'};
+                eeg.bad = false;
                 erps{i} = EEGAnalysis.conditionERPs(eeg, 'Baseline', app.ERPSettings.baseline);
+            end
+            erps = erps(~cellfun(@isempty, erps));
+            if isempty(erps)
+                error('NeuroAnalyzer:eeg:badOption', ['Every chosen channel (%s) is marked bad, so there is ' ...
+                    'nothing to plot. Choose other channels (step 4).'], EEGSource.listText(chans));
             end
             e = EEGAnalysis.grandAverage(erps);
         end
@@ -871,7 +1371,9 @@ classdef EEGAnalysisApp < handle
         end
 
         %% plotERP - Conditions, butterfly or difference wave of the shown participant(s)
-        function plotERP(app)
+        % ok: false when the plot could not be made (the axes and the status say why)
+        function ok = plotERP(app)
+            ok = true;
             ax = app.AxERP;
             % cla keeps objects with hidden handles (butterfly lines, SEM shades): delete them all
             delete(allchild(ax));
@@ -879,8 +1381,10 @@ classdef EEGAnalysisApp < handle
             if isempty(app.ERPs)
                 if isempty(app.Loaded)
                     UIKit.emptyAxes(ax, 'Load EEG files (or Try demo data) to begin');
+                elseif isempty(app.EEGs)
+                    UIKit.emptyAxes(ax, 'Cut the recordings into trials (step 3)');
                 else
-                    UIKit.emptyAxes(ax, 'Click Show ERPs (step 2)');
+                    UIKit.emptyAxes(ax, 'Click Show ERPs (step 4)');
                 end
                 return;
             end
@@ -898,9 +1402,12 @@ classdef EEGAnalysisApp < handle
                         if isempty(c), c = 1; end
                         t = e.times * 1000;
                         y = e.mean(:, :, c);
-                        plot(ax, t, y', 'Color', lighten(T.bodyColor, 0.6), 'LineWidth', 0.5, 'HandleVisibility', 'off');
+                        good = any(isfinite(y), 2);     % bad channels are NaN: no line for them
+                        plot(ax, t, y(good, :)', 'Color', lighten(T.bodyColor, 0.6), 'LineWidth', 0.5, ...
+                            'HandleVisibility', 'off');
                         if ~isempty(chans)
                             ch = EEGAnalysis.channelIndex(e.labels, chans);
+                            ch = ch(good(ch));
                             for i = 1:numel(ch)
                                 col = T.plotColors(1 + mod(i - 1, size(T.plotColors, 1)), :);
                                 plot(ax, t, y(ch(i), :), 'Color', col, 'LineWidth', 1.8, 'DisplayName', e.labels{ch(i)});
@@ -938,6 +1445,8 @@ classdef EEGAnalysisApp < handle
             catch ME
                 hold(ax, 'off');
                 UIKit.emptyAxes(ax, sprintf('Cannot plot: %s', ME.message));
+                UIKit.setStatus(app.StatusLabel, sprintf('Cannot plot: %s', ME.message), 'warning');
+                ok = false;
                 return;
             end
             if ~isempty(app.MeasureSettings)
@@ -963,11 +1472,21 @@ classdef EEGAnalysisApp < handle
         function fillOverview(app)
             lines = {};
             for k = 1:numel(app.Loaded)
-                e = app.Loaded{k};
-                if ~isempty(app.EEGs), e = app.EEGs{k}; end
+                e = app.analysedData(k);
                 lines{end + 1} = sprintf('%s  (%s, %s)', app.Names{k}, e.source, fileName(e.file)); %#ok<AGROW>
                 lines = [lines, strcat({'   '}, EEGSource.describe(e))]; %#ok<AGROW>
-                lines{end + 1} = '   Already done to the data (read from the file, nothing was run):'; %#ok<AGROW>
+                bad = EEGAnalysis.badChannels(e);
+                if any(bad)
+                    lines{end + 1} = sprintf(['   Bad channels: %s (left out of the reference, rejection, ERPs ' ...
+                        'and measures).'], EEGSource.listText(e.labels(bad))); %#ok<AGROW>
+                else
+                    lines{end + 1} = '   Bad channels: none marked.'; %#ok<AGROW>
+                end
+                if numel(e.history) > numel(app.Loaded{k}.history)
+                    lines{end + 1} = '   Already done to the data (read from the file, then the steps run here):'; %#ok<AGROW>
+                else
+                    lines{end + 1} = '   Already done to the data (read from the file, nothing was run):'; %#ok<AGROW>
+                end
                 lines = [lines, strcat({'     - '}, EEGSource.describeHistory(e))]; %#ok<AGROW>
                 lines{end + 1} = ''; %#ok<AGROW>
             end
@@ -1046,7 +1565,7 @@ classdef EEGAnalysisApp < handle
         function fillStats(app)
             r = app.StatsResult;
             if isempty(r)
-                app.StatsText.Value = {'Measure (step 3), then Compare conditions (step 4).'};
+                app.StatsText.Value = {'Measure (step 5), then Compare conditions (step 6).'};
                 app.StatsTable.Data = cell(0, 5);
                 app.StatsInfo.Text = '';
                 return;
@@ -1075,7 +1594,8 @@ classdef EEGAnalysisApp < handle
                 'grandAverage', app.Grand, 'erpSettings', app.ERPSettings, 'measureSettings', app.MeasureSettings, ...
                 'measureHeader', {{'Participant', 'Condition', 'Value_uV', 'Latency_s', 'Trials', 'PeakAtEdge'}}, ...
                 'measures', {app.measureRows(false)}, 'measureText', EEGAnalysis.describeMeasure(app.MeasureSettings), ...
-                'stats', app.StatsResult, 'trialWindow', app.TrialWindow);
+                'stats', app.StatsResult, 'trialWindow', app.TrialWindow, 'cleaning', app.CleanSettings, ...
+                'trials', app.TrialSettings, 'rejection', {app.Rejections});
         end
 
         %% selectTab - Show a result tab by title
@@ -1094,9 +1614,31 @@ classdef EEGAnalysisApp < handle
             tested = ~isempty(app.StatsResult);
             peak = strcmp(app.MeasureDrop.Value, app.MeasureKinds{2});
             shownView = app.ViewDrop.Value;
+            reject = logical(app.RejectCb.Value);
+            % Step 2: next while a continuous recording is not cleaned, or after its settings changed
+            changed = app.cleaningChanged();
+            cleanNext = has && ((continuous && isempty(app.Cleaned) && ~ready) || changed);
+            for c = {app.CleanParticipantDrop, app.BadEdit, app.SuggestBtn, app.HighPassEdit, app.LowPassEdit, ...
+                    app.NotchDrop, app.ReferenceDrop, app.ApplyCleanBtn}
+                c{1}.Enable = onoff(has);
+            end
+            app.ReferenceChannelsEdit.Enable = onoff(has && strcmp(app.ReferenceDrop.Value, app.ReferenceModes{4}));
+            changedText = 'Settings changed: click Apply to use them.';
+            if changed
+                app.CleanInfo.Text = changedText;
+                app.CleanInfo.FontColor = UITheme.warning;
+            elseif ~isempty(app.CleanSettings) && strcmp(app.CleanInfo.Text, changedText)
+                app.CleanInfo.Text = cleaningText(app.CleanSettings, numel(app.Names));
+                app.CleanInfo.FontColor = UITheme.success;
+            end
+            % Step 3: events and window only for continuous recordings
+            app.EventsEdit.Enable = onoff(continuous);
             app.TrialFromEdit.Enable = onoff(continuous);
             app.TrialToEdit.Enable = onoff(continuous);
-            app.CutBtn.Enable = onoff(continuous);
+            app.RejectCb.Enable = onoff(has);
+            app.PeakToPeakEdit.Enable = onoff(has && reject);
+            app.AbsoluteEdit.Enable = onoff(has && reject);
+            app.CutBtn.Enable = onoff(has);
             app.BaselineFromEdit.Enable = onoff(ready && app.BaselineCb.Value);
             app.BaselineToEdit.Enable = onoff(ready && app.BaselineCb.Value);
             app.ShowBtn.Enable = onoff(ready);
@@ -1110,8 +1652,9 @@ classdef EEGAnalysisApp < handle
             app.CondBDrop.Enable = onoff(shown && strcmp(shownView, app.Views{3}));
             UIKit.setSessionEnable(app.SessionBtns, has);
             setButtonStyle(app.LoadBtn, ifelse(~has, 'primary', 'secondary'));
-            setButtonStyle(app.CutBtn, ifelse(continuous && ~ready, 'primary', 'secondary'));
-            setButtonStyle(app.ShowBtn, ifelse(ready && ~shown, 'primary', 'secondary'));
+            setButtonStyle(app.ApplyCleanBtn, ifelse(cleanNext, 'primary', 'secondary'));
+            setButtonStyle(app.CutBtn, ifelse(continuous && ~ready && ~cleanNext, 'primary', 'secondary'));
+            setButtonStyle(app.ShowBtn, ifelse(ready && ~shown && ~changed, 'primary', 'secondary'));
             setButtonStyle(app.MeasureBtn, ifelse(shown && ~measured, 'primary', 'secondary'));
             setButtonStyle(app.StatsBtn, ifelse(measured && ~tested && numel(app.Measures) > 1, 'primary', 'secondary'));
         end
@@ -1354,6 +1897,128 @@ function writeCsv(p, header, rows)
             end
         end
         fprintf(fid, '%s\n', strjoin(parts, ','));
+    end
+end
+
+%% notchFrequencies - Line frequency and its multiples below fs/2 - 1 Hz (and the low-pass); [] when off
+function f = notchFrequencies(notch, fs, lowPass)
+    f = [];
+    if ~isnumeric(notch) || isempty(notch) || notch <= 0, return; end
+    f = notch * (1:floor(fs / 2 / notch));
+    f = f(f < fs / 2 - 1);
+    if lowPass > 0, f = f(f < lowPass); end
+    if isempty(f), f = notch; end      % at least the line frequency itself
+end
+
+%% positiveOrEmpty - x when above 0, else [] (0 = off in the number fields)
+function x = positiveOrEmpty(x)
+    if isempty(x) || x <= 0, x = []; end
+end
+
+%% mastoidChannels - TP9 / TP10, else M1 / M2, else A1 / A2 (the names as in labels)
+function names = mastoidChannels(labels)
+    pairs = {'TP9', 'TP10'; 'M1', 'M2'; 'A1', 'A2'};
+    for i = 1:size(pairs, 1)
+        [tf, j] = ismember(lower(pairs(i, :)), lower(labels));
+        if all(tf), names = labels(j); return; end
+    end
+    error('NeuroAnalyzer:eeg:unknownChannel', ['Linked mastoids need the channels TP9 and TP10 (or M1 and M2, ' ...
+        'or A1 and A2), and this recording has none of these pairs. Choose Channels and type the reference channels.']);
+end
+
+%% cleaningText - Step 2 settings in one short sentence
+function t = cleaningText(cs, nP)
+    hp = cs.highPass; lp = cs.lowPass;
+    if hp > 0 && lp > 0
+        parts = {sprintf('band-pass %g-%g Hz', hp, lp)};
+    elseif hp > 0
+        parts = {sprintf('high-pass %g Hz', hp)};
+    elseif lp > 0
+        parts = {sprintf('low-pass %g Hz', lp)};
+    else
+        parts = {'no band filter'};
+    end
+    if isfield(cs, 'notchFreqs') && ~isempty(cs.notchFreqs)
+        parts{end + 1} = sprintf('notch at %s Hz', strjoin(arrayfun(@(v) sprintf('%g', v), cs.notchFreqs, ...
+            'UniformOutput', false), ', '));
+    elseif isnumeric(cs.notch)
+        parts{end + 1} = sprintf('notch at %g Hz', cs.notch);
+    end
+    switch cs.referenceMode
+        case 'average', parts{end + 1} = 'average reference';
+        case 'linked mastoids', parts{end + 1} = 'linked mastoids reference';
+        case 'channels', parts{end + 1} = sprintf('reference %s', strjoin(cs.referenceChannels, ', '));
+        otherwise, parts{end + 1} = 'reference as recorded';
+    end
+    nBad = cellfun(@numel, cs.bad);
+    if any(nBad > 0)
+        every = [cs.bad{:}];
+        [~, i] = unique(lower(every), 'first');
+        parts{end + 1} = sprintf('bad channels %s (%d of %d participants)', strjoin(every(sort(i)), ', '), ...
+            sum(nBad > 0), nP);
+    else
+        parts{end + 1} = 'no bad channels';
+    end
+    t = [upper(parts{1}(1)) parts{1}(2:end) '; ' strjoin(parts(2:end), '; ') '.'];
+end
+
+%% trialsText - Trials per participant and, after a rejection, what it left out
+function t = trialsText(eegs, rej, w)
+    n = cellfun(@(e) size(e.data, 3), eegs);
+    nText = strjoin(arrayfun(@num2str, n, 'UniformOutput', false), ', ');
+    if isempty(w)
+        t = sprintf('Trials per participant: %s.', nText);
+    else
+        t = sprintf('Cut from %g to %g ms: %s trials.', w(1) * 1000, w(2) * 1000, nText);
+    end
+    if isempty(rej), return; end
+    % Rejected trials per condition and channels, over the participants
+    conds = {};
+    for k = 1:numel(rej), conds = [conds, rej(k).conditions]; end %#ok<AGROW>
+    conds = EEGSource.stableUnique(conds);
+    out = zeros(1, numel(conds));
+    names = {};
+    counts = [];
+    for k = 1:numel(rej)
+        [~, j] = ismember(rej(k).conditions, conds);
+        out(j) = out(j) + rej(k).before - rej(k).after;
+        for i = 1:numel(rej(k).channels)
+            c = find(strcmp(names, rej(k).channels{i}), 1);
+            if isempty(c), names{end + 1} = rej(k).channels{i}; counts(end + 1) = 0; c = numel(names); end %#ok<AGROW>
+            counts(c) = counts(c) + rej(k).channelCounts(i); %#ok<AGROW>
+        end
+    end
+    per = arrayfun(@(c) sprintf('%s %d', conds{c}, out(c)), 1:numel(conds), 'UniformOutput', false);
+    t = sprintf('%s Rejected %d of %d (%s)', t, sum([rej.total]) - sum([rej.kept]), sum([rej.total]), strjoin(per, ', '));
+    if isempty(names)
+        t = [t '.'];
+    else
+        [~, order] = sort(counts, 'descend');
+        t = sprintf('%s, most often on %s.', t, strjoin(names(order(1:min(3, end))), ', '));
+    end
+end
+
+%% parseEvents - 'S 1 = Standard, S 2' -> events {'S 2'}, rename {'S 1', 'Standard'}; problems: bad entries
+function [events, rename, problems] = parseEvents(txt)
+    events = {};
+    rename = cell(0, 2);
+    problems = {};
+    parts = strtrim(strsplit(char(txt), {',', ';'}));
+    for i = 1:numel(parts)
+        x = parts{i};
+        if isempty(x), continue; end
+        eq = strfind(x, '=');
+        if isempty(eq)
+            events{end + 1} = x; %#ok<AGROW>
+            continue;
+        end
+        type = strtrim(x(1:eq(1) - 1));
+        name = strtrim(x(eq(1) + 1:end));
+        if isempty(type) || isempty(name) || numel(eq) > 1
+            problems{end + 1} = x; %#ok<AGROW>
+        else
+            rename(end + 1, :) = {type, name}; %#ok<AGROW>
+        end
     end
 end
 
