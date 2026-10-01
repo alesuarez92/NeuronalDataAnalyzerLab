@@ -10,6 +10,13 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+### Fixed
+
+- **Batch results table on MATLAB R2026b**: the third column is called
+  after its values (Fs_Hz, ROI, Series, Channel ...); in 0.7.0 it was
+  still called Message, the name it had in the list of queued files.
+  The window now draws the table empty before it shows other columns.
+
 ## [0.7.0] - 2026-10-01
 
 ### Added

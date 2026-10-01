@@ -618,13 +618,22 @@ classdef BatchApp < handle
         end
 
         %% showTable - Show table d (queue or summary) in the results table
-        % As cells with the column names set: with a table as Data, R2026b
-        % kept the header text of the columns shown before (the third column
-        % stayed "Message" over the summary). A new uitable per view hung.
+        % As cells with the column names set. R2026b keeps the header text
+        % of the columns the table already shows, whatever ColumnName says
+        % (the third column stayed "Message" over the summary): new column
+        % names empty the table first and let the window draw it. A new
+        % uitable per view hung.
         function showTable(app, d, widths)
             app.TableData = d;
+            names = d.Properties.VariableNames;
+            shown = app.Table.ColumnName;
+            if ~iscell(shown) || ~isequal(reshape(shown, 1, []), names)
+                app.Table.Data = {};
+                app.Table.ColumnName = {};
+                drawnow;
+            end
             app.Table.Data = table2cell(d);
-            app.Table.ColumnName = d.Properties.VariableNames;
+            app.Table.ColumnName = names;
             app.Table.ColumnWidth = widths;
             app.colourRows();
         end
