@@ -62,7 +62,9 @@ end
 %% resizeTo - Set the launcher's size and re-flow it (as a drag of the window edge does)
 % Since R2026b the window takes a new size a moment later, and a late report
 % of the size before can undo a new one: wait (up to 5 s per try, 3 tries)
-% until the window has the size asked for.
+% until the window has the size asked for. Under the virtual display of CI
+% (R2026b) the window may not grow again; it is then re-flowed for the width
+% asked for, as onResize does for a window of that width, with a warning.
 function resizeTo(app, w, h)
     for attempt = 1:3
         app.UIFig.Position(3:4) = [w h];
@@ -73,7 +75,13 @@ function resizeTo(app, w, h)
         drawnow; pause(0.2); drawnow;
         if hasSize(app, w, h), break; end
     end
-    app.onResize();
+    if hasSize(app, w, h)
+        app.onResize();
+    else
+        warning('MainTest:size', 'The window is %d x %d px, not %d x %d: re-flowed for %d px.', ...
+            round(app.UIFig.Position(3:4)), w, h, w);
+        app.layoutTiles(Main.columnsFor(w));
+    end
     drawnow;
 end
 
