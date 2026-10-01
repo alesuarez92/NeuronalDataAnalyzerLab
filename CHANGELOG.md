@@ -129,7 +129,8 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   line and the methods text give the factor. Names of electrodes on or
   beyond the head line are drawn outside it.
 - **Tests on MATLAB R2026b**: the launcher layout test waits until the
-  window has taken its new size before checking the columns.
+  window has taken its new size and the layout has settled (late size
+  events) before checking the columns.
 
 ## [0.6.0] - 2026-09-30
 

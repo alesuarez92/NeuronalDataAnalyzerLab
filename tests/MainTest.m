@@ -82,7 +82,20 @@ function resizeTo(app, w, h)
             round(app.UIFig.Position(3:4)), w, h, w);
         app.layoutTiles(Main.columnsFor(w));
     end
-    drawnow;
+    % Size events can still arrive late (R2026b) and re-flow for a size on
+    % the way: wait until the layout has stayed at the asked width for 0.5 s
+    want = Main.columnsFor(w);
+    t0 = tic;
+    calm = 0;
+    while calm < 5 && toc(t0) < 10
+        drawnow; pause(0.1);
+        if app.Columns == want
+            calm = calm + 1;
+        else
+            calm = 0;
+            app.layoutTiles(want);
+        end
+    end
 end
 
 %% hasSize - The launcher's window is w x h px
