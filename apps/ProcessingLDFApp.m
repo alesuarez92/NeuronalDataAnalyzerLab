@@ -600,16 +600,17 @@ classdef ProcessingLDFApp < handle
         end
 
         %% drawThreshold - Dashed threshold line on the stimulus axes
-        % Labelled at the right end: recordings usually start with a pulse
-        % and end with the response window after the last one.
+        % Named in the title, not by a label on the line: a label crosses a
+        % pulse wherever the pulses fall (the first or the last in the demo).
         function drawThreshold(app)
             if ~isempty(app.ThreshLine) && isgraphics(app.ThreshLine)
                 delete(app.ThreshLine);
             end
             app.ThreshLine = [];
             if isempty(app.Stim), return; end
-            app.ThreshLine = yline(app.AxStim, app.ThresholdInput.Value, '--', 'Threshold', ...
-                'Color', UITheme.plotColors(2, :), 'LabelHorizontalAlignment', 'right');
+            thr = app.ThresholdInput.Value;
+            app.ThreshLine = yline(app.AxStim, thr, '--', 'Color', UITheme.plotColors(2, :));
+            UIKit.styleAxes(app.AxStim, sprintf('Stimulus (dashed = threshold %g)', thr));
         end
 
         %% drawOnsets - Mark accepted onsets on the stimulus axes
