@@ -29,6 +29,7 @@ Utilities/TDTMatlabSDK/
 # the generators that produce it stay local.
 *.py
 *.sh
+!.claude/hooks/*.sh
 __pycache__/
 *.pyc
 *.pyo
