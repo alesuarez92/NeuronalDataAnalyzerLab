@@ -518,7 +518,7 @@ classdef EEGAnalysis
                 inBand{b} = find(freqs >= bands(b, 1) - 1e-9 & freqs <= bands(b, 2) + 1e-9);
                 if isempty(inBand{b})
                     error('NeuroAnalyzer:eeg:badOption', ['No frequency from %g to %g Hz is computed (%s band): ' ...
-                        'the frequencies run from %g to %g Hz.'], bands(b, :), bandNames{b}, freqs(1), freqs(end));
+                        'the frequencies run from %g to %g Hz.'], bands(b, 1), bands(b, 2), bandNames{b}, freqs(1), freqs(end));
                 end
             end
             % Channels: the chosen ones (default all) without the bad ones

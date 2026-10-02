@@ -677,7 +677,7 @@ function testDemoAlphaDecrease(tests)
     verifyLessThan(tests, abs(v('Novel')), 1.5, 'no change after Novel');
     bp = @(c) mean(ga.bandPct(1, w, strcmp(ga.conditions, c)));
     verifyLessThan(tests, bp('Target'), -30, 'alpha band power falls after Target');
-    verifyTrue(tests, all(all(isnan(ga.ersp(ga.freqs < 8, :, :)))), '1 s trials: no ERSP below 8 Hz');
+    verifyTrue(tests, all(isnan(ga.ersp(ga.freqs < 8, :, :)), 'all'), '1 s trials: no ERSP below 8 Hz');
     % Raw recordings cut into longer trials: a baseline well before the event
     ren = {'S 1', 'Standard'; 'S 2', 'Target'; 'S 3', 'Novel'};
     tfs = cell(1, numel(d.raw));

@@ -856,7 +856,7 @@ function testTimeFrequency(tests)
     tests.verifyLessThan(v('Target'), -2.5, 'alpha power falls after Target (simulated -6 dB, with noise)');
     tests.verifyLessThan(abs(v('Standard')), 1.5);
     tests.verifyLessThan(abs(v('Novel')), 1.5);
-    tests.verifyTrue(all(all(isnan(g.ersp(g.freqs < 8, :, :)))), 'no ERSP below 8 Hz');
+    tests.verifyTrue(all(isnan(g.ersp(g.freqs < 8, :, :)), 'all'), 'no ERSP below 8 Hz');
     d = g.ersp(:, :, strcmp(g.conditions, 'Target')) - g.ersp(:, :, strcmp(g.conditions, 'Standard'));
     [dm, k] = min(d(:));
     [fi, ti] = ind2sub(size(d), k);
