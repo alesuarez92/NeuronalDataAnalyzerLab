@@ -731,6 +731,7 @@ function testScalpMaps(tests)
     tests.verifyEqual(char(app.CondBDrop.Enable), 'on', 'B of the A minus B map');
     tests.verifyEqual(char(app.MapPanel.Visible), 'on');
     tests.verifyEqual(app.PlotGrid.RowHeight, {0, '1x'});
+    tests.verifyEqual(char(app.ErpPanel.Visible), 'off', 'no strip of the ERP plot above the maps');
     tests.verifyTrue(contains(app.StatusLabel.Text, 'not confirmed'));
     tests.verifyTrue(logical(app.setLayout('Confirm', true)));
     tests.verifyFalse(contains(app.StatusLabel.Text, 'not confirmed'));
@@ -793,6 +794,7 @@ function testScalpMaps(tests)
     app.setView('', 'Conditions');
     tests.verifyEqual(char(app.MapPanel.Visible), 'off');
     tests.verifyEqual(app.PlotGrid.RowHeight, {'1x', 0});
+    tests.verifyEqual(char(app.ErpPanel.Visible), 'on');
     tests.verifyNumElements(findall(app.AxERP, 'Type', 'line'), 3, 'one line per condition');
 
     % 7. The rodent recording: a flat map between the four screws, the VEP trough over V1

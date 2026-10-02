@@ -119,7 +119,8 @@ classdef EEGAnalysisApp < handle
         CondADrop
         CondBDrop
         AxERP
-        PlotGrid            % holds AxERP (row 1) and MapPanel (row 2); the row shown has height '1x'
+        PlotGrid            % holds ErpPanel (row 1) and MapPanel (row 2); the row shown has height '1x'
+        ErpPanel            % holds AxERP; hidden while the maps show (a 0-height row still drew its top)
         MapPanel            % the scalp maps (view Scalp maps)
         Tabs
         OverviewText
@@ -398,8 +399,9 @@ classdef EEGAnalysisApp < handle
             gp = uigridlayout(plotPanel, [2 1], 'RowHeight', {'1x', 0}, 'Padding', [4 4 4 4], 'RowSpacing', 0, ...
                 'BackgroundColor', T.cardBg);
             app.PlotGrid = gp;
-            app.AxERP = uiaxes(gp);
-            app.AxERP.Layout.Row = 1;
+            app.ErpPanel = uipanel(gp, 'BorderType', 'none', 'BackgroundColor', T.cardBg);
+            app.ErpPanel.Layout.Row = 1;
+            app.AxERP = uiaxes(uigridlayout(app.ErpPanel, [1 1], 'Padding', [0 0 0 0], 'BackgroundColor', T.cardBg));
             app.AxERP.Toolbar.Visible = 'on';
             app.MapPanel = uipanel(gp, 'BorderType', 'none', 'BackgroundColor', T.cardBg, 'Visible', 'off');
             app.MapPanel.Layout.Row = 2;
@@ -2019,6 +2021,7 @@ classdef EEGAnalysisApp < handle
                 app.PlotGrid.RowHeight = {'1x', 0};
             end
             app.MapPanel.Visible = onoff(on);
+            app.ErpPanel.Visible = onoff(~on);
         end
 
         %% plotMaps - Scalp maps of the shown participant, one colour scale for all
