@@ -57,6 +57,13 @@
 %       info: nTrials (max over frequencies), nTrialsPerFreq, nOnsets,
 %       onsets (epoch inside the recording), freqs, nCycles, meanPower,
 %       baselinePower, window, baselineWindow.
+%   h = TimeFrequency.supportSamples(fs, freqs, nCycles)
+%       Half-length in samples of the Morlet wavelet of each frequency
+%       (its support, +/- 3 s, with s = nCycles / (2*pi*f); default 7
+%       cycles), as morletTF and ersp use it. In a trial of n samples, the
+%       wavelet of frequency i lies inside the trial at samples
+%       h(i)+1 .. n-h(i): only there is its value the same as from a
+%       longer recording (EEGAnalysis.timeFrequency).
 %   bands = TimeFrequency.defaultBands()
 %       Conventional LFP/EEG bands (delta 1-4, theta 4-8, alpha 8-13,
 %       beta 13-30, gamma 30-80 Hz) as a struct array with name / range.
@@ -297,6 +304,13 @@ classdef TimeFrequency
             info = struct('nTrials', max(nTrials), 'nTrialsPerFreq', nTrials, 'nOnsets', numel(onsets), ...
                 'onsets', onsets(used), 'freqs', freqs, 'nCycles', nCycles, 'meanPower', meanPow, ...
                 'baselinePower', basePow, 'window', window, 'baselineWindow', baselineWindow);
+        end
+
+        %% supportSamples - Half-length (samples) of the wavelet of each frequency
+        function h = supportSamples(fs, freqs, nCycles)
+            if nargin < 3 || isempty(nCycles), nCycles = 7; end
+            [freqs, nCycles] = TimeFrequency.checkFreqs(freqs, nCycles, fs);
+            h = arrayfun(@(f, nc) TimeFrequency.halfLength(fs, f / nc), freqs, nCycles);
         end
 
         %% defaultBands - Conventional band names and limits (Hz)

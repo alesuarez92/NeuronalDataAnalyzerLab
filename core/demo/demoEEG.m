@@ -16,7 +16,10 @@
 %     P1    +2 uV at 60 ms, largest at Oz
 %     N1    -5 uV at 100 ms, largest at Cz
 %     P300  at 350 ms, largest at Pz: Target 10 > Novel 6 > Standard 2 uV
-%     alpha 10 Hz, 4 uV, largest over O1 / Oz / O2, random phase per trial
+%     alpha 10 Hz, 4 uV, largest over O1 / Oz / O2, random phase per trial;
+%           after Target its amplitude halves from 350 to 650 ms (100 ms
+%           ramps before and after): power -75% (-6 dB) there, an
+%           event-related desynchronization (ERD) for time-frequency
 %   plus 1/f and white noise and an average reference. Each participant
 %   scales the amplitudes (about +-10%) and shifts N1 and P300 (about
 %   +-10 ms). The history says: band-pass 0.1-30 Hz, average reference,
@@ -32,7 +35,8 @@
 %   (online reference, not in the data; azimuth 0, elevation 67.5 deg on
 %   the sphere), markers 'S  1' / 'S  2' / 'S  3' = Standard (40) / Target
 %   (15) / Novel (15), 1.2-1.5 s apart, from 2 s. The same P1 / N1 / P300 /
-%   alpha as the scalp case (P300 at Pz: Target > Novel > Standard), plus:
+%   alpha (and its decrease after Target) as the scalp case (P300 at Pz:
+%   Target > Novel > Standard), plus:
 %     electrode offsets (+-400 uV) and linear drift (+-1 uV/s): a high-pass
 %       filter removes them
 %     50 Hz line noise, 5-15 uV per channel: a notch or a low-pass removes it
@@ -102,7 +106,7 @@ function files = demoEEG(folder, varargin)
     for k = 1:2:numel(varargin)
         o.(varargin{k}) = varargin{k + 1};
     end
-    cacheVersion = 3;
+    cacheVersion = 4;                    % 4: alpha decrease after Target
     cached = nargin < 1 || isempty(folder);
     if cached
         folder = fullfile(DemoData.folder(), 'eeg');
@@ -175,6 +179,7 @@ function [out, truth] = writeScalp(folder, nPart, formats)
     w = @(name, sig) exp(-(acos(max(-1, min(1, u * u(ch(name), :)'))) / sig) .^ 2);
     g = @(mu, sd) exp(-0.5 * ((times - mu) / sd) .^ 2);
     wP1 = w('Oz', 0.6); wN1 = w('Cz', 0.6); wP3 = w('Pz', 0.8); wA = w('Oz', 0.7);
+    erd = alphaEnvelope(times);                                 % alpha after a Target
 
     truth = struct('labels', {labels}, 'azel', azel, 'headRadius', R, 'posEEGLAB', posEEGLAB, ...
         'posRAS', posRAS, 'fs', fs, 'times', times, 'conditionNames', {names}, 'trialsPerCondition', nPer, ...
@@ -182,7 +187,7 @@ function [out, truth] = writeScalp(folder, nPart, formats)
         'p1', struct('channel', 'Oz', 'latency', 0.06, 'amplitude', 2), ...
         'n1', struct('channel', 'Cz', 'latency', 0.1, 'amplitude', -5), ...
         'p300', struct('channel', 'Pz', 'latency', 0.35, 'amplitude', p300), ...
-        'alpha', struct('channels', {{'O1', 'Oz', 'O2'}}, 'frequency', 10, 'amplitude', 4), ...
+        'alpha', alphaTruth(), ...
         'participants', struct('condition', {}, 'rejected', {}, 'ampScale', {}, 'latShift', {}, 'data', {}));
     out = struct('eeglab', {}, 'eeglabfdt', {}, 'fieldtrip', {}, 'brainvision', {}, 'matrix', {});
     locs = struct('label', labels, 'x', num2cell(posEEGLAB(:, 1)'), 'y', num2cell(posEEGLAB(:, 2)'), ...
@@ -199,7 +204,9 @@ function [out, truth] = writeScalp(folder, nPart, formats)
         for k = 1:n
             erp = amp * (2 * wP1 * g(0.06, 0.012) - 5 * wN1 * g(0.1 + lat, 0.015) ...
                 + p300(condAll(k)) * wP3 * g(0.35 + lat, 0.06));
-            X(:, :, k) = erp + 4 * wA * sin(2 * pi * 10 * times + 2 * pi * rand(rs));
+            a = 4 * wA * sin(2 * pi * 10 * times + 2 * pi * rand(rs));
+            if condAll(k) == 2, a = a .* erd; end
+            X(:, :, k) = erp + a;
         end
         X = X + 3 * permute(reshape(pinkNoise(rs, nS, nCh * n), nS, nCh, n), [2 1 3]) ...
             + randn(rs, nCh, nS, n);
@@ -428,6 +435,7 @@ function [out, truth] = writeRaw(folder, nPart, formats)
 
     truth = struct('labels', {labels}, 'reference', 'FCz', 'referenceAzEl', azel(end, :), 'fs', fs, ...
         'conditionNames', {names}, 'markers', {markers}, 'trialsPerCondition', nPer, 'badChannel', 'T7', ...
+        'alpha', alphaTruth(), ...
         'lineFrequency', 50, 'blinkAmplitude', 150, 'participants', struct('condition', {}, 'onsets', {}, ...
         'blinkTrials', {}, 'blinkBetween', {}, 'ampScale', {}, 'latShift', {}, 'n1CzFCz', {}, ...
         'n1CzAverage', {}, 'dc', {}, 'lineAmplitude', {}, 'data', {}));
@@ -446,7 +454,12 @@ function [out, truth] = writeRaw(folder, nPart, formats)
         nS = T * fs;
         t = (0:nS - 1) / fs;
         % True potentials at the 32 channels and FCz (against infinity)
-        V = 3 * pinkNoise(rs, nS, nCh + 1)' + randn(rs, nCh + 1, nS) + 4 * wA * sin(2 * pi * 10 * t + 2 * pi * rand(rs));
+        erd = ones(1, nS);                                       % alpha halved after each Target
+        for k = find(cond == 2)
+            erd = erd .* alphaEnvelope(t - onsets(k));
+        end
+        V = 3 * pinkNoise(rs, nS, nCh + 1)' + randn(rs, nCh + 1, nS) ...
+            + 4 * wA * (erd .* sin(2 * pi * 10 * t + 2 * pi * rand(rs)));
         blinkTrials = sort(randperm(rs, n, nBlinkTrials));
         roomy = find(isi >= 1.4);
         roomy = roomy(~ismember(roomy, blinkTrials) & ~ismember(roomy + 1, blinkTrials));
@@ -486,6 +499,25 @@ function [out, truth] = writeRaw(folder, nPart, formats)
         writeBrainVision(out(p).brainvision, eeg, 'Positions', posRAS(1:nCh, :), 'Reference', 'FCz', ...
             'Comment', amp32);
     end
+end
+
+%% alphaEnvelope - Alpha amplitude at times tau (s) after a Target event
+% 1, falling to 0.5 from 250 to 350 ms, 0.5 until 650 ms, back to 1 at 750
+% ms (raised-cosine ramps); 1 before and after.
+function e = alphaEnvelope(tau)
+    e = ones(size(tau));
+    r = tau > 0.25 & tau < 0.35;
+    e(r) = 1 - 0.25 * (1 - cos(pi * (tau(r) - 0.25) / 0.1));
+    e(tau >= 0.35 & tau <= 0.65) = 0.5;
+    r = tau > 0.65 & tau < 0.75;
+    e(r) = 0.5 + 0.25 * (1 - cos(pi * (tau(r) - 0.65) / 0.1));
+end
+
+%% alphaTruth - The simulated alpha and its decrease after Target (known answers)
+function a = alphaTruth()
+    a = struct('channels', {{'O1', 'Oz', 'O2'}}, 'frequency', 10, 'amplitude', 4, ...
+        'decrease', struct('condition', 'Target', 'from', 0.35, 'to', 0.65, 'ramp', 0.1, ...
+        'amplitudeFactor', 0.5, 'powerChangePct', -75, 'powerChangeDb', 10 * log10(0.25)));
 end
 
 %% pinkNoise - nS x m columns of 1/f noise with unit standard deviation

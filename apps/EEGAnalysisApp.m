@@ -29,11 +29,17 @@
 %   6 Statistics    (conditions compared within participants: paired
 %                    t-test / Wilcoxon for two, repeated-measures ANOVA /
 %                    Friedman for more; core/GroupStats.m)
-%   7 Save          (measures as .csv, everything as .mat; sessions)
+%   7 Time-frequency (Morlet wavelet power of every trial at chosen
+%                    channels, per participant and condition: ERSP, ITPC
+%                    and the power of one band; EEGAnalysis.timeFrequency;
+%                    values only where the whole wavelet lies inside the
+%                    trial)
+%   8 Save          (measures as .csv, everything as .mat; sessions)
 % and on the right the ERP plot (conditions, all channels, a difference
 % wave, or scalp maps of the window of step 5: one per condition and A
-% minus B, core/ScalpMap.m; one participant or the grand average) above
-% the tabs
+% minus B, core/ScalpMap.m; or the time-frequency of step 7: ERSP per
+% condition and A minus B, ITPC per condition, band power; one
+% participant or the grand average) above the tabs
 % Overview (what each file holds and what was done to it) |
 % Measures | Statistics. The computations are in core/EEGAnalysis.m.
 % Step 2 always starts again from the files as read and step 3 from the
@@ -52,7 +58,8 @@
 % showERPs(), setView(participant, view, condA, condB), showScalpMaps([from
 % to] s), setMeasure(kind, polarity, [from to] s, channels), measure(),
 % setStatsMethod(m),
-% compareConditions(), exportResultsTo(path). Sessions:
+% compareConditions(), setTimeFrequency([from to] Hz, cycles, [from to] s,
+% channels, band; [] = unchanged), showTimeFrequency(), exportResultsTo(path). Sessions:
 % saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
 % sessionState(), restoreSession(s).
 % =========================================================================
@@ -111,6 +118,16 @@ classdef EEGAnalysisApp < handle
         StatsBtn
         StatsInfo
         % Step 7
+        TFFromEdit          % Hz
+        TFToEdit            % Hz
+        TFCyclesEdit        % Morlet wavelet cycles
+        TFBaseFromEdit      % ms
+        TFBaseToEdit        % ms
+        TFChannelsEdit      % text: 'Oz' or 'O1, Oz, O2' ('' = the channels of step 4)
+        TFBandDrop          % band of Band power (TimeFrequency.defaultBands)
+        TFBtn
+        TFInfo
+        % Step 8
         ExportBtn
         SessionBtns
         % Right side
@@ -149,6 +166,9 @@ classdef EEGAnalysisApp < handle
         StatsResult = []    % GroupStats.compare result
         ScalpMaps = []      % maps last drawn (ScalpMap.make results plus name), [] = none
         MapSettings = []    % window [from to] s, participant, condA, condB of ScalpMaps
+        TFs = {}            % EEGAnalysis.timeFrequency per participant (step 7)
+        GrandTF = []        % grandTimeFrequency of TFs (several participants)
+        TFSettings = []     % currentTF() used for TFs
         % Electrode layout (step 1)
         Layout = []         % EEGLayout of participant 1 (core/EEGLayout.m: kind, labels, pos, ...)
         LayoutSettings = [] % source 'auto' | 'template' | 'file', positionsFile, edits, confirmed
@@ -159,7 +179,8 @@ classdef EEGAnalysisApp < handle
 
     properties(Constant)
         GrandLabel = 'All participants (grand average)'
-        Views = {'Conditions', 'All channels (butterfly)', 'Difference wave', 'Scalp maps'}
+        Views = {'Conditions', 'All channels (butterfly)', 'Difference wave', 'Scalp maps', ...
+            ['Time' char(8211) 'frequency (ERSP)'], 'Phase locking (ITPC)', 'Band power'}
         MeasureKinds = {'Mean amplitude', 'Peak amplitude'}
         NotchItems = {'Off', '50 Hz (+ harmonics)', '60 Hz (+ harmonics)'}
         ReferenceModes = {'As recorded', 'Average', 'Linked mastoids', 'Channels'}
@@ -187,10 +208,10 @@ classdef EEGAnalysisApp < handle
             app.W.Body.RowHeight = {'1x'};
             app.W.Body.ColumnWidth = {360, '1x'};
 
-            left = uigridlayout(app.W.Body, [8 1], 'Padding', [0 0 0 0], 'RowSpacing', 10, ...
+            left = uigridlayout(app.W.Body, [9 1], 'Padding', [0 0 0 0], 'RowSpacing', 10, ...
                 'BackgroundColor', T.bgGray, 'Scrollable', 'on');
             left.Layout.Row = 1; left.Layout.Column = 1;
-            heights = cell(1, 8);
+            heights = cell(1, 9);
             ch = T.controlHeight; bh = T.buttonHeight;
 
             % --- 1 Load EEG ---
@@ -359,16 +380,47 @@ classdef EEGAnalysisApp < handle
             app.StatsInfo = infoLabel(g, '', 'Result of the test');
             app.StatsInfo.Layout.Row = 4; app.StatsInfo.Layout.Column = [1 2];
 
-            % --- 7 Save ---
-            [p, g, heights{7}] = stepCard(left, 7, 'Save', {bh, UIKit.sessionButtonsHeight()});
+            % --- 7 Time-frequency ---
+            [p, g, heights{7}] = stepCard(left, 7, ['Time' char(8211) 'frequency'], {ch, ch, ch, ch, ch, bh, 120});
             p.Layout.Row = 7;
+            [app.TFFromEdit, app.TFToEdit] = rangeRow(g, 2, 'Frequencies (Hz)', 4, 40, ...
+                ['Lowest and highest frequency, in 1 Hz steps (below half the sampling rate). Low frequencies ' ...
+                 'need long trials: their wavelets are long.'], [0 100000]);
+            app.TFCyclesEdit = addField(g, 3, 'Wavelet cycles', 'numeric', 3, ...
+                ['Cycles of each Morlet wavelet. Fewer cycles: shorter wavelets, so values nearer the trial ' ...
+                 'edges and finer timing, but coarser frequencies. 3 suits trials of about 1 s; 5 to 7 longer ' ...
+                 'trials.'], [0.5 50]);
+            [app.TFBaseFromEdit, app.TFBaseToEdit] = rangeRow(g, 4, 'Baseline (ms)', -200, 0, ...
+                ['Reference window before the event: ERSP is the power in dB against its mean power there, ' ...
+                 'band power the % change from it (each condition against its own baseline)'], [-60000 60000]);
+            app.TFChannelsEdit = addField(g, 5, 'Channels', 'text', '', ...
+                ['Channels separated by commas, e.g. Oz or O1, Oz, O2 (any case; their power is averaged). ' ...
+                 'Empty = the channels of step 4.']);
+            bands = TimeFrequency.defaultBands();
+            bandItems = arrayfun(@(b) sprintf('%s (%g%s%g Hz)', b.name, b.range(1), char(8211), b.range(2)), ...
+                bands, 'UniformOutput', false);
+            app.TFBandDrop = addField(g, 6, 'Band', 'dropdown', {bandItems, bandItems{3}}, ...
+                ['Frequency band of Band power (Show: Band power): the mean power over its frequencies, as % ' ...
+                 'change from the baseline. Band limits are conventions; they differ between labs and species.']);
+            app.TFBtn = UIKit.button(g, ['Time' char(8211) 'frequency'], @(~,~)app.showTimeFrequency(), 'secondary', ...
+                ['Wavelet power of every trial at these channels, per participant and condition (and across ' ...
+                 'participants): ERSP, phase locking (ITPC) and band power, in the plot above (Show). A value is ' ...
+                 'shown only where the whole wavelet lies inside the trial.']);
+            app.TFBtn.Layout.Row = 7; app.TFBtn.Layout.Column = [1 2];
+            app.TFInfo = infoLabel(g, '', ['What the time' char(8211) 'frequency is made of, and what the trial ' ...
+                'length leaves blank']);
+            app.TFInfo.Layout.Row = 8; app.TFInfo.Layout.Column = [1 2];
+
+            % --- 8 Save ---
+            [p, g, heights{8}] = stepCard(left, 8, 'Save', {bh, UIKit.sessionButtonsHeight()});
+            p.Layout.Row = 8;
             app.ExportBtn = UIKit.button(g, ['Export results' char(8230)], @(~,~)app.exportDialog(), 'secondary', ...
                 ['.csv: one row per participant and condition (value in uV, latency in s, trials, edge warning), ' ...
                  'ready for a spreadsheet or statistics program; .mat: everything (ERPs, measures, statistics)']);
             app.ExportBtn.Layout.Row = 2; app.ExportBtn.Layout.Column = [1 2];
             app.SessionBtns = UIKit.sessionButtons(g, app);
             app.SessionBtns.Grid.Layout.Row = 3; app.SessionBtns.Grid.Layout.Column = [1 2];
-            heights{8} = '1x';
+            heights{9} = '1x';
             left.RowHeight = heights;
 
             % --- Right: plot bar, ERP plot and tabs ---
@@ -386,15 +438,16 @@ classdef EEGAnalysisApp < handle
                 'ValueChangedFcn', @(~,~)app.onView(), 'Tooltip', ...
                 ['Conditions: one line per condition at the chosen channels (shade = SEM). All channels: every ' ...
                  'channel of one condition (chosen channels in colour). Difference wave: condition A minus B. ' ...
-                 'Scalp maps: the mean voltage in the window of step 5 over the head, per condition and A minus B.']);
+                 'Scalp maps: the mean voltage in the window of step 5 over the head, per condition and A minus B. ' ...
+                 'Time' char(8211) 'frequency (ERSP), Phase locking (ITPC), Band power: the results of step 7.']);
             barLabel(bar, 'Condition');
             app.CondADrop = uidropdown(bar, 'Items', {'(none)'}, 'Value', '(none)', ...
                 'ValueChangedFcn', @(~,~)app.plotERP(), 'Tooltip', ...
-                'Condition shown (All channels) or A (Difference wave; the A minus B map of Scalp maps)');
+                'Condition shown (All channels) or A (Difference wave; the A minus B map of Scalp maps and ERSP)');
             barLabel(bar, 'minus');
             app.CondBDrop = uidropdown(bar, 'Items', {'(none)'}, 'Value', '(none)', ...
                 'ValueChangedFcn', @(~,~)app.plotERP(), 'Tooltip', ...
-                'Condition B, subtracted from A (Difference wave; the A minus B map of Scalp maps)');
+                'Condition B, subtracted from A (Difference wave; the A minus B map of Scalp maps and ERSP)');
             plotPanel = uipanel(right, 'BackgroundColor', T.cardBg, 'BorderType', 'line', 'HighlightColor', T.cardBorder);
             gp = uigridlayout(plotPanel, [2 1], 'RowHeight', {'1x', 0}, 'Padding', [4 4 4 4], 'RowSpacing', 0, ...
                 'BackgroundColor', T.cardBg);
@@ -931,7 +984,10 @@ classdef EEGAnalysisApp < handle
             app.Rejections = rej;
             if continuous, app.TrialWindow = ts.window; else, app.TrialWindow = []; end
             app.clearResults();
-            if continuous && ts.window(1) < 0, app.BaselineFromEdit.Value = ts.window(1) * 1000; end
+            if continuous && ts.window(1) < 0
+                app.BaselineFromEdit.Value = ts.window(1) * 1000;
+                app.TFBaseFromEdit.Value = ts.window(1) * 1000;
+            end
             app.CutInfo.Text = trialsText(eegs, rej, ifelse(continuous, ts.window, []));
             app.CutInfo.FontColor = UITheme.success;
             app.fillOverview();
@@ -1107,7 +1163,7 @@ classdef EEGAnalysisApp < handle
             if numel(app.ERPs) > 1
                 next = 'Next: Compare conditions (step 6).';
             else
-                next = 'Statistics need two or more participants; export the values (step 7).';
+                next = 'Statistics need two or more participants; export the values (step 8).';
             end
             UIKit.setStatus(app.StatusLabel, sprintf('Measured %d participant(s). %s', numel(r), next), ...
                 ifelse(nEdge > 0, 'warning', 'success'));
@@ -1146,12 +1202,98 @@ classdef EEGAnalysisApp < handle
             app.fillStats();
             app.selectTab('Statistics');
             app.updateControls();
-            UIKit.setStatus(app.StatusLabel, [res.summary ' Next: Save (step 7).'], 'success');
+            UIKit.setStatus(app.StatusLabel, [res.summary ' Next: Save (step 8), or the time' char(8211) ...
+                'frequency of the trials (step 7).'], 'success');
             ok = true;
         end
 
         %% ----------------------------------------------------------------
-        %% Step 7: save
+        %% Step 7: time-frequency
+        %% setTimeFrequency - [from to] Hz, cycles, baseline [from to] s, channels ({} = those of step 4), band name
+        % [] leaves a setting as it is.
+        function setTimeFrequency(app, freqs, cycles, baseline, chans, band)
+            if nargin >= 2 && ~isempty(freqs)
+                app.TFFromEdit.Value = freqs(1);
+                app.TFToEdit.Value = freqs(end);
+            end
+            if nargin >= 3 && ~isempty(cycles), app.TFCyclesEdit.Value = cycles; end
+            if nargin >= 4 && ~isempty(baseline)
+                app.TFBaseFromEdit.Value = baseline(1) * 1000;
+                app.TFBaseToEdit.Value = baseline(2) * 1000;
+            end
+            if nargin >= 5 && ~(isnumeric(chans) && isempty(chans)), app.TFChannelsEdit.Value = channelText(chans); end
+            if nargin >= 6 && ~isempty(band)
+                k = find(strncmpi(app.TFBandDrop.Items, band, numel(band)), 1);
+                if ~isempty(k), app.TFBandDrop.Value = app.TFBandDrop.Items{k}; end
+            end
+            app.updateControls();
+        end
+
+        %% showTimeFrequency - Wavelet power, ERSP, ITPC and band power of every participant (step 7)
+        % Shows the ERSP (Show: Time-frequency) unless another view of step 7 is shown.
+        function ok = showTimeFrequency(app)
+            ok = false;
+            if isempty(app.EEGs)
+                UIKit.setStatus(app.StatusLabel, 'Cut the recordings into trials first (step 3).', 'warning');
+                return;
+            end
+            o = app.currentTF();
+            f = o.frequencies;
+            nyq = app.EEGs{1}.fs / 2;
+            if ~(f(1) > 0 && f(2) > f(1) && f(2) < nyq)
+                UIKit.setStatus(app.StatusLabel, sprintf(['The frequencies must run from above 0 Hz to a higher ' ...
+                    'frequency below half the sampling rate (%g Hz).'], nyq), 'warning');
+                return;
+            end
+            if o.band(1) < f(1) - 1e-9 || o.band(2) > f(2) + 1e-9
+                UIKit.setStatus(app.StatusLabel, sprintf(['The %s band (%g to %g Hz) goes beyond the frequencies ' ...
+                    '(%g to %g Hz): widen them or choose another band.'], o.bandName, o.band, f), 'warning');
+                return;
+            end
+            freqs = f(1):1:f(2);
+            if freqs(end) < f(2) - 1e-9, freqs(end + 1) = f(2); end
+            dlg = UIKit.busy(app.UIFig, ['Computing the time' char(8211) 'frequency' char(8230)]);
+            try
+                tfs = cellfun(@(e) EEGAnalysis.timeFrequency(e, 'Channels', o.channels, 'Frequencies', freqs, ...
+                    'Cycles', o.cycles, 'Baseline', o.baseline, 'Bands', o.band, 'BandNames', {o.bandName}), ...
+                    app.EEGs, 'UniformOutput', false);
+                grand = [];
+                if numel(tfs) > 1, grand = EEGAnalysis.grandTimeFrequency(tfs); end
+            catch ME
+                UIKit.done(dlg);
+                UIKit.setStatus(app.StatusLabel, sprintf('Time%sfrequency not computed: %s', char(8211), ME.message), ...
+                    'error');
+                return;
+            end
+            UIKit.done(dlg);
+            app.TFs = tfs;
+            app.GrandTF = grand;
+            app.TFSettings = o;
+            e = tfs{1};
+            app.TFInfo.Text = EEGAnalysis.describeTimeFrequency(e);
+            blank = ~all(any(e.valid, 2)) || any(any(e.valid, 2)' & e.baselineSamples == 0);
+            if ~isempty(grand) && ~isempty(grand.notes)
+                app.TFInfo.Text = [app.TFInfo.Text ' ' strjoin(grand.notes, ' ')];
+            end
+            app.TFInfo.FontColor = ifelse(blank, UITheme.warning, UITheme.sectionTitleColor);
+            app.fillConditionDrops();
+            if ~any(strcmp(app.ViewDrop.Value, app.Views(5:7))), app.ViewDrop.Value = app.Views{5}; end
+            app.updateControls();
+            plotted = app.plotERP();
+            ok = true;
+            if ~plotted, return; end
+            if ~any(any(e.valid))
+                UIKit.setStatus(app.StatusLabel, app.TFInfo.Text, 'warning');
+                return;
+            end
+            UIKit.setStatus(app.StatusLabel, sprintf(['Time%sfrequency of %d participant(s) %s. Show: ' ...
+                'Time%sfrequency (ERSP), Phase locking (ITPC) or Band power.%s'], char(8211), numel(tfs), ...
+                tfWhere(e.channels), char(8211), ifelse(blank, ' Grey: no value (see step 7).', '')), ...
+                ifelse(blank, 'warning', 'success'));
+        end
+
+        %% ----------------------------------------------------------------
+        %% Step 8: save
         %% exportDialog - Choose .csv or .mat
         function exportDialog(app)
             start = ProjectManager.getExportDir();
@@ -1166,11 +1308,12 @@ classdef EEGAnalysisApp < handle
         %% exportResultsTo - Write the measures (.csv) or everything (.mat), by extension
         function ok = exportResultsTo(app, filePath)
             ok = false;
-            if isempty(app.Measures)
-                UIKit.setStatus(app.StatusLabel, 'Measure first (step 5).', 'warning');
+            [~, name, ext] = fileparts(filePath);
+            if isempty(app.Measures) && (isempty(app.TFs) || ~strcmpi(ext, '.mat'))
+                UIKit.setStatus(app.StatusLabel, ['Measure first (step 5); a .mat file also takes the ' ...
+                    'time' char(8211) 'frequency alone.'], 'warning');
                 return;
             end
-            [~, name, ext] = fileparts(filePath);
             try
                 if strcmpi(ext, '.mat')
                     results = app.resultsStruct(); %#ok<NASGU>
@@ -1311,6 +1454,26 @@ classdef EEGAnalysisApp < handle
                 st.summary{end + 1} = sprintf('Scalp maps (%s): %s. %s', app.MapSettings.participant, ...
                     mapWindowText(app.MapSettings.window), ScalpMap.describe(M(1)));
             end
+            % Step 7: the settings used (or those in the window when not computed) and the view shown
+            st.settings.tfShown = ~isempty(app.TFs);
+            if st.settings.tfShown, st.settings.timeFrequency = app.TFSettings;
+            else, st.settings.timeFrequency = app.currentTF(); end
+            st.settings.tfPlot = [];
+            if any(strcmp(app.ViewDrop.Value, app.Views(5:7)))
+                st.settings.tfPlot = struct('view', app.ViewDrop.Value, 'participant', app.ParticipantDrop.Value, ...
+                    'condA', app.CondADrop.Value, 'condB', app.CondBDrop.Value);
+            end
+            if st.settings.tfShown
+                e = app.analysisTF(1);
+                has = any(e.valid, 2)';
+                withBase = has & e.baselineSamples > 0;
+                st.results.timeFrequency = struct('conditions', {e.conditions}, 'trials', e.trials, ...
+                    'participants', numel(app.TFs), 'freqs', e.freqs, 'cycles', e.cycles, 'baseline', e.baseline, ...
+                    'channels', {e.channels}, 'band', e.bands(1, :), 'bandName', e.bandNames{1}, ...
+                    'lowestWithValues', firstOr(e.freqs(has), NaN), 'lowestWithBaseline', ...
+                    firstOr(e.freqs(withBase), NaN), 'text', EEGAnalysis.describeTimeFrequency(app.TFs{1}));
+                st.summary{end + 1} = ['Time' char(8211) 'frequency: ' st.results.timeFrequency.text];
+            end
             if isempty(app.Measures), return; end
             st.results.measureHeader = {'Participant', 'Condition', 'Value_uV', 'Latency_s', 'Trials', 'PeakAtEdge'};
             st.results.measures = app.measureRows(false);
@@ -1403,6 +1566,20 @@ classdef EEGAnalysisApp < handle
                 app.updateControls();
                 if ~app.plotERP(), return; end
             end
+            if isfield(cfg, 'timeFrequency') && isstruct(cfg.timeFrequency)
+                tq = cfg.timeFrequency;
+                app.setTimeFrequency(tq.frequencies, tq.cycles, tq.baseline, tq.channelsTyped, tq.bandName);
+                if cfg.tfShown && ~app.showTimeFrequency(), return; end
+                tp = cfg.tfPlot;
+                if isstruct(tp) && ~isempty(tp) && any(strcmp(app.Views, tp.view))
+                    if any(strcmp(app.ParticipantDrop.Items, tp.participant)), app.ParticipantDrop.Value = tp.participant; end
+                    if any(strcmp(app.CondADrop.Items, tp.condA)), app.CondADrop.Value = tp.condA; end
+                    if any(strcmp(app.CondBDrop.Items, tp.condB)), app.CondBDrop.Value = tp.condB; end
+                    app.ViewDrop.Value = tp.view;
+                    app.updateControls();
+                    app.plotERP();
+                end
+            end
             app.updateControls();
             ok = true;
         end
@@ -1489,6 +1666,7 @@ classdef EEGAnalysisApp < handle
                 app.CutInfo.FontColor = UITheme.bodyColor;
                 app.CutBtn.Text = 'Apply rejection';
                 app.BaselineFromEdit.Value = e1.times(1) * 1000;
+                if e1.times(1) < 0, app.TFBaseFromEdit.Value = e1.times(1) * 1000; end
             else
                 nEv = cellfun(@(e) numel(e.events), eegs);
                 app.FileInfo.Text = sprintf('%d participant(s)  ·  %d channels at %g Hz  ·  continuous, %s events', ...
@@ -1532,11 +1710,13 @@ classdef EEGAnalysisApp < handle
             app.ERPs = {}; app.Grand = []; app.ERPSettings = [];
             app.Measures = {}; app.MeasureSettings = []; app.StatsResult = [];
             app.ScalpMaps = []; app.MapSettings = [];
+            app.TFs = {}; app.GrandTF = []; app.TFSettings = [];
             if ~isempty(app.MeasuresTable) && isvalid(app.MeasuresTable)
                 app.fillMeasures();
                 app.fillStats();
                 app.ErpInfo.Text = '';
                 app.MeasureInfo.Text = '';
+                app.TFInfo.Text = '';
             end
         end
 
@@ -1912,6 +2092,16 @@ classdef EEGAnalysisApp < handle
         %% plotERP - Conditions, butterfly, difference wave or scalp maps of the shown participant(s)
         % ok: false when the plot could not be made (the axes and the status say why)
         function ok = plotERP(app)
+            tfView = find(strcmp(app.Views(5:7), app.ViewDrop.Value), 1);
+            if ~isempty(tfView)
+                app.showMapPanel(tfView < 3);
+                if tfView == 3
+                    ok = app.plotBandPower();
+                else
+                    ok = app.plotTF(ifelse(tfView == 1, 'ersp', 'itpc'));
+                end
+                return;
+            end
             mapsView = strcmp(app.ViewDrop.Value, app.Views{4}) && ~isempty(app.ERPs);
             app.showMapPanel(mapsView);
             if mapsView
@@ -2113,6 +2303,176 @@ classdef EEGAnalysisApp < handle
             end
         end
 
+        %% currentTF - Step 7 settings: frequencies [from to] Hz, cycles, baseline [from to] s, channels, band
+        % channels: those typed, else those of step 4 ({} = all); channelsTyped: the field as typed.
+        function o = currentTF(app)
+            bands = TimeFrequency.defaultBands();
+            k = find(strcmp(app.TFBandDrop.Items, app.TFBandDrop.Value), 1);
+            chans = channelList(app.TFChannelsEdit.Value);
+            if isempty(chans), chans = channelList(app.ChannelsEdit.Value); end
+            o = struct('frequencies', [app.TFFromEdit.Value app.TFToEdit.Value], 'cycles', app.TFCyclesEdit.Value, ...
+                'baseline', [app.TFBaseFromEdit.Value app.TFBaseToEdit.Value] / 1000, 'channels', {chans}, ...
+                'channelsTyped', {channelList(app.TFChannelsEdit.Value)}, 'band', bands(k).range, ...
+                'bandName', bands(k).name);
+        end
+
+        %% analysisTF - Time-frequency of the shown participant (1 = grand average with several)
+        function e = analysisTF(app, k)
+            if k == 1 && ~isempty(app.GrandTF)
+                e = app.GrandTF;
+            else
+                if ~isempty(app.GrandTF), k = k - 1; end
+                e = app.TFs{max(1, min(k, numel(app.TFs)))};
+                e.trials = e.n;
+            end
+        end
+
+        %% plotTF - ERSP (per condition and A minus B, one colour scale) or ITPC (per condition) images
+        % which: 'ersp' | 'itpc'. Grey: no value (the wavelet would leave the trial).
+        function ok = plotTF(app, which)
+            ok = false;
+            T = UITheme;
+            delete(app.MapPanel.Children);
+            g = uigridlayout(app.MapPanel, [2 1], 'RowHeight', {'fit', '1x'}, 'Padding', [4 2 4 2], ...
+                'RowSpacing', 4, 'BackgroundColor', T.cardBg);
+            info = uilabel(g, 'Text', '', 'WordWrap', 'on', 'FontSize', T.fontSmall + 1, ...
+                'FontColor', T.sectionTitleColor);
+            if isempty(app.TFs)
+                info.Text = ifelse(isempty(app.EEGs), 'Cut the recordings into trials (step 3), then compute the ', ...
+                    'Click the button of step 7 to compute the ');
+                info.Text = [info.Text 'time' char(8211) 'frequency.'];
+                return;
+            end
+            e = app.analysisTF(app.shownIndex());
+            isErsp = strcmp(which, 'ersp');
+            grand = ~isempty(app.GrandTF) && app.shownIndex() == 1;
+            C = numel(e.conditions);
+            Z = cell(1, C);
+            names = cell(1, C);
+            for c = 1:C
+                if isErsp, Z{c} = e.ersp(:, :, c); else, Z{c} = e.itpc(:, :, c); end
+                if grand, nTxt = sprintf('%d participants', e.n(c)); else, nTxt = sprintf('%d trials', e.n(c)); end
+                names{c} = sprintf('%s (%s)', e.conditions{c}, nTxt);
+            end
+            a = app.CondADrop.Value; b = app.CondBDrop.Value;
+            ia = find(strcmp(e.conditions, a), 1); ib = find(strcmp(e.conditions, b), 1);
+            if isErsp && C > 1 && ~isempty(ia) && ~isempty(ib) && ia ~= ib
+                Z{end + 1} = e.ersp(:, :, ia) - e.ersp(:, :, ib);
+                names{end + 1} = sprintf('%s minus %s', a, b);
+            end
+            n = numel(Z);
+            vals = cell2mat(cellfun(@(z) z(isfinite(z))', Z, 'UniformOutput', false));
+            if isErsp
+                m = max([abs(vals), 0]);
+                if m == 0, m = 1; end
+                lim = [-m m];
+                cmap = ScalpMap.colormap();
+                unit = 'dB';
+            else
+                lim = [0 1];
+                cmap = parula(256);
+                unit = 'ITPC';
+            end
+            mg = uigridlayout(g, [1 n + 1], 'ColumnWidth', [repmat({'1x'}, 1, n), {70}], 'Padding', [0 0 0 0], ...
+                'ColumnSpacing', 6, 'BackgroundColor', T.cardBg);
+            t = e.times * 1000;
+            df = 0.5 * min([diff(e.freqs), 1]);
+            for k = 1:n
+                ax = uiaxes(mg);
+                ax.Toolbar.Visible = 'off';
+                disableDefaultInteractivity(ax);
+                im = imagesc(ax, t, e.freqs, Z{k});
+                im.AlphaData = double(isfinite(Z{k}));
+                ax.YDir = 'normal';
+                ax.Color = noValueColor();
+                colormap(ax, cmap);
+                ax.CLim = lim;
+                hold(ax, 'on');
+                xline(ax, 0, ':', 'Color', T.stimColor, 'LineWidth', 1.2);
+                hold(ax, 'off');
+                xlim(ax, [t(1) t(end)]);
+                ylim(ax, [e.freqs(1) - df, e.freqs(end) + df]);
+                UIKit.styleAxes(ax, names{k}, 'Time (ms)', ifelse(k == 1, 'Frequency (Hz)', ''));
+                ax.XGrid = 'off'; ax.YGrid = 'off';
+                ax.Layer = 'top';
+            end
+            ax = uiaxes(mg);
+            ax.Toolbar.Visible = 'off';
+            disableDefaultInteractivity(ax);
+            ScalpMap.colorScale(ax, lim, unit, cmap);
+            where = tfWhere(e.channels);
+            if isErsp
+                info.Text = sprintf(['%s: ERSP %s, power in dB against its mean from %g to %g ms in each condition ' ...
+                    '(red: more power than in the baseline, blue: less). Grey: no value (the wavelet would ' ...
+                    'leave the trial).'], app.ParticipantDrop.Value, where, e.baseline * 1000);
+            else
+                nTr = e.n;                                   % trials (one participant) ...
+                if grand, nTr = e.trials ./ e.n; end         % ... or trials per participant
+                per = arrayfun(@(c) sprintf('%.2f for %s', sqrt(pi / (4 * max(1, nTr(c)))), e.conditions{c}), ...
+                    1:C, 'UniformOutput', false);
+                info.Text = sprintf(['%s: phase locking across trials (ITPC, 0 to 1) %s: 1 when every trial ' ...
+                    'has the same phase. By chance about %s (fewer trials, higher chance level). Grey: no value.'], ...
+                    app.ParticipantDrop.Value, where, EEGSource.listText(per));
+            end
+            ok = true;
+        end
+
+        %% plotBandPower - Band power per condition (% change from the baseline; shade = SEM)
+        function ok = plotBandPower(app)
+            ok = false;
+            ax = app.AxERP;
+            delete(allchild(ax));
+            legend(ax, 'off');
+            ax.YLimMode = 'auto';
+            if isempty(app.TFs)
+                UIKit.emptyAxes(ax, ifelse(isempty(app.EEGs), 'Cut the recordings into trials (step 3)', ...
+                    ['Click the button of step 7 (Time' char(8211) 'frequency)']));
+                return;
+            end
+            T = UITheme;
+            e = app.analysisTF(app.shownIndex());
+            grand = ~isempty(app.GrandTF) && app.shownIndex() == 1;
+            t = e.times * 1000;
+            hold(ax, 'on');
+            bw = e.baseline * 1000;
+            yl = [-1 1];
+            for c = 1:numel(e.conditions)
+                col = T.plotColors(1 + mod(c - 1, size(T.plotColors, 1)), :);
+                m = e.bandPct(1, :, c);
+                s = e.bandSem(1, :, c);
+                v = isfinite(m);
+                if ~any(v), continue; end
+                tt = t(v); mm = m(v); ss = s(v);
+                if all(isfinite(ss)) && numel(tt) > 1
+                    fill(ax, [tt fliplr(tt)], [mm + ss, fliplr(mm - ss)], col, 'FaceAlpha', 0.15, ...
+                        'EdgeColor', 'none', 'HandleVisibility', 'off');
+                    yl = [min(yl(1), min(mm - ss)), max(yl(2), max(mm + ss))];
+                end
+                yl = [min(yl(1), min(mm)), max(yl(2), max(mm))];
+                if grand, nTxt = sprintf('%d participants', e.n(c)); else, nTxt = sprintf('%d trials', e.n(c)); end
+                plot(ax, tt, mm, 'Color', col, 'LineWidth', 1.6, 'DisplayName', sprintf('%s (%s)', e.conditions{c}, nTxt));
+            end
+            yl = yl + [-0.08 0.08] * diff(yl);
+            patch(ax, [bw(1) bw(2) bw(2) bw(1)], [yl(1) yl(1) yl(2) yl(2)], T.axesGrid, 'FaceAlpha', 0.35, ...
+                'EdgeColor', 'none', 'HandleVisibility', 'off');
+            xline(ax, 0, ':', 'Color', T.stimColor, 'HandleVisibility', 'off');
+            yline(ax, 0, '-', 'Color', T.axesGrid, 'HandleVisibility', 'off');
+            hold(ax, 'off');
+            UIKit.styleAxes(ax, sprintf('%s: %s power (%g%s%g Hz) %s; shaded: baseline', ...
+                app.ParticipantDrop.Value, e.bandNames{1}, e.bands(1, 1), char(8211), e.bands(1, 2), ...
+                tfWhere(e.channels)), 'Time from the event (ms)', '% change from the baseline');
+            xlim(ax, [t(1) t(end)]);
+            ylim(ax, yl);
+            if ~isempty(findobj(ax, 'Type', 'line'))
+                legend(ax, 'Location', 'northwest', 'Box', 'off', 'Interpreter', 'none');
+            else
+                UIKit.emptyAxes(ax, sprintf(['No band power: the wavelets of the %s band are longer than the ' ...
+                    'trials allow (see step 7).'], e.bandNames{1}));
+                return;
+            end
+            ok = true;
+        end
+
         %% fillOverview - What every file holds and what was done to it before
         % The electrode layout (of participant 1) comes first, in place of the
         % position sentence of each file.
@@ -2253,7 +2613,8 @@ classdef EEGAnalysisApp < handle
                 'measureHeader', {{'Participant', 'Condition', 'Value_uV', 'Latency_s', 'Trials', 'PeakAtEdge'}}, ...
                 'measures', {app.measureRows(false)}, 'measureText', EEGAnalysis.describeMeasure(app.MeasureSettings), ...
                 'stats', app.StatsResult, 'trialWindow', app.TrialWindow, 'cleaning', app.CleanSettings, ...
-                'trials', app.TrialSettings, 'rejection', {app.Rejections});
+                'trials', app.TrialSettings, 'rejection', {app.Rejections}, 'timeFrequency', {app.TFs}, ...
+                'grandTimeFrequency', app.GrandTF, 'timeFrequencySettings', app.TFSettings);
         end
 
         %% selectTab - Show a result tab by title
@@ -2270,6 +2631,7 @@ classdef EEGAnalysisApp < handle
             shown = ~isempty(app.ERPs);
             measured = ~isempty(app.Measures);
             tested = ~isempty(app.StatsResult);
+            tfDone = ~isempty(app.TFs);
             peak = strcmp(app.MeasureDrop.Value, app.MeasureKinds{2});
             shownView = app.ViewDrop.Value;
             reject = logical(app.RejectCb.Value);
@@ -2305,11 +2667,15 @@ classdef EEGAnalysisApp < handle
             app.MapsBtn.Enable = onoff(shown);
             app.PolarityDrop.Enable = onoff(peak);
             app.StatsBtn.Enable = onoff(measured && numel(app.Measures) > 1);
-            app.ExportBtn.Enable = onoff(measured);
-            app.ParticipantDrop.Enable = onoff(shown);
-            app.ViewDrop.Enable = onoff(shown);
-            app.CondADrop.Enable = onoff(shown && ~strcmp(shownView, app.Views{1}));
-            app.CondBDrop.Enable = onoff(shown && any(strcmp(shownView, app.Views([3 4]))));
+            for c = {app.TFFromEdit, app.TFToEdit, app.TFCyclesEdit, app.TFBaseFromEdit, app.TFBaseToEdit, ...
+                    app.TFChannelsEdit, app.TFBandDrop, app.TFBtn}
+                c{1}.Enable = onoff(ready);
+            end
+            app.ExportBtn.Enable = onoff(measured || tfDone);
+            app.ParticipantDrop.Enable = onoff(shown || tfDone);
+            app.ViewDrop.Enable = onoff(shown || tfDone);
+            app.CondADrop.Enable = onoff((shown || tfDone) && ~any(strcmp(shownView, app.Views([1 6 7]))));
+            app.CondBDrop.Enable = onoff((shown || tfDone) && any(strcmp(shownView, app.Views([3 4 5]))));
             UIKit.setSessionEnable(app.SessionBtns, has);
             setButtonStyle(app.LoadBtn, ifelse(~has, 'primary', 'secondary'));
             setButtonStyle(app.ApplyCleanBtn, ifelse(cleanNext, 'primary', 'secondary'));
@@ -2317,6 +2683,8 @@ classdef EEGAnalysisApp < handle
             setButtonStyle(app.ShowBtn, ifelse(ready && ~shown && ~changed, 'primary', 'secondary'));
             setButtonStyle(app.MeasureBtn, ifelse(shown && ~measured, 'primary', 'secondary'));
             setButtonStyle(app.StatsBtn, ifelse(measured && ~tested && numel(app.Measures) > 1, 'primary', 'secondary'));
+            setButtonStyle(app.TFBtn, ifelse(ready && ~tfDone && (tested || (measured && numel(app.Measures) < 2)), ...
+                'primary', 'secondary'));
         end
     end
 end
@@ -2793,6 +3161,36 @@ function ly = layoutSession(L, ls, P)
     ly.summary = L.summary;
 end
 
+%% rangeRow - Label (column 1) and two numeric fields side by side (column 2) on grid row 'row'
+function [a, b] = rangeRow(g, row, labelText, va, vb, tooltip, limits)
+    T = UITheme;
+    lbl = uilabel(g, 'Text', labelText, 'FontSize', T.fontBody, 'FontColor', T.sectionTitleColor, ...
+        'Tooltip', tooltip);
+    lbl.Layout.Row = row; lbl.Layout.Column = 1;
+    rg = uigridlayout(g, [1 3], 'ColumnWidth', {'1x', 10, '1x'}, 'Padding', [0 0 0 0], 'ColumnSpacing', 2, ...
+        'BackgroundColor', T.cardBg);
+    rg.Layout.Row = row; rg.Layout.Column = 2;
+    a = uieditfield(rg, 'numeric', 'Value', va, 'Limits', limits, 'Tooltip', tooltip);
+    uilabel(rg, 'Text', char(8211), 'HorizontalAlignment', 'center', 'FontColor', T.bodyColor);
+    b = uieditfield(rg, 'numeric', 'Value', vb, 'Limits', limits, 'Tooltip', tooltip);
+end
+
+%% tfWhere - 'at Oz' or 'over O1, Oz and O2' (time-frequency titles)
+function t = tfWhere(chans)
+    if isscalar(chans)
+        t = sprintf('at %s', chans{1});
+    elseif numel(chans) <= 4
+        t = sprintf('over %s', EEGSource.listText(chans));
+    else
+        t = sprintf('over %d channels', numel(chans));
+    end
+end
+
+%% noValueColor - Background where a time-frequency image has no value
+function c = noValueColor()
+    c = [0.86 0.86 0.86];
+end
+
 %% mapWindowText - 'mean voltage from 300 to 400 ms' or 'voltage at 100 ms'
 function t = mapWindowText(w)
     if abs(w(2) - w(1)) < 1e-9
@@ -2800,6 +3198,11 @@ function t = mapWindowText(w)
     else
         t = sprintf('mean voltage from %g to %g ms', w * 1000);
     end
+end
+
+%% firstOr - First element of x, or v when x is empty
+function y = firstOr(x, v)
+    if isempty(x), y = v; else, y = x(1); end
 end
 
 %% onoff - 'on'/'off' from a logical

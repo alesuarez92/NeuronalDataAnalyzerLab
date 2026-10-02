@@ -1587,7 +1587,8 @@ classdef MethodsWriter
                 parts{end+1} = MethodsWriter.eegRejection(rj, MethodsWriter.getf(st, 'trials', struct()));
             end
             paras = {strjoin(parts, ' ')};
-            if ~logical(MethodsWriter.getf(st, 'erpsShown', false)), return; end
+            tfParas = MethodsWriter.eegTimeFrequency(s, nP);
+            if ~logical(MethodsWriter.getf(st, 'erpsShown', false)), paras = [paras, tfParas]; return; end
 
             conds = cellstr(MethodsWriter.getf(s, 'results.conditions', {}));
             trials = MethodsWriter.getf(s, 'results.trials', []);
@@ -1658,6 +1659,50 @@ classdef MethodsWriter
                     'one value per participant and condition, with participants matched across conditions');
                 paras{end+1} = MethodsWriter.groupText(gt, gs);
             end
+            paras = [paras, tfParas];
+        end
+
+        %% eegTimeFrequency - Morlet ERSP, ITPC and band power per condition (EEG window, step 7)
+        function paras = eegTimeFrequency(s, nP)
+            paras = {};
+            r = MethodsWriter.getf(s, 'results.timeFrequency', []);
+            if ~logical(MethodsWriter.getf(s, 'settings.tfShown', false)) || ~isstruct(r) || ~isfield(r, 'freqs') ...
+                    || isempty(r.freqs)
+                return;
+            end
+            f = r.freqs;
+            nc = unique(r.cycles);
+            if isscalar(nc), cyc = sprintf('%s cycles', MethodsWriter.num(nc));
+            else, cyc = sprintf('%s&ndash;%s cycles', MethodsWriter.num(min(nc)), MethodsWriter.num(max(nc))); end
+            ch = cellstr(r.channels);
+            if isscalar(ch), where = sprintf('at %s', ch{1});
+            else, where = sprintf('at %s (power and phase locking averaged over channels)', MethodsWriter.listText(ch)); end
+            t = sprintf(['Time&ndash;frequency representations were computed for every trial %s from complex Morlet ' ...
+                'wavelet transforms (%s; %d frequencies from %s to %s Hz; wavelets truncated at &plusmn;3 standard ' ...
+                'deviations of their Gaussian envelope and normalised to unit energy; the mean of each trial removed ' ...
+                'first). Values were kept only where the whole wavelet lay within the trial'], where, cyc, numel(f), ...
+                MethodsWriter.num(f(1)), MethodsWriter.num(f(end)));
+            lv = MethodsWriter.getf(r, 'lowestWithValues', NaN);
+            if MethodsWriter.isNum(lv) && lv > f(1)
+                t = sprintf('%s (from %s Hz up for these trials)', t, MethodsWriter.num(lv));
+            end
+            b = r.baseline * 1000;
+            t = sprintf(['%s. Event-related spectral perturbation (ERSP; {{makeig1993}}) was expressed in dB relative ' ...
+                'to the mean power of each condition from %s to %s ms'], t, MethodsWriter.num(b(1)), MethodsWriter.num(b(2)));
+            lb = MethodsWriter.getf(r, 'lowestWithBaseline', NaN);
+            if MethodsWriter.isNum(lb) && lb > f(1)
+                t = sprintf('%s (from %s Hz up, where whole wavelets fitted within that window)', t, MethodsWriter.num(lb));
+            end
+            bd = r.band;
+            t = sprintf(['%s, inter-trial phase coherence (ITPC; {{tallonbaudry1996}}) as the length of the mean unit ' ...
+                'phase vector across trials, and %s band power (%s&ndash;%s Hz; the mean wavelet power over its ' ...
+                'frequencies) as the percent change of each trial from the mean baseline band power of its condition ' ...
+                '({{pfurtscheller1999}}).'], t, lower(char(r.bandName)), MethodsWriter.num(bd(1)), MethodsWriter.num(bd(2)));
+            if nP > 1
+                t = [t ' Grand averages were the means of the participants'' ERSP (in dB), ITPC and band power, each ' ...
+                    'participant weighted equally.'];
+            end
+            paras = {t};
         end
 
         %% baselineClause - ", with stimulus onset at t0 = 0 s, ..." sentence ending

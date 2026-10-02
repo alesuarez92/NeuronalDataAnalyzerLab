@@ -21,7 +21,8 @@ Open Ephys, NWB, SpikeGLX, Blackrock, Neuralynx, Plexon, Multi Channel
 Systems and Axon ABF recordings), **EEG** (raw or cleaned scalp and
 rodent EEG from BrainVision, EDF / BDF, EGI .mff, XDF, EEG-BIDS, EEGLAB and
 FieldTrip: electrode layouts, bad channels, filters, re-reference, trials
-and rejection, ERPs, measures and statistics), **ROI / coregistered image analysis**
+and rejection, ERPs, measures and statistics, scalp maps, time–frequency
+per condition), **ROI / coregistered image analysis**
 (motion correction, multiple ROIs, cell detection, ΔF/F, kymograph,
 robust vessel diameter), **histology and culture images** (cell counts,
 marker-positive cells, counts per region and per mm², section and time-point

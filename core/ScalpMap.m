@@ -48,8 +48,9 @@
 %       Options 'CLim' ([] = ScalpMap.limits(M)), 'Title' (''), 'Contours'
 %       (true), 'Labels' (false: electrode names), 'FontSize' (8). h.map,
 %       h.contours, h.outline, h.electrodes, h.left, h.labels.
-%   h = ScalpMap.colorScale(ax, lim, label)
-%       A vertical colour scale from lim(1) to lim(2) on axes ax.
+%   h = ScalpMap.colorScale(ax, lim, label, cmap)
+%       A vertical colour scale from lim(1) to lim(2) on axes ax, in the
+%       colours cmap (n x 3; default ScalpMap.colormap).
 %   c = ScalpMap.colormap(n)
 %       Blue (negative) - white (0) - red (positive), n x 3 (default 256).
 %   s = ScalpMap.describe(M)
@@ -247,9 +248,10 @@ classdef ScalpMap
         end
 
         %% colorScale - A vertical colour scale on its own axes
-        function h = colorScale(ax, lim, label)
+        function h = colorScale(ax, lim, label, cmap)
             if nargin < 3, label = ''; end
-            c = ScalpMap.colormap();
+            if nargin < 4 || isempty(cmap), cmap = ScalpMap.colormap(); end
+            c = cmap;
             v = linspace(lim(1), lim(2), size(c, 1));
             h = image(ax, [0.25 0.75], v, repmat(reshape(c, [], 1, 3), 1, 2));
             set(ax, 'YDir', 'normal', 'XTick', [], 'YAxisLocation', 'right', 'XLim', [0 1], ...

@@ -19,7 +19,10 @@
 %   a channel placed by hand, Use this layout (confirmed) -> session, and
 %   the rodent's skull layout in mm from bregma; then scalp maps (P300
 %   window, N1 at 100 ms, one participant, a session, the rodent's flat
-%   map, a file without positions). Checks the results
+%   map, a file without positions); then the time-frequency of step 7
+%   (ERSP of the alpha decrease after Target at Oz, ITPC at the N1 over
+%   Cz, alpha band power, a session, the raw demo cut into longer
+%   trials). Checks the results
 %   against the demo's known answers (core/demo/demoEEG.m) and saves a
 %   frame after every step to
 %   test-artifacts/screens/walkthrough/EEGAnalysisApp_<NN>_<step>.png.
@@ -821,6 +824,135 @@ function testScalpMaps(tests)
     tests.verifyFalse(logical(app.showScalpMaps()));
     tests.verifyEmpty(app.ScalpMaps);
     tests.verifyTrue(contains(app.StatusLabel.Text, 'No scalp maps'));
+end
+
+%% testTimeFrequency - Step 7: ERSP, ITPC and band power on the demo's known answers
+function testTimeFrequency(tests)
+    DemoData.ensureDemoPath();
+    app = EEGAnalysisApp(); c = onCleanup(@() delete(app.UIFig));
+    tests.verifyEqual(char(app.TFBtn.Enable), 'off', 'no trials yet');
+    tests.verifyTrue(logical(app.loadDemo()));
+    tests.verifyEqual(char(app.TFBtn.Enable), 'on', 'the demo is already cut into trials');
+    tests.verifyEqual(app.TFBaseFromEdit.Value, -200, 'the baseline starts with the trials');
+
+    % 1. ERSP at Oz, 4-40 Hz, 3 cycles (no ERPs needed): alpha falls after Target; no ERSP
+    %    below 8 Hz, where no whole wavelet fits inside the 200 ms before the event
+    app.setTimeFrequency([4 40], 3, [-0.2 0], {'Oz'}, 'Alpha');
+    app.setView('grand', '', 'Target', 'Standard');
+    tests.verifyTrue(logical(app.showTimeFrequency()));
+    tests.verifyEqual(app.ViewDrop.Value, app.Views{5});
+    tests.verifyEqual(char(app.ViewDrop.Enable), 'on', 'the views of step 7 work without ERPs');
+    tests.verifyEqual(char(app.CondBDrop.Enable), 'on', 'B of the A minus B image');
+    tests.verifyEqual(char(app.MapPanel.Visible), 'on');
+    tests.verifyEqual(char(app.ErpPanel.Visible), 'off');
+    tests.verifyNumElements(app.TFs, 8);
+    g = app.GrandTF;
+    tests.verifyEqual(g.channels, {'Oz'});
+    tests.verifyEqual(g.n, [8 8 8]);
+    tests.verifyEqual(g.freqs, 4:40);
+    i10 = g.freqs == 10;
+    w = g.times >= 0.4 & g.times <= 0.6;
+    v = @(cnd) mean(g.ersp(i10, w, strcmp(g.conditions, cnd)));
+    tests.verifyLessThan(v('Target'), -2.5, 'alpha power falls after Target (simulated -6 dB, with noise)');
+    tests.verifyLessThan(abs(v('Standard')), 1.5);
+    tests.verifyLessThan(abs(v('Novel')), 1.5);
+    tests.verifyTrue(all(all(isnan(g.ersp(g.freqs < 8, :, :)))), 'no ERSP below 8 Hz');
+    tests.verifyTrue(contains(app.TFInfo.Text, 'ERSP from 8 Hz up'));
+    tests.verifyTrue(contains(app.StatusLabel.Text, 'Grey: no value'));
+    axs = findobj(app.MapPanel, 'Type', 'axes');
+    tests.verifyNumElements(axs, 5, 'three conditions, Target minus Standard and the colour scale');
+    titles = arrayfun(@(a) char(a.Title.String), axs, 'UniformOutput', false);
+    tests.verifyTrue(any(strcmp(titles, 'Target minus Standard')));
+    shot(tests, app, 'EEGAnalysisApp_t01_ersp_alpha_decrease');
+
+    % 2. ITPC at Cz: the N1 has the same phase in every trial (about 100 ms), later about chance
+    app.setTimeFrequency([], [], [], {'Cz'});
+    tests.verifyTrue(logical(app.showTimeFrequency()));
+    app.setView('', 'Phase locking');
+    tests.verifyEqual(app.ViewDrop.Value, 'Phase locking (ITPC)');
+    tests.verifyEqual(char(app.CondBDrop.Enable), 'off', 'no A minus B for ITPC');
+    g = app.GrandTF;
+    tests.verifyEqual(g.channels, {'Cz'});
+    j = find(abs(g.times - 0.1) < 0.003, 1);
+    tests.verifyGreaterThan(min(g.itpc(i10, j, :)), 0.5, 'N1: phase locked in every condition');
+    tests.verifyLessThan(max(mean(g.itpc(i10, w, :), 2)), 0.4, 'no phase locking at 400-600 ms');
+    tests.verifyNumElements(findobj(app.MapPanel, 'Type', 'axes'), 4, 'one per condition and the colour scale');
+    shot(tests, app, 'EEGAnalysisApp_t02_itpc_n1');
+
+    % 3. Alpha band power at Oz: Target about -55% from 400 to 600 ms; Standard and Novel near 0
+    app.setTimeFrequency([], [], [], {'Oz'}, 'Alpha');
+    tests.verifyTrue(logical(app.showTimeFrequency()));
+    app.setView('grand', 'Band power');
+    tests.verifyEqual(char(app.ErpPanel.Visible), 'on');
+    tests.verifyEqual(char(app.MapPanel.Visible), 'off');
+    tests.verifyNumElements(findall(app.AxERP, 'Type', 'line'), 3, 'one line per condition');
+    tests.verifyTrue(contains(app.AxERP.Title.String, 'Alpha power'));
+    g = app.GrandTF;
+    bp = @(cnd) mean(g.bandPct(1, w, strcmp(g.conditions, cnd)));
+    tests.verifyLessThan(bp('Target'), -35, 'alpha band power falls after Target');
+    tests.verifyLessThan(abs(bp('Standard')), 30);
+    tests.verifyTrue(contains(app.TFInfo.Text, 'Alpha band power: its baseline is only'), ...
+        'the 1 s trials leave little baseline at 8 Hz');
+    shot(tests, app, 'EEGAnalysisApp_t03_alpha_band_power');
+
+    % 4. One participant: SEM across trials; the band outside the frequencies is refused
+    app.setView(2, 'Time');
+    tests.verifyNumElements(findobj(app.MapPanel, 'Type', 'axes'), 5);
+    app.setTimeFrequency([4 20], [], [], [], 'Gamma');
+    tests.verifyFalse(logical(app.showTimeFrequency()));
+    tests.verifyTrue(contains(app.StatusLabel.Text, 'goes beyond the frequencies'));
+    app.setTimeFrequency([4 40], [], [], [], 'Alpha');
+
+    % 5. Session: the settings, the results and the view come back; the methods text describes them
+    app.setView('grand', 'Band power');
+    p = fullfile(tests.TestData.tmp, ['EEGAnalysisTF' Session.Extension]);
+    tests.verifyTrue(logical(app.saveSessionTo(p, 'time-frequency')));
+    s = Session.load(p);
+    tests.verifyTrue(logical(s.settings.tfShown));
+    tests.verifyEqual(s.settings.timeFrequency.channels, {'Oz'});
+    tests.verifyEqual(s.settings.tfPlot.view, 'Band power');
+    tests.verifyEqual(s.results.timeFrequency.lowestWithBaseline, 8);
+    txt = MethodsWriter.fromSession(s);
+    tests.verifyTrue(contains(txt, 'complex Morlet wavelet transforms (3 cycles; 37 frequencies from 4 to 40 Hz'));
+    tests.verifyTrue(contains(txt, 'ERSP; Makeig, 1993'));
+    tests.verifyTrue(contains(txt, 'alpha band power'));
+    b = EEGAnalysisApp(); cb = onCleanup(@() delete(b.UIFig));
+    tests.verifyTrue(logical(b.openSession(p)), 'session not reopened');
+    tests.verifyEqual(b.ViewDrop.Value, 'Band power');
+    x = b.GrandTF.bandPct; y = app.GrandTF.bandPct;
+    tests.verifyEqual(isnan(x), isnan(y));
+    tests.verifyEqual(x(~isnan(x)), y(~isnan(y)), 'AbsTol', 1e-9);
+    delete(cb);
+
+    % 6. Raw demo cut into longer trials (-600 to 1000 ms): a baseline at every frequency,
+    %    alpha band power about -70% after Target
+    tests.verifyTrue(logical(app.loadRawDemo()));
+    tests.verifyEmpty(app.TFs, 'new files: no time-frequency');
+    for k = 1:3, app.setBadChannels(k, {'T7'}); end
+    app.setFilters(0.1, 30, 'off');
+    app.setReference('average');
+    tests.verifyTrue(logical(app.applyCleaning()));
+    app.setEvents('S 1 = Standard, S 2 = Target, S 3 = Novel');
+    app.setTrialWindow([-0.6 1]);
+    app.setRejection(true, 100, 0);
+    tests.verifyTrue(logical(app.cutIntoTrials()));
+    tests.verifyEqual(app.TFBaseFromEdit.Value, -600, 'the baseline starts with the new trials');
+    app.setTimeFrequency([4 40], 3, [-0.5 -0.1], {'Oz'}, 'Alpha');
+    tests.verifyTrue(logical(app.showTimeFrequency()));
+    g = app.GrandTF;
+    tests.verifyTrue(all(g.baselineSamples > 0), 'every frequency has a baseline');
+    bp = @(cnd) mean(g.bandPct(1, w2(g), strcmp(g.conditions, cnd)));
+    tests.verifyLessThan(bp('Target'), -45);
+    tests.verifyLessThan(abs(bp('Standard')), 30);
+    app.setView('grand', 'Band power');
+    shot(tests, app, 'EEGAnalysisApp_t04_raw_alpha_band_power');
+    app.setView('grand', 'Time', 'Target', 'Standard');
+    shot(tests, app, 'EEGAnalysisApp_t05_raw_ersp');
+end
+
+%% w2 - 400-600 ms of a time-frequency result
+function m = w2(g)
+    m = g.times >= 0.4 & g.times <= 0.6;
 end
 
 %% peakAt - Drawing coordinates of the largest ('max') or smallest ('min') value of a map

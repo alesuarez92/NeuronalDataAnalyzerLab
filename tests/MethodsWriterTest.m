@@ -491,6 +491,37 @@ function [s, res] = rmStatsSession()
     s.summary = {sprintf('Group test: %s', res.summary)};
 end
 
+%% testEEGTimeFrequency - Morlet ERSP / ITPC and band power of the EEG window (step 7)
+function testEEGTimeFrequency(tests)
+    [s, ~] = eegSession();
+    tests.verifyFalse(contains(MethodsWriter.fromSession(s), 'Morlet'), 'no time-frequency, none described');
+    s.settings.tfShown = true;
+    s.settings.timeFrequency = struct('frequencies', [4 40], 'cycles', 3, 'baseline', [-0.2 0], ...
+        'channels', {{'Oz'}}, 'channelsTyped', {{'Oz'}}, 'band', [8 13], 'bandName', 'Alpha');
+    s.results.timeFrequency = struct('conditions', {{'Standard', 'Target', 'Novel'}}, 'trials', [288 112 120], ...
+        'participants', 8, 'freqs', 4:40, 'cycles', 3 * ones(1, 37), 'baseline', [-0.2 0], 'channels', {{'Oz'}}, ...
+        'band', [8 13], 'bandName', 'Alpha', 'lowestWithValues', 4, 'lowestWithBaseline', 8, 'text', '');
+    [txt, refs] = MethodsWriter.fromSession(s);
+    checkClean(tests, txt, refs);
+    verifyHas(tests, txt, ['Time' char(8211) 'frequency representations were computed for every trial at Oz from ' ...
+        'complex Morlet wavelet transforms (3 cycles; 37 frequencies from 4 to 40 Hz; wavelets truncated at ' ...
+        char(177) '3 standard deviations']);
+    verifyHas(tests, txt, ['(ERSP; Makeig, 1993) was expressed in dB relative to the mean power of each condition ' ...
+        'from ' char(8722) '200 to 0 ms (from 8 Hz up, where whole wavelets fitted within that window)']);
+    verifyHas(tests, txt, '(ITPC; Tallon-Baudry et al., 1996)');
+    verifyHas(tests, txt, ['alpha band power (8' char(8211) '13 Hz; the mean wavelet power over its frequencies)']);
+    verifyHas(tests, txt, 'Pfurtscheller & Lopes da Silva, 1999');
+    verifyHas(tests, txt, 'Grand averages were the means of the participants'' ERSP (in dB), ITPC and band power');
+    tests.verifyTrue(any(startsWith(refs, 'Makeig S (1993)')));
+    tests.verifyTrue(any(startsWith(refs, 'Tallon-Baudry C')));
+    % Without ERPs (the time-frequency alone) it is still described
+    s.settings.erpsShown = false;
+    verifyHas(tests, MethodsWriter.fromSession(s), 'complex Morlet wavelet transforms');
+    % Two channels
+    s.results.timeFrequency.channels = {'O1', 'O2'};
+    verifyHas(tests, MethodsWriter.fromSession(s), 'at O1 and O2 (power and phase locking averaged over channels)');
+end
+
 function testEEGAnalysisCleaning(tests)
     % Raw recordings cleaned in the EEG window: bad channel, filters, re-reference, events, rejection
     s = eegSession();

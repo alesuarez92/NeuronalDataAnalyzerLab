@@ -27,6 +27,25 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   report describe them. `core/ScalpMap.m`, `EEGAnalysis.windowMean`,
   `tests/ScalpMapTest.m`; Help gives the demo's maps (P300 over Pz, N1
   over Cz, the rodent VEP over V1).
+- **EEG Analysis: time–frequency per condition** (ROADMAP EEG step 5), in
+  a new step 7 (Save is now step 8). Complex Morlet wavelets (the code of
+  LFP Analysis: unit energy, ±3 SD, 1 Hz steps, 3 cycles by default) of
+  every trial at the chosen channels, per participant and condition and
+  across participants: **ERSP** (dB against each condition's baseline;
+  one image per condition and one of A minus B), **phase locking (ITPC)**
+  with its chance level, and the **power of one band** (delta to gamma)
+  as % change from the baseline, mean ± SEM. A value is kept only where
+  the whole wavelet lies inside the trial, so it equals what a longer
+  recording gives (tested against `TimeFrequency.ersp` on the continuous
+  signal); the rest is grey, and the window says which frequencies the
+  trial length allows. Sessions keep the settings and the view, the .mat
+  export holds the results, and the methods text and Help describe them.
+  `EEGAnalysis.timeFrequency`, `grandTimeFrequency`,
+  `describeTimeFrequency`, `TimeFrequency.supportSamples`.
+- **EEG demo**: after Target the alpha over O1 / Oz / O2 halves from 350
+  to 650 ms (power −75%, −6 dB), a known answer for time–frequency; the
+  ERPs and every other value are unchanged in expectation (cached demos
+  are written again).
 
 ### Changed
 

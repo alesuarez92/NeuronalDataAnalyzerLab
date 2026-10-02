@@ -12,9 +12,13 @@
 % noise removed, exact re-references, bad channels (suggested, left out
 % of the reference, rejection, ERPs and measures), event names and gaps,
 % exact trial rejection, and the raw demo (T7 suggested, exactly the blink
-% trials rejected, N1 at Cz against FCz and the average). Plain
-% errors for unknown channels and conditions, bad windows and data that
-% are not cut into trials yet.
+% trials rejected, N1 at Cz against FCz and the average). Time-frequency
+% per condition: the same ERSP / ITPC as TimeFrequency.ersp on the
+% continuous recording where the wavelet fits, exact known answers (an
+% amplitude halved: -6.02 dB and -75% band power; phase-locked trials: ITPC
+% 1), blank edges, the grand average, and the demo's alpha decrease after
+% Target. Plain errors for unknown channels and conditions, bad windows and
+% data that are not cut into trials yet.
 % =========================================================================
 
 function tests = EEGAnalysisTest
@@ -497,7 +501,208 @@ function testRawDemoPipeline(tests)
     verifyGreaterThan(tests, abs(tr.participants(1).n1CzAverage), 2 * abs(tr.participants(1).n1CzFCz));
 end
 
+%% ------------------------------------------------------- Time-frequency
+
+%% testTimeFrequencyMatchesContinuous - Trials long enough: the values of TimeFrequency.ersp
+% ersp transforms the continuous recording; timeFrequency the trials cut from it (each
+% trial's mean removed). Where the whole wavelet lies inside the trial they agree.
+function testTimeFrequencyMatchesContinuous(tests)
+    fs = 250;
+    rs = RandStream('mt19937ar', 'Seed', 5);
+    N = 60 * fs;
+    x = randn(rs, 1, N) + 2 * sin(2 * pi * 10 * (0:N - 1) / fs);
+    onsets = 3:2:55;
+    for k = 1:numel(onsets)                          % a phase-locked 20 Hz burst after each onset
+        i = round(onsets(k) * fs) + (1:round(0.3 * fs));
+        x(i) = x(i) + 3 * sin(2 * pi * 20 * (0:numel(i) - 1) / fs);
+    end
+    w = [-1 1.5]; freqs = 8:2:30; nc = 7; base = [-0.5 -0.1];
+    [E, I] = TimeFrequency.ersp(x, fs, onsets, w, freqs, base, nc);
+    m = max(TimeFrequency.supportSamples(fs, freqs, nc));
+    rel = round(w(1) * fs) - m:round(w(2) * fs) + m;
+    data = zeros(1, numel(rel), numel(onsets));
+    for k = 1:numel(onsets), data(1, :, k) = x(round(onsets(k) * fs) + 1 + rel); end
+    eeg = EEGSource.make(data, fs, 'Times', rel / fs, 'Labels', {'A'}, ...
+        'Conditions', repmat({'X'}, 1, numel(onsets)), 'IsEpoched', true);
+    tf = EEGAnalysis.timeFrequency(eeg, 'Frequencies', freqs, 'Cycles', nc, 'Baseline', base, ...
+        'Bands', [18 22], 'BandNames', {'Beta'});
+    in = tf.times >= w(1) - 1e-9 & tf.times <= w(2) + 1e-9;
+    verifyTrue(tests, all(all(tf.valid(:, in))));
+    verifyEqual(tests, tf.ersp(:, in), E, 'AbsTol', 0.01, 'ERSP (dB) as from the continuous recording');
+    verifyEqual(tests, tf.itpc(:, in), I, 'AbsTol', 0.01, 'ITPC as from the continuous recording');
+    verifyEqual(tests, tf.bandNames, {'Beta'});
+    b = mean(tf.bandPct(1, tf.times >= 0.1 & tf.times <= 0.2));
+    verifyGreaterThan(tests, b, 50, 'the 20 Hz burst raises beta power');
+end
+
+%% testTimeFrequencyKnownAnswers - Amplitude halved: -6.02 dB, -75%; locked phase: ITPC 1; blank edges
+function testTimeFrequencyKnownAnswers(tests)
+    fs = 250; t = -0.5 + (0:374) / fs; nT = 20;
+    rs = RandStream('mt19937ar', 'Seed', 6);
+    env = ones(size(t)); env(t >= 0.2) = 0.5;
+    data = zeros(3, numel(t), 2 * nT);
+    cond = [repmat({'Locked'}, 1, nT), repmat({'Random'}, 1, nT)];
+    for k = 1:2 * nT
+        ph = 0;
+        if k > nT, ph = 2 * pi * rand(rs); end
+        data(1:2, :, k) = repmat(4 * sin(2 * pi * 10 * t + ph) .* env, 2, 1);
+        data(3, :, k) = 100 * randn(rs, 1, numel(t));            % a bad channel
+    end
+    eeg = EEGSource.make(data, fs, 'Times', t, 'Labels', {'O1', 'Oz', 'T7'}, 'Conditions', cond, 'IsEpoched', true);
+    eeg = EEGAnalysis.markBad(eeg, {'T7'});
+    tf = EEGAnalysis.timeFrequency(eeg, 'Frequencies', 6:14, 'Cycles', 3, 'Baseline', [-0.4 -0.1]);
+    verifyEqual(tests, tf.channels, {'O1', 'Oz'}, 'all good channels by default');
+    verifyEqual(tests, tf.conditions, {'Locked', 'Random'});
+    verifyEqual(tests, tf.n, [nT nT]);
+    verifyEqual(tests, tf.cycles, 3 * ones(1, 9));
+    verifyEqual(tests, tf.bandNames, {'Alpha'});
+    i10 = tf.freqs == 10;
+    j = abs(tf.times - 0.5) < 1e-9;
+    verifyEqual(tests, squeeze(tf.ersp(i10, j, :))', [-6.02 -6.02], 'AbsTol', 0.05, 'amplitude halved: -6 dB');
+    verifyEqual(tests, tf.itpc(i10, j, 1), 1, 'AbsTol', 1e-9, 'the same phase in every trial');
+    verifyLessThan(tests, tf.itpc(i10, j, 2), 0.6, 'random phases');
+    verifyEqual(tests, squeeze(tf.bandPct(1, j, :))', [-75 -75], 'AbsTol', 1, 'power -75% in the alpha band');
+    verifyEqual(tests, tf.bandSem(1, j, 1), 0, 'AbsTol', 1e-6, 'identical trials');
+    % Where the wavelet fits: samples h+1 .. n-h at each frequency; blank (NaN) elsewhere
+    h = TimeFrequency.supportSamples(fs, tf.freqs, 3);
+    for i = 1:numel(tf.freqs)
+        verifyEqual(tests, find(tf.valid(i, :), 1), h(i) + 1);
+        verifyEqual(tests, find(tf.valid(i, :), 1, 'last'), numel(t) - h(i));
+    end
+    verifyTrue(tests, all(isnan(tf.ersp(~repmat(tf.valid, 1, 1, 2)))));
+    verifyTrue(tests, all(isnan(tf.itpc(~repmat(tf.valid, 1, 1, 2)))));
+    verifyEqual(tests, tf.bandValid(1, :), all(tf.valid(tf.freqs >= 8 & tf.freqs <= 13, :), 1));
+    verifyEqual(tests, tf.baselineSamples, sum(tf.valid(:, t >= -0.4 - 1e-9 & t <= -0.1 + 1e-9), 2)');
+    % One channel, one condition, cycles per frequency
+    tf = EEGAnalysis.timeFrequency(eeg, 'Channels', 'oz', 'Conditions', 'Random', 'Frequencies', [8 10 12], ...
+        'Cycles', [3 4 5], 'Baseline', [-0.4 -0.1], 'Bands', [9 11], 'BandNames', {'Mu'});
+    verifyEqual(tests, tf.channels, {'Oz'});
+    verifyEqual(tests, tf.conditions, {'Random'});
+    verifyEqual(tests, [size(tf.ersp, 1), size(tf.ersp, 2), size(tf.ersp, 3)], [3 numel(t) 1]);
+    verifyEqual(tests, tf.cycles, [3 4 5]);
+    verifyTrue(tests, contains(EEGAnalysis.describeTimeFrequency(tf), 'Morlet wavelets of 3 to 5 cycles, 8 to 12 Hz (3 frequencies), at Oz'));
+    tf = EEGAnalysis.timeFrequency(eeg, 'Channels', {'Oz', 'T7'}, 'Frequencies', 10, 'Bands', [9 11]);
+    verifyEqual(tests, tf.channels, {'Oz'}, 'the bad channel is left out');
+    verifyEqual(tests, tf.left, {'T7'});
+    verifyEqual(tests, tf.baseline, [-0.5 0], 'AbsTol', 1e-12, 'default: trial start to the event');
+end
+
+%% testTimeFrequencyShortTrials - What a 1 s trial leaves blank, said in words
+function testTimeFrequencyShortTrials(tests)
+    rs = RandStream('mt19937ar', 'Seed', 7);
+    t = -0.2 + (0:249) / 250;
+    eeg = EEGSource.make(randn(rs, 1, 250, 10), 250, 'Times', t, 'Labels', {'Oz'}, ...
+        'Conditions', repmat({'S'}, 1, 10), 'IsEpoched', true);
+    tf = EEGAnalysis.timeFrequency(eeg);
+    verifyEqual(tests, tf.freqs, 4:40);
+    verifyEqual(tests, tf.baseline, [-0.2 0], 'AbsTol', 1e-12);
+    has = tf.baselineSamples > 0;
+    verifyEqual(tests, tf.freqs(find(has, 1)), 8, 'a baseline sample from 8 Hz up (3 cycles)');
+    verifyTrue(tests, all(all(isnan(tf.ersp(~has, :)))), 'no ERSP without a baseline');
+    verifyTrue(tests, any(isfinite(tf.power(1, :))), '4 Hz still has power values in the middle');
+    s = EEGAnalysis.describeTimeFrequency(tf);
+    verifyTrue(tests, contains(s, 'ERSP from 8 Hz up'));
+    verifyTrue(tests, contains(s, 'At 8 Hz the values run from -20 to 616 ms'));
+    tf = EEGAnalysis.timeFrequency(eeg, 'Frequencies', 1:2, 'Bands', [1 2]);
+    verifyFalse(tests, any(tf.valid(:)));
+    verifyTrue(tests, contains(EEGAnalysis.describeTimeFrequency(tf), 'No value'));
+end
+
+%% testTimeFrequencyGrandAverage - Mean over participants, SEM across them, common conditions
+function testTimeFrequencyGrandAverage(tests)
+    rs = RandStream('mt19937ar', 'Seed', 8);
+    t = -0.4 + (0:299) / 250;
+    mk = @(conds) EEGSource.make(randn(rs, 2, 300, numel(conds)), 250, 'Times', t, 'Labels', {'Cz', 'Pz'}, ...
+        'Conditions', conds, 'IsEpoched', true);
+    a = EEGAnalysis.timeFrequency(mk(repmat({'A', 'B'}, 1, 6)), 'Frequencies', 8:12);
+    b = EEGAnalysis.timeFrequency(mk([repmat({'A', 'B'}, 1, 4), {'C', 'C'}]), 'Frequencies', 8:12);
+    ga = EEGAnalysis.grandTimeFrequency({a, b});
+    verifyEqual(tests, ga.conditions, {'A', 'B'});
+    verifyEqual(tests, ga.n, [2 2]);
+    verifyEqual(tests, ga.trials, [10 10]);
+    verifyEqualNaN(tests, ga.ersp, (a.ersp + b.ersp(:, :, 1:2)) / 2, 1e-12);
+    verifyEqualNaN(tests, ga.itpc, (a.itpc + b.itpc(:, :, 1:2)) / 2, 1e-12);
+    verifyEqualNaN(tests, ga.bandSem, abs(a.bandPct - b.bandPct(:, :, 1:2)) / 2, 1e-9);   % SEM of two: half their distance
+    verifyTrue(tests, contains(ga.notes{1}, 'Left out of the grand average: C'));
+    one = EEGAnalysis.grandTimeFrequency({a});
+    verifyEqualNaN(tests, one.ersp, a.ersp, 0);
+    verifyEqual(tests, one.trials, a.n);
+    c = EEGAnalysis.timeFrequency(mk(repmat({'A', 'B'}, 1, 3)), 'Frequencies', 8:13);
+    verifyError(tests, @() EEGAnalysis.grandTimeFrequency({a, c}), 'NeuroAnalyzer:eeg:mismatch');
+end
+
+%% testTimeFrequencyErrors - Plain messages
+function testTimeFrequencyErrors(tests)
+    eeg = tinyEEG();
+    verifyError(tests, @() EEGAnalysis.timeFrequency(eeg, 'Frequencies', 6), 'NeuroAnalyzer:eeg:badOption', ...
+        'at or above half the sampling rate (5 Hz)');
+    verifyError(tests, @() EEGAnalysis.timeFrequency(eeg, 'Frequencies', [1 2], 'Cycles', 0), 'NeuroAnalyzer:eeg:badOption');
+    verifyError(tests, @() EEGAnalysis.timeFrequency(eeg, 'Frequencies', [1 2], 'Cycles', [3 4 5]), 'NeuroAnalyzer:eeg:badOption');
+    verifyError(tests, @() EEGAnalysis.timeFrequency(eeg, 'Frequencies', [1 2], 'Bands', [3 4]), 'NeuroAnalyzer:eeg:badOption');
+    verifyError(tests, @() EEGAnalysis.timeFrequency(eeg, 'Frequencies', [1 2], 'Bands', [2 1]), 'NeuroAnalyzer:eeg:badOption');
+    verifyError(tests, @() EEGAnalysis.timeFrequency(eeg, 'Frequencies', [1 2], 'Bands', [1 2], 'Channels', 'Oz'), ...
+        'NeuroAnalyzer:eeg:unknownChannel');
+    verifyError(tests, @() EEGAnalysis.timeFrequency(eeg, 'Frequencies', [1 2], 'Bands', [1 2], 'Conditions', 'C'), ...
+        'NeuroAnalyzer:eeg:unknownCondition');
+    verifyError(tests, @() EEGAnalysis.timeFrequency(eeg, 'Frequencies', [1 2], 'Bands', [1 2], 'Baseline', [0.3 0.4]), ...
+        'NeuroAnalyzer:eeg:badWindow');
+    verifyError(tests, @() EEGAnalysis.timeFrequency(EEGAnalysis.markBad(eeg, {'Fz', 'Cz'}), 'Frequencies', [1 2], ...
+        'Bands', [1 2]), 'NeuroAnalyzer:eeg:badOption', 'every channel bad');
+    late = EEGSource.make(zeros(1, 5, 2), 10, 'Times', (0:4) / 10, 'Labels', {'Cz'}, 'Conditions', {'A', 'A'}, ...
+        'IsEpoched', true);
+    verifyError(tests, @() EEGAnalysis.timeFrequency(late, 'Frequencies', [1 2], 'Bands', [1 2]), ...
+        'NeuroAnalyzer:eeg:badWindow', 'no time before the event: a baseline must be given');
+    cont = EEGSource.make(zeros(1, 50), 10, 'Labels', {'Cz'}, 'IsEpoched', false);
+    verifyError(tests, @() EEGAnalysis.timeFrequency(cont), 'NeuroAnalyzer:eeg:notEpoched');
+    verifyError(tests, @() EEGAnalysis.grandTimeFrequency({}), 'NeuroAnalyzer:eeg:badOption');
+end
+
+%% testDemoAlphaDecrease - The demo's alpha halves after Target (O1 / Oz / O2, 350-650 ms)
+function testDemoAlphaDecrease(tests)
+    d = tests.TestData.demo;
+    a = d.truth.scalp.alpha;
+    verifyEqual(tests, a.decrease.condition, 'Target');
+    verifyEqual(tests, a.decrease.powerChangePct, -75);
+    tfs = cell(1, numel(d.scalp));
+    for p = 1:numel(d.scalp)
+        tfs{p} = EEGAnalysis.timeFrequency(readEEGLAB(d.scalp(p).eeglab), 'Channels', {'Oz'}, ...
+            'Frequencies', 4:40, 'Cycles', 3, 'Baseline', [-0.2 0]);
+    end
+    ga = EEGAnalysis.grandTimeFrequency(tfs);
+    w = ga.times >= 0.4 & ga.times <= 0.6;
+    i10 = ga.freqs == 10;
+    v = @(c) mean(ga.ersp(i10, w, strcmp(ga.conditions, c)));
+    verifyLessThan(tests, v('Target'), -1.5, 'alpha power falls after Target (simulated -6 dB, with noise)');
+    verifyLessThan(tests, abs(v('Standard')), 1.5, 'no change after Standard');
+    verifyLessThan(tests, abs(v('Novel')), 1.5, 'no change after Novel');
+    bp = @(c) mean(ga.bandPct(1, w, strcmp(ga.conditions, c)));
+    verifyLessThan(tests, bp('Target'), -30, 'alpha band power falls after Target');
+    verifyTrue(tests, all(all(isnan(ga.ersp(ga.freqs < 8, :, :)))), '1 s trials: no ERSP below 8 Hz');
+    % Raw recordings cut into longer trials: a baseline well before the event
+    ren = {'S 1', 'Standard'; 'S 2', 'Target'; 'S 3', 'Novel'};
+    tfs = cell(1, numel(d.raw));
+    for p = 1:numel(d.raw)
+        e = EEGAnalysis.filter(EEGAnalysis.markBad(EEGSource.open(d.raw(p).brainvision), 'T7'), 'HighPass', 0.1, 'LowPass', 30);
+        ep = EEGAnalysis.epoch(EEGAnalysis.rereference(e, 'average'), 'Window', [-0.6 1], 'Rename', ren);
+        tfs{p} = EEGAnalysis.timeFrequency(EEGAnalysis.rejectTrials(ep, 'PeakToPeak', 100), 'Channels', {'Oz'}, ...
+            'Frequencies', 4:40, 'Cycles', 3, 'Baseline', [-0.5 -0.1]);
+    end
+    ga = EEGAnalysis.grandTimeFrequency(tfs);
+    verifyTrue(tests, all(ga.baselineSamples > 0), 'every frequency has a baseline');
+    w = ga.times >= 0.4 & ga.times <= 0.6;
+    bp = @(c) mean(ga.bandPct(1, w, strcmp(ga.conditions, c)));
+    verifyLessThan(tests, bp('Target'), -45, 'alpha band power about -70% after Target');
+    verifyLessThan(tests, abs(bp('Standard')), 30);
+end
+
 %% ---------------------------------------------------------------- Helpers
+
+%% verifyEqualNaN - Same NaN positions and the same values elsewhere
+function verifyEqualNaN(tests, x, y, tol)
+    verifyEqual(tests, size(x), size(y));
+    verifyEqual(tests, isnan(x), isnan(y), 'the same values are blank');
+    verifyEqual(tests, x(~isnan(x)), y(~isnan(y)), 'AbsTol', tol);
+end
 
 %% tinyEEG - 2 channels x 5 samples x 4 trials with known averages
 % Trial k, channel c: k + c * [0 0 3 6 3] at -0.2 ... 0.2 s; conditions

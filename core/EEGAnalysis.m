@@ -92,6 +92,42 @@
 %       Value, Latency, Trials, AtEdge (a table).
 %   s   = EEGAnalysis.describeMeasure(opts)
 %       The measure in one plain sentence (for the window and methods text).
+%   tf  = EEGAnalysis.timeFrequency(eeg, Name, Value)
+%       Time-frequency of the trials of each condition, from complex Morlet
+%       wavelets (TimeFrequency.morletTF: unit energy, truncated at +/- 3
+%       SDs; each trial's mean removed first). 'Channels' (names, default
+%       all; bad channels left out; several channels: their power and ITPC
+%       are averaged), 'Frequencies' (Hz, default 4:40), 'Cycles' (one
+%       number, or one per frequency; default 3), 'Baseline' [from to] s
+%       (default from the trial start to 0), 'Bands' (nBands x 2 Hz,
+%       default [8 13]) with 'BandNames' (default {'Alpha'}), 'Conditions'.
+%       A value is kept only where the whole wavelet lies inside the trial
+%       (tf.valid, freq x time; TimeFrequency.supportSamples), so it is the
+%       same as from a longer recording; elsewhere it is NaN.
+%         power  freq x time x condition: mean over trials (uV^2)
+%         ersp   10*log10(power / B), B = the condition's mean power in the
+%                baseline (its samples where the wavelet fits; NaN at a
+%                frequency without such a sample, tf.baselineSamples = 0)
+%         itpc   | mean over trials of coef / |coef| | (0..1); about
+%                1/sqrt(trials) by chance
+%         bandPct, bandSem  bands x time x condition: band power (the mean
+%                power over the computed frequencies inside the band, valid
+%                where all of them are; tf.bandValid) of each trial as %
+%                change from the condition's mean baseline band power; mean
+%                and SEM across trials
+%       tf also holds conditions, times, fs, freqs, cycles, baseline,
+%       channels (used), left (chosen but bad), n (trials per condition),
+%       bands, bandNames.
+%   ga  = EEGAnalysis.grandTimeFrequency(tfs)
+%       Mean of several participants' timeFrequency results (same
+%       frequencies, times, cycles, baseline and bands): ersp (dB), itpc,
+%       power and bandPct averaged, every participant once; bandSem is the
+%       SEM across participants. ga.n participants and ga.trials trials per
+%       condition; conditions not in every participant are left out
+%       (ga.notes). One participant: its result as it is.
+%   s   = EEGAnalysis.describeTimeFrequency(tf)
+%       The settings in one plain sentence, then what the trial length left
+%       blank (lowest frequency with values, with a baseline).
 %   idx = EEGAnalysis.channelIndex(labels, names)
 %       Positions of channel names (any case); error listing the unknown ones.
 %
@@ -418,6 +454,275 @@ classdef EEGAnalysis
                     lower(o.Polarity), w(1), w(2), where);
             else
                 s = sprintf('Mean amplitude from %g to %g ms, %s.', w(1), w(2), where);
+            end
+        end
+
+        %% timeFrequency - Morlet power, ERSP, ITPC and band power per condition
+        function tf = timeFrequency(eeg, varargin)
+            o = EEGSource.options(struct('Channels', {{}}, 'Frequencies', 4:40, 'Cycles', 3, 'Baseline', [], ...
+                'Bands', [8 13], 'BandNames', {{'Alpha'}}, 'Conditions', {{}}), varargin);
+            if ~eeg.isEpoched
+                error('NeuroAnalyzer:eeg:notEpoched', ['The data are one continuous recording. Cut ' ...
+                    'them into trials around the events first.']);
+            end
+            conds = EEGSource.cellRow(o.Conditions);
+            if isempty(conds), conds = eeg.conditions; end
+            unknown = conds(~ismember(conds, eeg.conditions));
+            if ~isempty(unknown)
+                error('NeuroAnalyzer:eeg:unknownCondition', 'Unknown %s %s. Conditions in the data: %s.', ...
+                    EEGSource.plural(numel(unknown), 'condition'), EEGSource.listText(unknown), EEGSource.listText(eeg.conditions));
+            end
+            t = eeg.times;
+            fs = eeg.fs;
+            nS = numel(t);
+            % Frequencies (increasing) and the cycles of each
+            freqs = double(o.Frequencies(:)');
+            if isempty(freqs) || any(~isfinite(freqs)) || any(freqs <= 0) || any(freqs >= fs / 2)
+                error('NeuroAnalyzer:eeg:badOption', ['The frequencies must lie above 0 Hz and below half the ' ...
+                    'sampling rate (%g Hz).'], fs / 2);
+            end
+            cyc = double(o.Cycles(:)');
+            if isscalar(cyc)
+                freqs = unique(freqs);
+                cyc = repmat(cyc, size(freqs));
+            elseif numel(cyc) ~= numel(freqs) || any(diff(freqs) <= 0)
+                error('NeuroAnalyzer:eeg:badOption', ['Give one number of cycles, or one per frequency ' ...
+                    '(frequencies increasing).']);
+            end
+            if any(~(cyc > 0)) || any(~isfinite(cyc))
+                error('NeuroAnalyzer:eeg:badOption', 'The number of wavelet cycles must be above 0.');
+            end
+            % Baseline window (default: from the start of the trial to the event)
+            bw = double(o.Baseline);
+            if isempty(bw)
+                if t(1) >= 0
+                    error('NeuroAnalyzer:eeg:badWindow', ['The trials start at or after the event (%g ms), so ' ...
+                        'there is no time before it to compare with. Give a baseline window.'], t(1) * 1000);
+                end
+                bw = [t(1) min(0, t(end))];
+            end
+            wb = EEGAnalysis.windowMask(t, bw, 'baseline');
+            % Bands: the computed frequencies inside each
+            bands = double(o.Bands);
+            if isempty(bands), bands = zeros(0, 2); end
+            if size(bands, 2) ~= 2 || any(bands(:, 1) >= bands(:, 2))
+                error('NeuroAnalyzer:eeg:badOption', 'Each band must be [low high] in Hz with low < high.');
+            end
+            nB = size(bands, 1);
+            bandNames = EEGSource.cellRow(o.BandNames);
+            if numel(bandNames) ~= nB
+                bandNames = arrayfun(@(k) sprintf('%g-%g Hz', bands(k, :)), 1:nB, 'UniformOutput', false);
+            end
+            inBand = cell(1, nB);
+            for b = 1:nB
+                inBand{b} = find(freqs >= bands(b, 1) - 1e-9 & freqs <= bands(b, 2) + 1e-9);
+                if isempty(inBand{b})
+                    error('NeuroAnalyzer:eeg:badOption', ['No frequency from %g to %g Hz is computed (%s band): ' ...
+                        'the frequencies run from %g to %g Hz.'], bands(b, :), bandNames{b}, freqs(1), freqs(end));
+                end
+            end
+            % Channels: the chosen ones (default all) without the bad ones
+            bad = EEGAnalysis.badChannels(eeg);
+            chans = EEGSource.cellRow(o.Channels);
+            if isempty(chans)
+                ch = find(~bad);
+            else
+                ch = EEGAnalysis.channelIndex(eeg.labels, chans);
+            end
+            left = eeg.labels(ch(bad(ch)));
+            ch = ch(~bad(ch));
+            if isempty(ch) && isempty(chans)
+                error('NeuroAnalyzer:eeg:badOption', 'Every channel is marked bad.');
+            elseif isempty(ch)
+                error('NeuroAnalyzer:eeg:badOption', 'Every chosen channel is marked bad (%s): choose other channels.', ...
+                    EEGSource.listText(left));
+            end
+            % Where the whole wavelet lies inside the trial
+            h = TimeFrequency.supportSamples(fs, freqs, cyc);
+            k = 1:nS;
+            valid = k >= 1 + h(:) & k <= nS - h(:);
+            fu = find(any(valid, 2))';
+            % Trials of each condition
+            nTr = size(eeg.data, 3);
+            C = numel(conds);
+            trialCond = zeros(1, nTr);
+            for c = 1:C
+                trialCond(strcmp(eeg.trials.condition, conds{c})) = c;
+            end
+            n = arrayfun(@(c) sum(trialCond == c), 1:C);
+            F = numel(freqs);
+            pw = zeros(F, nS, C);
+            ip = zeros(F, nS, C);
+            bt = zeros(nB, nS, nTr);                 % band power of each trial (mean over channels)
+            for c = ch
+                if isempty(fu), break; end
+                X = reshape(double(eeg.data(c, :, :)), nS, nTr).';
+                coef = reshape(TimeFrequency.morletTF(X, fs, freqs(fu), cyc(fu)), numel(fu), nS, nTr);
+                p = abs(coef) .^ 2;
+                u = coef ./ max(abs(coef), realmin);
+                for cc = 1:C
+                    sel = trialCond == cc;
+                    if ~any(sel), continue; end
+                    pw(fu, :, cc) = pw(fu, :, cc) + mean(p(:, :, sel), 3);
+                    ip(fu, :, cc) = ip(fu, :, cc) + abs(mean(u(:, :, sel), 3));
+                end
+                for b = 1:nB
+                    [~, j] = ismember(inBand{b}, fu);        % 0: a frequency of the band never fits the trial
+                    if all(j > 0), bt(b, :, :) = bt(b, :, :) + mean(p(j, :, :), 1); end
+                end
+            end
+            nCh = numel(ch);
+            pw = pw / nCh;
+            ip = ip / nCh;
+            bt = bt / nCh;
+            out = repmat(~valid, [1 1 C]);
+            pw(out) = NaN;
+            ip(out) = NaN;
+            % ERSP: dB against the condition's mean power in the baseline samples where the wavelet fits
+            inBase = valid & wb;
+            B = nan(F, 1, C);
+            for i = find(any(inBase, 2))'
+                B(i, 1, :) = mean(pw(i, inBase(i, :), :), 2);
+            end
+            ersp = 10 * log10(pw ./ B);
+            % Band power: each trial as % change from its condition's mean baseline band power
+            bandValid = false(nB, nS);
+            bp = nan(nB, nS, C);
+            bs = nan(nB, nS, C);
+            for b = 1:nB
+                bandValid(b, :) = all(valid(inBand{b}, :), 1);
+                mb = bandValid(b, :) & wb;
+                if ~any(mb), continue; end
+                for cc = 1:C
+                    sel = trialCond == cc;
+                    if ~any(sel), continue; end
+                    y = reshape(bt(b, :, sel), nS, []);       % samples x trials
+                    pc = 100 * (y / mean(mean(y(mb, :), 1)) - 1);
+                    pc(~bandValid(b, :), :) = NaN;
+                    bp(b, :, cc) = mean(pc, 2)';
+                    if sum(sel) > 1, bs(b, :, cc) = std(pc, 0, 2)' / sqrt(sum(sel)); end
+                end
+            end
+            tf = struct('conditions', {conds}, 'times', t, 'fs', fs, 'freqs', freqs, 'cycles', cyc, ...
+                'baseline', bw, 'channels', {eeg.labels(ch)}, 'left', {left}, 'n', n, 'power', pw, ...
+                'ersp', ersp, 'itpc', ip, 'valid', valid, 'baselineSamples', sum(inBase, 2)', ...
+                'bands', bands, 'bandNames', {bandNames}, 'bandPct', bp, 'bandSem', bs, 'bandValid', bandValid);
+        end
+
+        %% grandTimeFrequency - Mean of the participants' time-frequency results (each participant once)
+        function ga = grandTimeFrequency(tfs)
+            if isstruct(tfs), tfs = num2cell(tfs); end
+            if isempty(tfs)
+                error('NeuroAnalyzer:eeg:badOption', ['No time' char(8211) 'frequency results to average.']);
+            end
+            ref = tfs{1};
+            ga = ref;
+            ga.trials = ref.n;
+            ga.notes = {};
+            if numel(tfs) == 1, return; end
+            same = @(a, b) numel(a) == numel(b) && all(abs(a(:) - b(:)) < 1e-9);
+            for p = 2:numel(tfs)
+                e = tfs{p};
+                if ~same(e.times, ref.times) || ~same(e.freqs, ref.freqs) || ~same(e.cycles, ref.cycles) ...
+                        || ~same(e.baseline, ref.baseline) || ~same(e.bands, ref.bands)
+                    error('NeuroAnalyzer:eeg:mismatch', ['Participant %d has other trial times, frequencies, ' ...
+                        'cycles, baseline or bands than participant 1.'], p);
+                end
+            end
+            conds = ref.conditions;
+            for p = 2:numel(tfs)
+                conds = conds(ismember(conds, tfs{p}.conditions));
+            end
+            if isempty(conds)
+                error('NeuroAnalyzer:eeg:unknownCondition', 'The participants have no condition in common.');
+            end
+            P = numel(tfs);
+            C = numel(conds);
+            [F, nS, ~] = size(ref.ersp);
+            nB = size(ref.bands, 1);
+            E = zeros(F, nS, C, P); I = E; W = E;
+            Bp = zeros(nB, nS, C, P);
+            N = zeros(P, C);
+            for p = 1:P
+                [~, j] = ismember(conds, tfs{p}.conditions);
+                E(:, :, :, p) = tfs{p}.ersp(:, :, j);
+                I(:, :, :, p) = tfs{p}.itpc(:, :, j);
+                W(:, :, :, p) = tfs{p}.power(:, :, j);
+                Bp(:, :, :, p) = tfs{p}.bandPct(:, :, j);
+                N(p, :) = tfs{p}.n(j);
+            end
+            ga.conditions = conds;
+            ga.ersp = mean(E, 4);
+            ga.itpc = mean(I, 4);
+            ga.power = mean(W, 4);
+            ga.bandPct = mean(Bp, 4);
+            ga.bandSem = std(Bp, 0, 4) / sqrt(P);
+            ga.n = repmat(P, 1, C);
+            ga.trials = sum(N, 1);
+            every = cellfun(@(e) e.conditions, tfs, 'UniformOutput', false);
+            every = [every{:}];
+            leftOut = EEGSource.stableUnique(every(~ismember(every, conds)));
+            if ~isempty(leftOut)
+                ga.notes{end + 1} = sprintf('Left out of the grand average: %s (not recorded in every participant).', ...
+                    EEGSource.listText(leftOut));
+            end
+            used = cellfun(@(e) e.channels, tfs, 'UniformOutput', false);
+            if any(cellfun(@(c) ~isequal(sort(c), sort(ref.channels)), used))
+                ga.channels = EEGSource.stableUnique([used{:}]);
+                ga.notes{end + 1} = sprintf(['The channels marked bad differ between participants: each ' ...
+                    'participant uses their good channels among %s.'], EEGSource.listText(ga.channels));
+            end
+            left = cellfun(@(e) e.left, tfs, 'UniformOutput', false);
+            ga.left = EEGSource.stableUnique([{}, left{:}]);
+        end
+
+        %% describeTimeFrequency - Settings in one sentence, then what the trial length left blank
+        function s = describeTimeFrequency(tf)
+            f = tf.freqs;
+            nc = unique(tf.cycles);
+            if isscalar(nc), ct = sprintf('%g cycles', nc); else, ct = sprintf('%g to %g cycles', min(nc), max(nc)); end
+            if isscalar(tf.channels), where = sprintf('at %s', tf.channels{1});
+            else, where = sprintf('averaged over %d channels', numel(tf.channels)); end
+            s = sprintf(['Morlet wavelets of %s, %g to %g Hz (%d frequencies), %s; ERSP in dB against the mean ' ...
+                'power from %g to %g ms.'], ct, f(1), f(end), numel(f), where, tf.baseline * 1000);
+            has = any(tf.valid, 2)';
+            withBase = tf.baselineSamples > 0;
+            span = sprintf('%g to %g ms', tf.times([1 end]) * 1000);
+            if ~any(has)
+                s = sprintf(['%s No value: at every frequency the wavelet is longer than the trials (%s). Cut ' ...
+                    'longer trials, use fewer cycles or higher frequencies.'], s, span);
+                return;
+            end
+            if ~has(1)
+                s = sprintf('%s Below %g Hz the wavelets are longer than the trials (%s): no values.', s, ...
+                    f(find(has, 1)), span);
+            end
+            if ~any(withBase)
+                s = sprintf(['%s No ERSP: at no frequency does a whole wavelet fit inside the baseline. Cut ' ...
+                    'trials that start earlier, or use fewer cycles.'], s);
+            elseif find(withBase, 1) > find(has, 1)
+                s = sprintf(['%s ERSP from %g Hz up: below, no whole wavelet fits inside the baseline ' ...
+                    '(trials that start earlier would help).'], s, f(find(withBase, 1)));
+            end
+            if any(withBase)
+                i = find(withBase, 1);
+                tv = tf.times(tf.valid(i, :)) * 1000;
+                s = sprintf(['%s At %g Hz the values run from %.0f to %.0f ms; nearer the trial edges the ' ...
+                    'wavelet would leave the trial, so they stay blank.'], s, f(i), tv(1), tv(end));
+            end
+            % Band power: how much of the baseline its lowest frequency leaves
+            inWin = tf.times >= tf.baseline(1) - 1e-9 & tf.times <= tf.baseline(2) + 1e-9;
+            for b = 1:size(tf.bands, 1)
+                mb = tf.bandValid(b, :) & inWin;
+                lo = f(find(f >= tf.bands(b, 1) - 1e-9, 1));
+                if ~any(mb)
+                    s = sprintf(['%s No %s band power: at %g Hz no whole wavelet fits inside the baseline ' ...
+                        '(longer trials needed).'], s, tf.bandNames{b}, lo);
+                elseif sum(mb) < sum(inWin)
+                    tv = tf.times(mb) * 1000;
+                    s = sprintf(['%s %s band power: its baseline is only %.0f to %.0f ms (where the wavelet of ' ...
+                        '%g Hz fits), so it is noisier.'], s, tf.bandNames{b}, tv(1), tv(end), lo);
+                end
             end
         end
 
