@@ -10,6 +10,8 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-02
+
 ### Added
 
 - **EEG Analysis: scalp maps** (ROADMAP EEG step 4). **Scalp maps** in
