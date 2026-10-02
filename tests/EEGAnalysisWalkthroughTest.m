@@ -857,6 +857,12 @@ function testTimeFrequency(tests)
     tests.verifyLessThan(abs(v('Standard')), 1.5);
     tests.verifyLessThan(abs(v('Novel')), 1.5);
     tests.verifyTrue(all(all(isnan(g.ersp(g.freqs < 8, :, :)))), 'no ERSP below 8 Hz');
+    d = g.ersp(:, :, strcmp(g.conditions, 'Target')) - g.ersp(:, :, strcmp(g.conditions, 'Standard'));
+    [dm, k] = min(d(:));
+    [fi, ti] = ind2sub(size(d), k);
+    fprintf(['Time-frequency demo (Help numbers): ERSP 10 Hz 400-600 ms at Oz: Target %.2f, Standard %.2f, ' ...
+        'Novel %.2f dB; Target minus Standard min %.2f dB at %g Hz, %g ms\n'], v('Target'), v('Standard'), ...
+        v('Novel'), dm, g.freqs(fi), g.times(ti) * 1000);
     tests.verifyTrue(contains(app.TFInfo.Text, 'ERSP from 8 Hz up'));
     tests.verifyTrue(contains(app.StatusLabel.Text, 'Grey: no value'));
     axs = findobj(app.MapPanel, 'Type', 'axes');
@@ -875,6 +881,9 @@ function testTimeFrequency(tests)
     tests.verifyEqual(g.channels, {'Cz'});
     j = find(abs(g.times - 0.1) < 0.003, 1);
     tests.verifyGreaterThan(min(g.itpc(i10, j, :)), 0.5, 'N1: phase locked in every condition');
+    fprintf('Time-frequency demo: ITPC 10 Hz at Cz, 100 ms: %s; 400-600 ms: %s (%s)\n', ...
+        mat2str(round(squeeze(g.itpc(i10, j, :))' * 100) / 100), ...
+        mat2str(round(squeeze(mean(g.itpc(i10, w, :), 2))' * 100) / 100), strjoin(g.conditions, ', '));
     tests.verifyLessThan(max(mean(g.itpc(i10, w, :), 2)), 0.4, 'no phase locking at 400-600 ms');
     tests.verifyNumElements(findobj(app.MapPanel, 'Type', 'axes'), 4, 'one per condition and the colour scale');
     shot(tests, app, 'EEGAnalysisApp_t02_itpc_n1');
@@ -890,6 +899,8 @@ function testTimeFrequency(tests)
     g = app.GrandTF;
     bp = @(cnd) mean(g.bandPct(1, w, strcmp(g.conditions, cnd)));
     tests.verifyLessThan(bp('Target'), -35, 'alpha band power falls after Target');
+    fprintf('Time-frequency demo: alpha band 400-600 ms at Oz: Target %.1f, Standard %.1f, Novel %.1f %%\n', ...
+        bp('Target'), bp('Standard'), bp('Novel'));
     tests.verifyLessThan(abs(bp('Standard')), 30);
     tests.verifyTrue(contains(app.TFInfo.Text, 'Alpha band power: its baseline is only'), ...
         'the 1 s trials leave little baseline at 8 Hz');
@@ -944,6 +955,11 @@ function testTimeFrequency(tests)
     bp = @(cnd) mean(g.bandPct(1, w2(g), strcmp(g.conditions, cnd)));
     tests.verifyLessThan(bp('Target'), -45);
     tests.verifyLessThan(abs(bp('Standard')), 30);
+    i10 = g.freqs == 10;
+    fprintf(['Time-frequency raw demo (-600 to 1000 ms): trials kept %s; alpha band 400-600 ms at Oz: Target ' ...
+        '%.1f, Standard %.1f, Novel %.1f %%; ERSP 10 Hz Target %.2f dB\n'], mat2str(cellfun(@(e) size(e.data, 3), ...
+        app.EEGs)), bp('Target'), bp('Standard'), bp('Novel'), ...
+        mean(g.ersp(i10, w2(g), strcmp(g.conditions, 'Target'))));
     app.setView('grand', 'Band power');
     shot(tests, app, 'EEGAnalysisApp_t04_raw_alpha_band_power');
     app.setView('grand', 'Time', 'Target', 'Standard');
