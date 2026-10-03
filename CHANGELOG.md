@@ -10,6 +10,8 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-03
+
 ### Added
 
 - **Batch Processing: EEG** (ROADMAP EEG step 7). A new pipeline, *EEG:
@@ -27,6 +29,12 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   at Pz is Target > Novel > Standard in every file. The event parsing,
   mastoid pair and notch frequencies are now shared in `EEGAnalysis`
   (`parseEvents`, `mastoidChannels`, `notchFrequencies`).
+
+### Fixed
+
+- Help, Batch Processing: the P300 values the EEG demo batch gives are
+  quoted as the ranges in the release frames (Target 5.6 to 7.7, Novel 3.4
+  to 4.7, Standard 0.7 to 1.9 µV at Pz).
 
 ## [0.8.0] - 2026-10-02
 
