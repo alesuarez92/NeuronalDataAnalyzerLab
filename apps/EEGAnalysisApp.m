@@ -842,7 +842,7 @@ classdef EEGAnalysisApp < handle
             try
                 for k = 1:numel(eegs)
                     e = EEGAnalysis.markBad(eegs{k}, cs.bad{k});
-                    nf = notchFrequencies(cs.notch, e.fs, cs.lowPass);
+                    nf = EEGAnalysis.notchFrequencies(cs.notch, e.fs, cs.lowPass);
                     if cs.highPass > 0 || cs.lowPass > 0 || ~isempty(nf)
                         [e, info] = EEGAnalysis.filter(e, 'HighPass', positiveOrEmpty(cs.highPass), ...
                             'LowPass', positiveOrEmpty(cs.lowPass), 'Notch', nf);
@@ -856,7 +856,7 @@ classdef EEGAnalysisApp < handle
                         case 'average'
                             e = EEGAnalysis.rereference(e, 'average');
                         case 'linked mastoids'
-                            e = EEGAnalysis.rereference(e, mastoidChannels(e.labels));
+                            e = EEGAnalysis.rereference(e, EEGAnalysis.mastoidChannels(e.labels));
                         case 'channels'
                             if isempty(cs.referenceChannels)
                                 error('NeuroAnalyzer:eeg:badOption', 'Type the reference channels (e.g. Cz or TP9, TP10).');
@@ -2022,7 +2022,7 @@ classdef EEGAnalysisApp < handle
         %% currentTrials - Step 3 settings from the controls (window in s, thresholds in uV, 0 = off)
         % problems: entries of the events text that are not 'type' or 'type = name'.
         function ts = currentTrials(app)
-            [events, rename, problems] = parseEvents(app.EventsEdit.Value);
+            [events, rename, problems] = EEGAnalysis.parseEvents(app.EventsEdit.Value);
             ts = struct('eventsText', strtrim(app.EventsEdit.Value), 'events', {events}, 'rename', {rename}, ...
                 'window', [app.TrialFromEdit.Value app.TrialToEdit.Value] / 1000, ...
                 'reject', logical(app.RejectCb.Value), 'peakToPeak', app.PeakToPeakEdit.Value, ...
@@ -2916,31 +2916,12 @@ function writeCsv(p, header, rows)
     end
 end
 
-%% notchFrequencies - Line frequency and its multiples below fs/2 - 1 Hz (and the low-pass); [] when off
-function f = notchFrequencies(notch, fs, lowPass)
-    f = [];
-    if ~isnumeric(notch) || isempty(notch) || notch <= 0, return; end
-    f = notch * (1:floor(fs / 2 / notch));
-    f = f(f < fs / 2 - 1);
-    if lowPass > 0, f = f(f < lowPass); end
-    if isempty(f), f = notch; end      % at least the line frequency itself
-end
 
 %% positiveOrEmpty - x when above 0, else [] (0 = off in the number fields)
 function x = positiveOrEmpty(x)
     if isempty(x) || x <= 0, x = []; end
 end
 
-%% mastoidChannels - TP9 / TP10, else M1 / M2, else A1 / A2 (the names as in labels)
-function names = mastoidChannels(labels)
-    pairs = {'TP9', 'TP10'; 'M1', 'M2'; 'A1', 'A2'};
-    for i = 1:size(pairs, 1)
-        [tf, j] = ismember(lower(pairs(i, :)), lower(labels));
-        if all(tf), names = labels(j); return; end
-    end
-    error('NeuroAnalyzer:eeg:unknownChannel', ['Linked mastoids need the channels TP9 and TP10 (or M1 and M2, ' ...
-        'or A1 and A2), and this recording has none of these pairs. Choose Channels and type the reference channels.']);
-end
 
 %% cleaningText - Step 2 settings in one short sentence
 function t = cleaningText(cs, nP)
@@ -3014,29 +2995,6 @@ function t = trialsText(eegs, rej, w)
     t = sprintf('%s; %s kept.', t, strjoin(arrayfun(@num2str, [rej.kept], 'UniformOutput', false), ', '));
 end
 
-%% parseEvents - 'S 1 = Standard, S 2' -> events {'S 2'}, rename {'S 1', 'Standard'}; problems: bad entries
-function [events, rename, problems] = parseEvents(txt)
-    events = {};
-    rename = cell(0, 2);
-    problems = {};
-    parts = strtrim(strsplit(char(txt), {',', ';'}));
-    for i = 1:numel(parts)
-        x = parts{i};
-        if isempty(x), continue; end
-        eq = strfind(x, '=');
-        if isempty(eq)
-            events{end + 1} = x; %#ok<AGROW>
-            continue;
-        end
-        type = strtrim(x(1:eq(1) - 1));
-        name = strtrim(x(eq(1) + 1:end));
-        if isempty(type) || isempty(name) || numel(eq) > 1
-            problems{end + 1} = x; %#ok<AGROW>
-        else
-            rename(end + 1, :) = {type, name}; %#ok<AGROW>
-        end
-    end
-end
 
 %% buildLayout - EEGLayout of a recording with layout settings (source, positionsFile, edits)
 % P: the positions file already read ([] = read it here when there is one).

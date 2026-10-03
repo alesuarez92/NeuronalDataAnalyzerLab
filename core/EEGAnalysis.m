@@ -128,6 +128,16 @@
 %   s   = EEGAnalysis.describeTimeFrequency(tf)
 %       The settings in one plain sentence, then what the trial length left
 %       blank (lowest frequency with values, with a baseline).
+%   [events, rename, problems] = EEGAnalysis.parseEvents(txt)
+%       'S 1 = Standard, S 2 = Target, boundary' -> the event types to use
+%       ({'boundary'}), the renames ({'S 1', 'Standard'; 'S 2', 'Target'})
+%       and the parts that could not be read (e.g. 'a = b = c').
+%   names = EEGAnalysis.mastoidChannels(labels)
+%       The linked-mastoid pair of a recording: TP9 / TP10, else M1 / M2,
+%       else A1 / A2 (any case); plain error when it has none of them.
+%   f   = EEGAnalysis.notchFrequencies(notch, fs, lowPass)
+%       The line frequency notch (Hz, 0 = off: []) and its harmonics below
+%       fs/2 - 1 Hz and below the low-pass (when on); at least notch itself.
 %   idx = EEGAnalysis.channelIndex(labels, names)
 %       Positions of channel names (any case); error listing the unknown ones.
 %
@@ -1016,6 +1026,51 @@ classdef EEGAnalysis
             s = sprintf(['Rejected %d of %d trials with %s on any good channel from %g to %g ms ' ...
                 '(%s).'], info.total - info.kept, info.total, strjoin(rules, ' or '), info.window * 1000, ...
                 EEGSource.listText(per));
+        end
+
+        %% parseEvents - 'S 1 = Standard, S 2' -> event types, renames, unreadable parts
+        function [events, rename, problems] = parseEvents(txt)
+            events = {};
+            rename = cell(0, 2);
+            problems = {};
+            parts = strtrim(strsplit(char(txt), {',', ';'}));
+            for i = 1:numel(parts)
+                x = parts{i};
+                if isempty(x), continue; end
+                eq = strfind(x, '=');
+                if isempty(eq)
+                    events{end + 1} = x; %#ok<AGROW>
+                    continue;
+                end
+                type = strtrim(x(1:eq(1) - 1));
+                name = strtrim(x(eq(1) + 1:end));
+                if isempty(type) || isempty(name) || numel(eq) > 1
+                    problems{end + 1} = x; %#ok<AGROW>
+                else
+                    rename(end + 1, :) = {type, name}; %#ok<AGROW>
+                end
+            end
+        end
+
+        %% mastoidChannels - TP9 / TP10, else M1 / M2, else A1 / A2 (as named in labels)
+        function names = mastoidChannels(labels)
+            pairs = {'TP9', 'TP10'; 'M1', 'M2'; 'A1', 'A2'};
+            for i = 1:size(pairs, 1)
+                [tf, j] = ismember(lower(pairs(i, :)), lower(labels));
+                if all(tf), names = labels(j); return; end
+            end
+            error('NeuroAnalyzer:eeg:unknownChannel', ['Linked mastoids need the channels TP9 and TP10 (or M1 and M2, ' ...
+                'or A1 and A2), and this recording has none of these pairs. Choose Channels and type the reference channels.']);
+        end
+
+        %% notchFrequencies - Line frequency and harmonics below Nyquist (and the low-pass)
+        function f = notchFrequencies(notch, fs, lowPass)
+            f = [];
+            if ~isnumeric(notch) || isempty(notch) || notch <= 0, return; end
+            f = notch * (1:floor(fs / 2 / notch));
+            f = f(f < fs / 2 - 1);
+            if lowPass > 0, f = f(f < lowPass); end
+            if isempty(f), f = notch; end      % at least the line frequency itself
         end
 
         %% channelIndex - Positions of channel names (any case)

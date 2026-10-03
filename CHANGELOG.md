@@ -10,6 +10,24 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+### Added
+
+- **Batch Processing: EEG** (ROADMAP EEG step 7). A new pipeline, *EEG:
+  ERPs and a measure per condition*, runs the steps of EEG Analysis on
+  every file of a folder (one per participant, raw or cleaned: BrainVision,
+  EDF / BDF, EEGLAB, FieldTrip, XDF) with one set of settings, in the
+  window's order: bad channels (typed, the file's own, optionally the
+  suggested ones), filters, reference, trials around renamed events,
+  rejection, ERPs with a baseline, and the mean or peak amplitude in a
+  window at chosen channels. One row per file and condition: trials kept
+  and rejected, value (µV), latency, edge-peak flag, channels used, bad
+  channels, reference. The numbers equal the window's with the same
+  settings (tested). *Try demo batch* loads the 3 raw demo recordings:
+  exactly the blink trials are rejected (62 trials per file) and the P300
+  at Pz is Target > Novel > Standard in every file. The event parsing,
+  mastoid pair and notch frequencies are now shared in `EEGAnalysis`
+  (`parseEvents`, `mastoidChannels`, `notchFrequencies`).
+
 ## [0.8.0] - 2026-10-02
 
 ### Added

@@ -8,7 +8,7 @@
 %
 %   demo = demoBatch(pipeline)            writes to tempdir/NeuroAnalyzerDemo/batch/<pipeline>
 %   demo = demoBatch(pipeline, folder)    writes to folder (created if needed)
-%   demo = demoBatch(pipeline, folder, n) n files ('mua': always 2)
+%   demo = demoBatch(pipeline, folder, n) n files ('mua': always 2, 'eeg': 3)
 %
 % Output struct demo: pipeline, folder, files (1 x n cellstr, sorted by
 % name), truth (1 x n struct array, one per file, fields below) and params
@@ -43,6 +43,17 @@
 %               recording recorded with twice the gain (mua_data x 2,
 %               an exact scaling, so sorting finds the same spikes).
 %               truth: gain, DemoData's truth (units, onsets).
+%   'eeg'       the raw EEG demo of demoEEG (written into <folder>/raw):
+%               3 BrainVision Recorder recordings of the oddball study
+%               (500 Hz, 32 channels against FCz, markers S 1 / S 2 / S 3 =
+%               Standard (40) / Target (15) / Novel (15)), each with a noisy
+%               T7 and blinks in 8 known trials. The settings mark T7 bad,
+%               band-pass 0.1-30 Hz, re-reference to the average, cut -200 to
+%               800 ms and reject above 100 uV peak-to-peak (exactly the 8
+%               blink trials: 62 trials left), then the mean amplitude 300-400
+%               ms at Pz: P300 Target > Novel > Standard in every file.
+%               truth: demoEEG's truth.raw.participants without the data
+%               (condition, onsets, blinkTrials, n1CzAverage, ...).
 %   'roi'       imaging .mat (stack, timeVec, roiMask), n = 3: 64 x 64 x
 %               100 frames at 10 Hz. A cell (disk, radius 5 px, centre
 %               (20, 20), the roiMask) whose fluorescence is F0 (1 + dF/F):
@@ -65,19 +76,20 @@ function demo = demoBatch(pipeline, folder, n)
     if nargin < 2 || isempty(folder)
         folder = fullfile(tempdir, 'NeuroAnalyzerDemo', 'batch', pipeline);
     end
-    defaultN = struct('ldf', 4, 'erp', 3, 'mua', 2, 'roi', 3, 'features', 4);
+    defaultN = struct('ldf', 4, 'erp', 3, 'mua', 2, 'eeg', 3, 'roi', 3, 'features', 4);
     if ~isfield(defaultN, pipeline)
-        error('NeuroAnalyzer:demoBatch:pipeline', 'Unknown pipeline ''%s'' (ldf, erp, mua, roi, features).', pipeline);
+        error('NeuroAnalyzer:demoBatch:pipeline', 'Unknown pipeline ''%s'' (ldf, erp, mua, eeg, roi, features).', pipeline);
     end
     if nargin < 3 || isempty(n), n = defaultN.(pipeline); end
     if exist(folder, 'dir') ~= 7, mkdir(folder); end
-    offsets = struct('ldf', 1, 'erp', 2, 'mua', 3, 'roi', 4, 'features', 5);
+    offsets = struct('ldf', 1, 'erp', 2, 'mua', 3, 'roi', 4, 'features', 5, 'eeg', 6);
     rs = RandStream('mt19937ar', 'Seed', 20260930 + offsets.(pipeline));
 
     switch pipeline
         case 'ldf',      [files, truth, params] = makeLDF(folder, n, rs);
         case 'erp',      [files, truth, params] = makeERP(folder, n, rs);
         case 'mua',      [files, truth, params] = makeMUA(folder);
+        case 'eeg',      [files, truth, params] = makeEEG(folder);
         case 'roi',      [files, truth, params] = makeROI(folder, n, rs);
         otherwise,       [files, truth, params] = makeFeatures(folder, n, rs);
     end
@@ -176,6 +188,20 @@ function [files, truth, params] = makeMUA(folder)
     end
     params = Batch.completeParams('mua', struct('channels', 4, 'detectMethod', 'MAD', ...
         'threshold', 4, 'polarity', 'negative', 'seed', 0));
+end
+
+%% makeEEG - The raw EEG demo (3 BrainVision recordings) and settings that clean and measure it
+function [files, truth, params] = makeEEG(folder)
+    if exist('writeBrainVision', 'file') ~= 2
+        addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'io'));
+    end
+    d = demoEEG(folder, 'Kinds', {'raw'}, 'Formats', {'brainvision'});
+    files = {d.raw.brainvision};
+    truth = rmfield(d.truth.raw.participants, 'data');
+    params = Batch.completeParams('eeg', struct('badChannels', 'T7', 'highPass', 0.1, 'lowPass', 30, ...
+        'reference', 'Average', 'events', 'S 1 = Standard, S 2 = Target, S 3 = Novel', 'trialWindowMs', [-200 800], ...
+        'peakToPeak', 100, 'baselineMs', [-200 0], 'measure', 'Mean amplitude', 'windowMs', [300 400], ...
+        'channels', 'Pz'));
 end
 
 %% makeROI - Stacks with different calcium transient size and vessel diameter

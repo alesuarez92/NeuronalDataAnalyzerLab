@@ -5,7 +5,8 @@
 % Drives BatchApp through its public methods (no dialogs): demo batch for
 % each pipeline -> Run -> summary, including a corrupt file (red row, the
 % other files still processed), removing files and exporting. Checks the
-% summaries against the demo truths and saves a frame after every step to
+% summaries against the demo truths (the raw EEG demo: blink trials out,
+% P300 at Pz) and saves a frame after every step to
 % test-artifacts/screens/walkthrough/BatchApp_x<NN>_<step>.png.
 % Skipped when no display is available; the LDF and MUA steps need their
 % toolboxes and are left out without them.
@@ -145,6 +146,34 @@ function testBatchPipelines(tests)
     app.clearFiles();
     verifyEqual(tests, char(app.RunBtn.Enable), 'off');
     shot(tests, app, 'BatchApp_x10_mua_settings');
+end
+
+%% testBatchEEG - EEG demo batch in the window: 3 raw recordings cleaned and measured
+function testBatchEEG(tests)
+    app = BatchApp(); c = onCleanup(@() delete(app.UIFig));
+    verifyTrue(tests, logical(app.loadDemo('eeg')));
+    verifyEqual(tests, app.Pipeline, 'eeg');
+    verifyNumElements(tests, app.Files, 3);
+    p = app.getParams();
+    verifyEqual(tests, p.badChannels, 'T7');
+    verifyEqual(tests, p.trialWindowMs, [-200 800]);
+    verifyEqual(tests, p.reference, 'Average');
+    verifyTrue(tests, contains(app.StatusLabel.Text, '62 trials per file'));
+    shot(tests, app, 'BatchApp_x12_eeg_demo_loaded');
+    [ok, R] = app.runBatch(fullfile(tests.TestData.work, 'eeg'));
+    verifyTrue(tests, ok);
+    verifyEqual(tests, R.nOK, 3);
+    T = R.summary;
+    verifyEqual(tests, height(T), 9);
+    for k = 1:3
+        f = T(strcmp(T.File, sprintf('sub-%02d_task-oddball.vhdr', k)), :);
+        verifyEqual(tests, sum(f.Trials), 62);
+        verifyEqual(tests, sum(f.Rejected), 8);
+        v = @(cnd) f.Value_uV(strcmp(f.Condition, cnd));
+        verifyGreaterThan(tests, v('Target'), v('Novel'));
+        verifyGreaterThan(tests, v('Novel'), v('Standard'));
+    end
+    shot(tests, app, 'BatchApp_x13_eeg_summary');
 end
 
 %% testBatchMUA - MUA demo batch in the window (two files, channel 4)

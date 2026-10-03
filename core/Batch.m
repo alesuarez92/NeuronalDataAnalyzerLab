@@ -9,7 +9,7 @@
 % no trials, ...) is recorded in the table with Status 'error' and its
 % message, and the batch carries on with the next file.
 %
-%   names = Batch.pipelines()          {'ldf', 'erp', 'mua', 'roi', 'features'}
+%   names = Batch.pipelines()          {'ldf', 'erp', 'mua', 'eeg', 'roi', 'features'}
 %   d = Batch.describe(pipeline)       label, input, output, extensions
 %   p = Batch.defaults(pipeline)       default settings (see below)
 %   spec = Batch.paramSpec(pipeline)   the main settings as form fields
@@ -75,6 +75,19 @@
 %               ISI violations and, with a stimulus, the rate in
 %               responseWindowMs vs baselineWindowMs around each onset
 %               (SpikeTrains.stimulusOnsets: stimThreshold, stimMinISI).
+%   'eeg'       one EEG file per participant, raw or cleaned (BrainVision
+%               .vhdr, EDF / BDF, EEGLAB .set, FieldTrip .mat, XDF, read by
+%               EEGSource.open) -> the steps of EEG Analysis in its order:
+%               bad channels (the file's own, those typed that the file has,
+%               optionally the suggested ones) -> zero-phase FIR filters ->
+%               re-reference -> trials around the events (continuous
+%               recordings; events renamed to conditions) -> rejection by
+%               peak-to-peak / absolute amplitude -> ERPs per condition
+%               (baseline subtracted) -> mean or peak amplitude in a window
+%               at the chosen channels (EEGAnalysis.measure). Row per
+%               condition: trials kept and rejected, value (uV), latency
+%               (ms; peak only), peak on the window edge, the channels used,
+%               bad channels, reference, sampling rate.
 %   'roi'       imaging .mat (stack or frames, timeVec or t, roiMask or
 %               roiMasks) or multi-frame TIFF -> grayscale stack (optional
 %               rigid motion correction) -> per ROI: mean brightness
@@ -90,8 +103,8 @@
 %
 % Requires: Signal Processing Toolbox for 'ldf' (decimate, butter,
 % filtfilt) and 'mua' (findpeaks); Statistics and Machine Learning
-% Toolbox for 'mua' (pca, kmeans). 'erp', 'roi' and 'features' use base
-% MATLAB only (Image Processing Toolbox not needed).
+% Toolbox for 'mua' (pca, kmeans). 'erp', 'eeg', 'roi' and 'features' use
+% base MATLAB only (Image Processing Toolbox not needed).
 % =========================================================================
 
 classdef Batch
@@ -109,7 +122,7 @@ classdef Batch
 
         %% pipelines - Pipeline keys, in menu order
         function names = pipelines()
-            names = {'ldf', 'erp', 'mua', 'roi', 'features'};
+            names = {'ldf', 'erp', 'mua', 'eeg', 'roi', 'features'};
         end
 
         %% describe - Label, input, output and file extensions of a pipeline
@@ -131,6 +144,13 @@ classdef Batch
                         'input', 'MUA .mat files (mua_data, mua_fs; stim_data optional) from Extract Ephys', ...
                         'output', 'One row per channel: spikes, units, rates, SNR, ISI violations, evoked vs baseline rate', ...
                         'extensions', {{'.mat'}});
+                case 'eeg'
+                    d = struct('label', 'EEG: ERPs and a measure per condition', ...
+                        'input', ['One EEG file per participant, raw or cleaned: BrainVision .vhdr, EDF / BDF, ' ...
+                        'EEGLAB .set, FieldTrip .mat, XDF (as EEG Analysis)'], ...
+                        'output', ['One row per file and condition: trials kept and rejected, mean or peak ' ...
+                        'amplitude (and latency) at the chosen channels'], ...
+                        'extensions', {{'.vhdr', '.edf', '.bdf', '.set', '.mat', '.xdf'}});
                 case 'roi'
                     d = struct('label', 'Imaging: ROI dF/F and vessel diameter', ...
                         'input', 'Image stacks: .mat (stack, timeVec, roiMask) or multi-frame TIFF', ...
@@ -164,6 +184,11 @@ classdef Batch
                         'minSpikesPerCluster', 20, 'autoMerge', true, 'seed', 0, ...
                         'stimThreshold', 0.5, 'stimMinISI', 1, ...
                         'responseWindowMs', [5 55], 'baselineWindowMs', [-100 0]);
+                case 'eeg'
+                    p = struct('badChannels', '', 'suggestBad', false, 'highPass', 0, 'lowPass', 0, ...
+                        'notch', 'Off', 'reference', 'As recorded', 'referenceChannels', '', 'events', '', ...
+                        'trialWindowMs', [-200 800], 'peakToPeak', 0, 'absolute', 0, 'baselineMs', [-200 0], ...
+                        'measure', 'Mean amplitude', 'polarity', 'Positive', 'windowMs', [300 400], 'channels', '');
                 case 'roi'
                     p = struct('measure', 'All', 'baselineFrames', 30, 'line', [], ...
                         'robust', true, 'motionCorrection', false, 'roiMask', []);
@@ -222,6 +247,24 @@ classdef Batch
                         'stimMinISI', 'Stim min ISI (s)', 'numeric', {}, [0 Inf], 'Minimum interval between onsets (s)'
                         'responseWindowMs', 'Response (ms)', 'vector', {}, [], 'Evoked-rate window after each onset, ms, e.g. 5 55'
                         'baselineWindowMs', 'Baseline (ms)', 'vector', {}, [], 'Baseline-rate window around each onset, ms, e.g. -100 0'};
+                case 'eeg'
+                    rows = {
+                        'badChannels', 'Bad channels', 'text', {}, [], ['Channels to leave out in every file (flat, noisy or detached), separated by commas, e.g. T7; names a file does not have are ignored, and the channels a file marks bad stay bad']
+                        'suggestBad', 'Also suggested bad channels', 'checkbox', {}, [], 'Also leave out, in each file, the flat or very noisy channels that Suggest in EEG Analysis would give'
+                        'highPass', 'High-pass (Hz)', 'numeric', {}, [0 10000], 'Zero-phase FIR high-pass as in EEG Analysis (0 = off), e.g. 0.1 for raw recordings. Filter continuous recordings, not short trials'
+                        'lowPass', 'Low-pass (Hz)', 'numeric', {}, [0 10000], 'Zero-phase FIR low-pass (0 = off), e.g. 30 for ERPs'
+                        'notch', 'Notch', 'dropdown', {'Off', '50 Hz (+ harmonics)', '60 Hz (+ harmonics)'}, [], 'Mains line noise and its multiples below half the sampling rate and the low-pass'
+                        'reference', 'Reference', 'dropdown', {'As recorded', 'Average', 'Linked mastoids', 'Channels'}, [], 'As recorded; the average of the good channels; TP9 / TP10 (or M1 / M2, A1 / A2); or the channels below'
+                        'referenceChannels', 'Reference channels', 'text', {}, [], 'Only for Reference = Channels: names separated by commas, e.g. Cz or TP9, TP10 (their mean)'
+                        'events', 'Events and names', 'text', {}, [], 'Continuous recordings: the events to cut trials around, each with its condition name, e.g. S 1 = Standard, S 2 = Target. Empty = every event, named by its type. Files already cut into trials keep their conditions'
+                        'trialWindowMs', 'Trial window (ms)', 'vector', {}, [], 'Continuous recordings: start and end of each trial around its event, ms, e.g. -200 800'
+                        'peakToPeak', ['Reject peak-to-peak (' char(181) 'V)'], 'numeric', {}, [0 1e6], 'Leave out a trial when the largest minus the smallest value of a good channel exceeds this (0 = off), e.g. 100'
+                        'absolute', ['Reject absolute (' char(181) 'V)'], 'numeric', {}, [0 1e6], 'Leave out a trial when any value of a good channel lies further than this from 0 (0 = off)'
+                        'baselineMs', 'Baseline (ms)', 'vector', {}, [], 'Subtract the mean of this window from every trial and channel, ms, e.g. -200 0; empty = none'
+                        'measure', 'Measure', 'dropdown', {'Mean amplitude', 'Peak amplitude'}, [], 'Mean amplitude in the window (robust; recommended) or the largest value with its latency'
+                        'polarity', 'Peak direction', 'dropdown', {'Positive', 'Negative'}, [], 'Peak amplitude only: positive (P1, P300) or negative (N1, N400)'
+                        'windowMs', 'Window (ms)', 'vector', {}, [], 'Time window to measure in, ms after the event, e.g. 300 400 (the same for every condition)'
+                        'channels', 'Channels', 'text', {}, [], 'Channels to measure at, separated by commas (averaged), e.g. Pz; empty = all good channels'};
                 case 'roi'
                     rows = {
                         'measure', 'Measure', 'dropdown', {'All', 'dF/F', 'Brightness', 'Vessel diameter'}, [], 'All = brightness and dF/F per ROI, plus vessel diameter when a line is given'
@@ -402,6 +445,7 @@ classdef Batch
                 case 'ldf',      [rows, info] = Batch.fileLDF(file, params, outFolder);
                 case 'erp',      [rows, info] = Batch.fileERP(file, params);
                 case 'mua',      [rows, info] = Batch.fileMUA(file, params);
+                case 'eeg',      [rows, info] = Batch.fileEEG(file, params);
                 case 'roi',      [rows, info] = Batch.fileROI(file, params);
                 otherwise,       [rows, info] = Batch.fileFeatures(file, params);
             end
@@ -467,6 +511,10 @@ classdef Batch
                         'nRejected', 'double'; 'MeanRate_Hz', 'double'; 'UnitRates_Hz', 'char'; ...
                         'MeanSNR', 'double'; 'MaxISIViol_pct', 'double'; 'nOnsets', 'double'; ...
                         'BaselineRate_Hz', 'double'; 'EvokedRate_Hz', 'double'};
+                case 'eeg'
+                    cols = {'Condition', 'char'; 'Trials', 'double'; 'Rejected', 'double'; 'Value_uV', 'double'; ...
+                        'Latency_ms', 'double'; 'PeakAtEdge', 'double'; 'Channels', 'char'; ...
+                        'BadChannels', 'char'; 'Reference', 'char'; 'Fs_Hz', 'double'};
                 case 'roi'
                     cols = {'ROI', 'char'; 'nFrames', 'double'; 'FrameRate_Hz', 'double'; ...
                         'MeanBrightness', 'double'; 'PeakDFF', 'double'; 'PeakDFFTime_s', 'double'; ...
@@ -709,6 +757,99 @@ classdef Batch
             evokedRate = nr / (numel(onsets) * (rw(2) - rw(1)));
         end
 
+        %% fileEEG - One participant's EEG -> the steps of EEG Analysis -> one row per condition
+        % Bad channels -> filters -> reference -> trials (continuous recordings) -> rejection
+        % -> ERPs (baseline) -> measure, in the order of the EEG Analysis window.
+        function [rows, info] = fileEEG(file, p)
+            if exist('EEGSource', 'file') ~= 2
+                addpath(fullfile(fileparts(mfilename('fullpath')), 'io'));
+            end
+            eeg = EEGSource.open(file);
+            % Bad channels: the file's own, those typed that it has, and (optionally) the suggested ones
+            bad = eeg.labels(EEGAnalysis.badChannels(eeg));
+            typed = Batch.nameList(p.badChannels);
+            bad = [bad, typed(ismember(lower(typed), lower(eeg.labels)))];
+            if p.suggestBad
+                bad = [bad, EEGAnalysis.suggestBadChannels(EEGAnalysis.markBad(eeg, bad))];
+            end
+            [~, keep] = unique(lower(bad), 'stable');
+            eeg = EEGAnalysis.markBad(eeg, bad(keep));
+            % Filters, then the reference
+            notch = 0;
+            if strncmpi(p.notch, '50', 2), notch = 50; elseif strncmpi(p.notch, '60', 2), notch = 60; end
+            nf = EEGAnalysis.notchFrequencies(notch, eeg.fs, p.lowPass);
+            if p.highPass > 0 || p.lowPass > 0 || ~isempty(nf)
+                eeg = EEGAnalysis.filter(eeg, 'HighPass', Batch.positiveOrEmpty(p.highPass), ...
+                    'LowPass', Batch.positiveOrEmpty(p.lowPass), 'Notch', nf);
+            end
+            switch Batch.menuIndex(p.reference, {'As recorded', 'Average', 'Linked mastoids', 'Channels'}, 'reference')
+                case 2, eeg = EEGAnalysis.rereference(eeg, 'average');
+                case 3, eeg = EEGAnalysis.rereference(eeg, EEGAnalysis.mastoidChannels(eeg.labels));
+                case 4
+                    rc = Batch.nameList(p.referenceChannels);
+                    if isempty(rc)
+                        error('NeuroAnalyzer:Batch:badValue', 'Type the reference channels (e.g. Cz or TP9, TP10).');
+                    end
+                    eeg = EEGAnalysis.rereference(eeg, rc);
+            end
+            % Trials: continuous recordings are cut around their events; then the rejection
+            if ~eeg.isEpoched
+                [events, rename, problems] = EEGAnalysis.parseEvents(p.events);
+                if ~isempty(problems)
+                    error('NeuroAnalyzer:Batch:badValue', 'Write each event as "type = name" (e.g. S 1 = Standard): %s.', ...
+                        strjoin(problems, ', '));
+                end
+                eeg = EEGAnalysis.epoch(eeg, 'Window', Batch.window2(p.trialWindowMs, 'Trial window') / 1000, ...
+                    'Events', events, 'Rename', rename);
+            end
+            conds = eeg.conditions;
+            before = cellfun(@(c) sum(strcmp(eeg.trials.condition, c)), conds);
+            if p.peakToPeak > 0 || p.absolute > 0
+                eeg = EEGAnalysis.rejectTrials(eeg, 'PeakToPeak', Batch.positiveOrEmpty(p.peakToPeak), ...
+                    'Absolute', Batch.positiveOrEmpty(p.absolute));
+            end
+            % ERPs and the measure
+            base = [];
+            if ~isempty(p.baselineMs), base = Batch.window2(p.baselineMs, 'Baseline') / 1000; end
+            erp = EEGAnalysis.conditionERPs(eeg, 'Baseline', base);
+            chans = Batch.nameList(p.channels);
+            kind = Batch.ifelse(Batch.menuIndex(p.measure, {'Mean amplitude', 'Peak amplitude'}, 'measure') == 2, 'peak', 'mean');
+            r = EEGAnalysis.measure(erp, 'Channels', chans, 'Window', Batch.window2(p.windowMs, 'Window') / 1000, ...
+                'Measure', kind, 'Polarity', lower(char(p.polarity)));
+            isBad = EEGAnalysis.badChannels(eeg);
+            if isempty(chans)
+                used = sprintf('all %d good channels', sum(~isBad));
+            else
+                idx = EEGAnalysis.channelIndex(eeg.labels, chans);
+                used = strjoin(eeg.labels(idx(~isBad(idx))), ', ');
+            end
+            badText = strjoin(eeg.labels(isBad), ', ');
+            rows = struct('Status', 'ok', 'Message', '', 'Condition', {r.condition}, 'Trials', {r.n}, ...
+                'Rejected', NaN, 'Value_uV', {r.value}, 'Latency_ms', NaN, 'PeakAtEdge', NaN, 'Channels', used, ...
+                'BadChannels', badText, 'Reference', eeg.reference, 'Fs_Hz', eeg.fs);
+            % Rows in the order of the conditions typed in Events and names (others after)
+            [~, ren] = EEGAnalysis.parseEvents(p.events);
+            [~, pos] = ismember({rows.Condition}, ren(:, 2)');
+            pos(pos == 0) = size(ren, 1) + find(pos == 0);
+            [~, order] = sort(pos);
+            rows = rows(order);
+            r = r(order);
+            for c = 1:numel(rows)
+                rows(c).Rejected = before(strcmp(conds, rows(c).Condition)) - rows(c).Trials;
+                rows(c).Latency_ms = 1000 * r(c).latency;
+                rows(c).PeakAtEdge = double(r(c).atEdge);
+                if isnan(rows(c).Value_uV)
+                    rows(c).Status = 'error';
+                    rows(c).Message = 'No good channel to measure at: every chosen channel is marked bad.';
+                end
+            end
+            vals = strjoin(arrayfun(@(x) sprintf('%s %.3g', x.Condition, x.Value_uV), rows, 'UniformOutput', false), ', ');
+            desc = EEGAnalysis.describeMeasure(struct('Measure', kind, 'Polarity', char(p.polarity), ...
+                'Window', Batch.window2(p.windowMs, 'Window') / 1000, 'Channels', {chans}));
+            info = sprintf('%d trials (%d rejected); %s: %s %sV', sum([rows.Trials]), sum([rows.Rejected]), ...
+                regexprep(desc, '\.$', ''), vals, char(181));
+        end
+
         %% fileROI - Stack -> per-ROI brightness / dF/F, vessel diameter on a line
         function [rows, info] = fileROI(file, p)
             [stack, timeVec, masks, names] = Batch.loadStack(file);
@@ -948,6 +1089,20 @@ classdef Batch
                 error('NeuroAnalyzer:Batch:missingVars', 'Invalid %s file. Missing variable(s): %s. Use a file saved by %s.', ...
                     what, strjoin(missing, ', '), source);
             end
+        end
+
+        %% nameList - 'T7, FT9' (or a cell) -> {'T7', 'FT9'}; '' -> {}
+        function c = nameList(x)
+            if iscell(x), c = EEGSource.cellRow(x); return; end
+            x = strtrim(char(x));
+            if isempty(x), c = {}; return; end
+            c = strtrim(strsplit(x, {',', ';'}));
+            c = c(~cellfun(@isempty, c));
+        end
+
+        %% positiveOrEmpty - x when above 0, else [] (0 = off)
+        function x = positiveOrEmpty(x)
+            if isempty(x) || x <= 0, x = []; end
         end
 
         %% window2 - Validate a [from to] window

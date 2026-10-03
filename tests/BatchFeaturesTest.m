@@ -8,7 +8,10 @@
 % that a corrupt or wrong file is recorded as an error while the other
 % files still run, that the CSV, MAT and log files are written, that
 % Cancel skips the remaining files, and that MUA sorting is repeatable
-% (seeded) and leaves the global random stream as it was.
+% (seeded) and leaves the global random stream as it was. The EEG pipeline
+% gives the same numbers as the steps of EEG Analysis run one by one, and
+% on the raw EEG demo rejects exactly the blink trials (P300 at Pz Target >
+% Novel > Standard in every file).
 % 'ldf' needs the Signal Processing Toolbox and 'mua' also the Statistics
 % and Machine Learning Toolbox; those tests are skipped without them.
 % =========================================================================
@@ -200,6 +203,66 @@ function testMUA(tests)
     % Seeded: the same file gives the same result again
     R2 = Batch.run('mua', demo.files(1), demo.params, fullfile(tests.TestData.dir, 'out_mua'), 'Name', 'mua_again');
     verifyEqual(tests, [R2.summary.nSpikes R2.summary.nUnits], [T.nSpikes(1) T.nUnits(1)]);
+end
+
+%% testEEG - The raw EEG demo: T7 bad, 0.1-30 Hz, average reference, blink trials out, P300 order;
+% the same numbers as the steps of EEG Analysis run one by one
+function testEEG(tests)
+    demo = demoBatch('eeg', fullfile(tests.TestData.dir, 'eeg'));
+    verifyNumElements(tests, demo.files, 3);
+    bad = fullfile(tests.TestData.dir, 'eeg', 'raw', 'notes.mat');
+    x = 1; save(bad, 'x');                                    % a .mat that is no EEG: an error row
+    R = Batch.run('eeg', [demo.files, {bad}], demo.params, fullfile(tests.TestData.dir, 'eeg_out'), 'Name', 'eeg');
+    verifyEqual(tests, R.nOK, 3);
+    verifyEqual(tests, R.nError, 1, 'the .mat that is no EEG');
+    verifyEqual(tests, R.fileStatus{4}, 'error');
+    S = R.summary;
+    verifyEqual(tests, height(S), 3 * 3 + 1, 'one row per file and condition, one for the error');
+    verifyTrue(tests, all(ismember({'Condition', 'Trials', 'Rejected', 'Value_uV', 'Latency_ms', 'PeakAtEdge', ...
+        'Channels', 'BadChannels', 'Reference', 'Fs_Hz'}, S.Properties.VariableNames)));
+    ren = {'S 1', 'Standard'; 'S 2', 'Target'; 'S 3', 'Novel'};
+    for k = 1:3
+        [~, nm, ex] = fileparts(demo.files{k});
+        f = S(strcmp(S.File, [nm ex]), :);
+        tag = sprintf('file %d', k);
+        verifyEqual(tests, f.Condition', {'Standard', 'Target', 'Novel'}, ['rows in the order typed, ' tag]);
+        verifyEqual(tests, sum(f.Trials), 62, tag);
+        verifyEqual(tests, sum(f.Rejected), numel(demo.truth(k).blinkTrials), ['exactly the blink trials, ' tag]);
+        verifyEqual(tests, unique(f.BadChannels), {'T7'});
+        verifyEqual(tests, unique(f.Channels), {'Pz'});
+        verifyTrue(tests, startsWith(f.Reference{1}, 'average of the 31 good channels'));
+        verifyEqual(tests, unique(f.Fs_Hz), 500);
+        verifyTrue(tests, all(isnan(f.Latency_ms)), 'mean amplitude: no latency');
+        v = @(c) f.Value_uV(strcmp(f.Condition, c));
+        verifyGreaterThan(tests, v('Target'), v('Novel'), ['P300: Target > Novel, ' tag]);
+        verifyGreaterThan(tests, v('Novel'), v('Standard'), ['P300: Novel > Standard, ' tag]);
+        if k == 1
+            % The steps of EEG Analysis, one by one: the same numbers
+            e = EEGAnalysis.filter(EEGAnalysis.markBad(EEGSource.open(demo.files{1}), 'T7'), 'HighPass', 0.1, 'LowPass', 30);
+            ep = EEGAnalysis.epoch(EEGAnalysis.rereference(e, 'average'), 'Window', [-0.2 0.8], 'Rename', ren);
+            ep = EEGAnalysis.rejectTrials(ep, 'PeakToPeak', 100);
+            r = EEGAnalysis.measure(EEGAnalysis.conditionERPs(ep, 'Baseline', [-0.2 0]), 'Channels', 'Pz', ...
+                'Window', [0.3 0.4]);
+            for c = 1:numel(r)
+                verifyEqual(tests, v(r(c).condition), r(c).value, 'AbsTol', 1e-9, ['as EEG Analysis: ' r(c).condition]);
+                verifyEqual(tests, f.Trials(strcmp(f.Condition, r(c).condition)), r(c).n);
+            end
+        end
+    end
+    verifySubstring(tests, fileread(R.paths.log), '62 trials (8 rejected); Mean amplitude from 300 to 400 ms, at Pz: Standard');
+    % N1: negative peak at Cz with a latency; a channel marked bad gives a plain error row
+    p = demo.params;
+    p.measure = 'Peak amplitude'; p.polarity = 'Negative'; p.windowMs = [50 150]; p.channels = 'Cz';
+    rows = Batch.processFile('eeg', demo.files{1}, p);
+    verifyEqual(tests, {rows.Status}, {'ok', 'ok', 'ok'});
+    verifyLessThan(tests, [rows.Value_uV], -2, 'N1 negative at Cz');
+    verifyEqual(tests, [rows.Latency_ms], repmat(100 + 1000 * demo.truth(1).latShift, 1, 3), 'AbsTol', 20);
+    p.channels = 'T7';
+    rows = Batch.processFile('eeg', demo.files{1}, p);
+    verifyEqual(tests, unique({rows.Status}), {'error'});
+    verifySubstring(tests, rows(1).Message, 'marked bad');
+    p.channels = 'Pz'; p.events = 'S 1 = a = b';
+    verifyError(tests, @() Batch.processFile('eeg', demo.files{1}, p), 'NeuroAnalyzer:Batch:badValue');
 end
 
 %% testErrorsAndCancel - Unreadable / unsupported files logged; Cancel skips the rest
