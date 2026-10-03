@@ -43,7 +43,7 @@
 %       gives 0, no motion).
 %   F = LaserSpeckle.flowFromK2(K2, p)         flow index: 1 ./ K2 ('invK2')
 %       or 1 / tau_c in 1/s ('tauc')
-%   R = LaserSpeckle.analyze(I, t, masks, p)
+%   R = LaserSpeckle.analyze(I, t, masks, p, names)
 %       Everything the window shows: R.t (s), R.fps, R.flowMean (mean flow
 %       map), R.K2Mean, R.meanImage, R.roiFlow (K x M, flow index per ROI),
 %       R.roiRel (K x M, flow relative to the baseline window, 1 = baseline),
@@ -53,14 +53,35 @@
 %       of the average trial in ResponseSec: robust to noise), R.peak (K x 1,
 %       %, largest value of the average trial after onset: noise adds to
 %       it) and R.peakTime (K x 1, s), R.responseMap (H x W, % change in
-%       ResponseSec vs the pre-stimulus window), R.units, R.checks
-%       (plain-language checks, cellstr 'OK: / Check: / Warning: ...'),
-%       R.checkRows (the same checks as QualityChecks rows) and R.params.
+%       ResponseSec vs the pre-stimulus window), R.units, R.roiNames
+%       (names: one per ROI; default 'ROI 1', ... or 'Whole image'),
+%       R.roiK (K x 1, baseline speckle contrast of each ROI; [] for
+%       perfusion images), R.intensity (1 x N, mean raw intensity of each
+%       frame after the dark level; [] unless raw), R.shift (field shift:
+%       t, dx, dy in px against the start, from up to 100 evenly spaced
+%       blocks of frames), R.checks (plain-language checks, cellstr
+%       'OK: / Check: / Warning: ...'), R.checkRows (the same checks as
+%       QualityChecks rows) and R.params.
+%   [d, t] = LaserSpeckle.fieldShift(V, t)
+%       Shift (px, [dx dy] per row) of each of up to 100 evenly spaced
+%       blocks of the images V (H x W x M) against the first block
+%       (cross-correlation, sub-pixel peak), and the block times.
 %   onsets = LaserSpeckle.onsetsFromStimulus(stim, t, minISI)
 %       Rising edges of a stimulus trace (mid-range threshold, crossings
 %       closer than minISI s to the last kept one are ignored), in s.
 %   [c, Q] = LaserSpeckle.checks(I, p, R)      plain-language quality checks
-%       (lines and QualityChecks rows)
+%       (lines and QualityChecks rows): saturation, dark level, contrast
+%       window, speckle contrast, speckle size (autocorrelation of raw
+%       frames: Check below 1.5 px), exposure (Check outside 1-20 ms),
+%       illumination drift (Check above 10%), high baseline contrast in a
+%       ROI (Check above K = 0.4: static scattering), perfusion images
+%       clipped at the export range (Warning above 0.1% of the values),
+%       field shift (Check above 1 px, Warning above 3 px), then the
+%       blood-flow checks every source shares on the ROI traces
+%       (PerfusionChecks: trials, trial baseline, time resolution, drift,
+%       movement artefacts, signal range)
+%   w = LaserSpeckle.speckleSize(I, dark)      speckle size (px): FWHM of the
+%       spatial autocorrelation of up to 5 raw frames (NaN when flat)
 %   s = LaserSpeckle.flowLabel(p)              axis label of the flow index
 %
 % Errors: NeuroAnalyzer:LaserSpeckle:input, :window, :frames, :exposure,
@@ -201,21 +222,33 @@ classdef LaserSpeckle
         end
 
         %% analyze - Flow index, ROI traces, trials, response map and checks
-        function R = analyze(I, t, masks, p)
+        function R = analyze(I, t, masks, p, names)
             p = LaserSpeckle.complete(p);
             [H, W, N] = size(I);
             if N < 1 || ~isnumeric(I)
                 error('NeuroAnalyzer:LaserSpeckle:input', 'The images must be a numeric H x W x N stack.');
             end
-            if nargin < 3 || isempty(masks), masks = true(H, W); end
+            if nargin < 3 || isempty(masks)
+                masks = true(H, W);
+                if nargin < 5 || isempty(names), names = {'Whole image'}; end
+            end
             masks = logical(masks);
             if size(masks, 1) ~= H || size(masks, 2) ~= W
                 error('NeuroAnalyzer:LaserSpeckle:masks', 'Each ROI mask must be %d x %d (H x W).', H, W);
             end
             nR = size(masks, 3);
+            if nargin < 5 || isempty(names)
+                names = arrayfun(@(k) sprintf('ROI %d', k), 1:nR, 'UniformOutput', false);
+            end
+            names = cellstr(names);
             R = struct();
             R.params = p;
+            R.roiNames = names(:)';
             R.meanImage = mean(double(I), 3);
+            R.intensity = [];
+            if strcmpi(p.InputType, 'raw')
+                R.intensity = reshape(mean(mean(double(I), 1), 2), 1, N) - double(mean(p.Dark(:)));
+            end
 
             % --- Values that average linearly: K^2 (raw / contrast) or the flow itself ---
             switch lower(p.InputType)
@@ -282,6 +315,10 @@ classdef LaserSpeckle
             if ~any(inB), inB = true(1, M); end
             R.baselineSec = bw;
             R.roiRel = R.roiFlow ./ mean(R.roiFlow(:, inB), 2, 'omitnan');
+            R.roiK = [];
+            if isK2, R.roiK = sqrt(mean(roiV(:, inB), 2, 'omitnan')); end
+            [d, ts] = LaserSpeckle.fieldShift(V, R.t);
+            R.shift = struct('t', ts, 'dx', d(:, 1)', 'dy', d(:, 2)');
 
             % --- Trials around each onset (% change from each trial's own pre-stimulus mean) ---
             fs = R.fps;
@@ -420,6 +457,7 @@ classdef LaserSpeckle
                     end
                 end
             end
+            Q = LaserSpeckle.sourceChecks(Q, I, p, R);
             if strcmpi(p.FlowModel, 'tauc')
                 Q = QualityChecks.add(Q, 'note', 'Flow index', sprintf(['Flow index = 1/tau_c from the exposure ' ...
                     'model (T = %g ms, beta = %g).'], p.ExposureMs, p.Beta), ...
@@ -429,25 +467,84 @@ classdef LaserSpeckle
                     'Relative changes are close to changes in flow, slightly smaller for large changes.', ...
                     'Use the correlation-time model with the exposure for a closer estimate.');
             end
+            if isfield(R, 'shift') && ~isempty(R.shift)
+                Q = LaserSpeckle.shiftCheck(Q, R.shift);
+            end
             if isfield(R, 'onsets')
-                nOn = numel(p.Onsets);
-                nT = numel(R.onsets);
-                if nOn == 0
-                    Q = QualityChecks.add(Q, 'note', 'Trials', ...
-                        'No stimulus onsets: no trials or response map (only the traces over time).');
-                elseif nT < nOn
-                    Q = QualityChecks.add(Q, 'check', 'Trials', sprintf(['%d of %d stimuli were left out because ' ...
-                        'their trial (%g s before to %g s after) does not fit in the recording.'], nOn - nT, nOn, ...
-                        p.PreSec, p.PostSec), '', 'Shorten Before / After to keep them.');
-                end
-                if nT > 0 && nT < 3
-                    Q = QualityChecks.add(Q, 'check', 'Trials', sprintf('Only %d trial(s).', nT), ...
-                        'The average and its SD are unreliable.', 'Record more stimuli for a clear response.');
-                elseif nT >= 3
-                    Q = QualityChecks.add(Q, 'ok', 'Trials', sprintf('%d trials averaged.', nT));
+                o = PerfusionChecks.options();
+                if isfield(R, 'roiNames'), o.names = R.roiNames; end
+                o.onsets = sort(p.Onsets(isfinite(p.Onsets)));
+                o.trialOnsets = R.onsets;
+                o.preSec = p.PreSec;
+                o.postSec = p.PostSec;
+                o.responseSec = p.ResponseSec;
+                if isfield(R, 'roiFlow') && isfield(R, 't')
+                    Q = PerfusionChecks.run(R.roiFlow, R.t, o, Q);
+                else
+                    Q = PerfusionChecks.trials(Q, o);
                 end
             end
             c = QualityChecks.lines(Q);
+        end
+
+        %% fieldShift - Shift of evenly spaced blocks of frames against the first one (px)
+        function [d, tb] = fieldShift(V, t)
+            [H, W, M] = size(V);
+            nB = max(min(100, floor(M / 5)), min(M, 2));      % blocks of >= 5 frames when there are enough
+            d = NaN(nB, 2); tb = NaN(1, nB);
+            if nargin < 2 || numel(t) ~= M, t = 1:M; end
+            if H < 24 || W < 24 || M < 2, d = zeros(0, 2); tb = zeros(1, 0); return; end
+            e = 8;                                            % the borders (contrast windows cut there) do not move
+            V = V(e + 1:H - e, e + 1:W - e, :);
+            H = H - 2 * e; W = W - 2 * e;
+            edges = round(linspace(0, M, nB + 1));
+            win = LaserSpeckle.taper(H) * LaserSpeckle.taper(W)';
+            F0 = [];
+            for b = 1:nB
+                blk = mean(V(:, :, edges(b) + 1:edges(b + 1)), 3, 'omitnan');
+                tb(b) = mean(t(edges(b) + 1:edges(b + 1)));
+                ok = isfinite(blk);
+                if nnz(ok) < 0.5 * H * W, continue; end
+                blk(~ok) = mean(blk(ok));
+                if all(blk(:) > 0), blk = log(blk); end         % vessels and bright areas weigh alike
+                blk = (blk - mean(blk(:))) .* win;
+                if ~any(blk(:)), continue; end
+                F = fft2(blk);
+                F = F ./ max(abs(F), eps) .^ 0.5;                 % half-whitened: a sharper peak
+                if isempty(F0), F0 = F; d(b, :) = 0; continue; end
+                c = real(ifft2(F0 .* conj(F)));
+                [~, i] = max(c(:));
+                [r, k] = ind2sub([H W], i);
+                d(b, :) = -[LaserSpeckle.peakOffset(c(r, :), k, W), LaserSpeckle.peakOffset(c(:, k)', r, H)];
+            end
+            keep = isfinite(d(:, 1));
+            d = d(keep, :); tb = tb(keep);
+        end
+
+        %% speckleSize - FWHM (px) of the spatial autocorrelation of up to 5 raw frames
+        function w = speckleSize(I, dark)
+            if nargin < 2 || isempty(dark), dark = 0; end
+            [H, W, N] = size(I);
+            w = NaN;
+            if H < 16 || W < 16, return; end
+            idx = unique(round(linspace(1, N, min(5, N))));
+            k = ones(15);
+            cnt = conv2(ones(H, W), k, 'same');
+            ws = [];
+            for n = idx
+                f = double(I(:, :, n)) - double(mean(dark(:)));
+                m = conv2(f, k, 'same') ./ cnt;
+                z = f ./ m - 1;
+                z = z(5:end-4, 5:end-4);
+                if any(~isfinite(z(:))), continue; end
+                z = z - mean(z(:));
+                ac = real(ifft2(abs(fft2(z)) .^ 2));
+                if ~(ac(1, 1) > 0), continue; end
+                ac = ac / ac(1, 1);
+                ws(end + 1) = LaserSpeckle.fwhm(ac(1, 1:6)); %#ok<AGROW>
+                ws(end + 1) = LaserSpeckle.fwhm(ac(1:6, 1)'); %#ok<AGROW>
+            end
+            if ~isempty(ws), w = mean(ws); end
         end
 
         %% flowLabel - Axis label of the flow index
@@ -466,6 +563,146 @@ classdef LaserSpeckle
     end
 
     methods(Static, Hidden)
+
+        %% sourceChecks - Speckle size, exposure, illumination, baseline contrast; perfusion images
+        function Q = sourceChecks(Q, I, p, R)
+            type = lower(p.InputType);
+            if strcmp(type, 'raw')
+                w = LaserSpeckle.speckleSize(I, p.Dark);
+                if isfinite(w) && w < 1.5
+                    Q = QualityChecks.add(Q, 'check', 'Speckle size', sprintf(['Speckles are about %.1f px ' ...
+                        'across (width of the autocorrelation): one pixel or smaller.'], w), ['Below about ' ...
+                        '2 px per speckle each pixel averages several speckles: K is lower and flow looks faster ' ...
+                        '(relative changes are less affected).'], ['Close the lens aperture (a higher f-number) ' ...
+                        'or zoom in until a speckle covers about 2 px.']);
+                elseif isfinite(w)
+                    Q = QualityChecks.add(Q, 'ok', 'Speckle size', sprintf(['Speckles are about %.1f px across ' ...
+                        '(about 2 px or more is ideal).'], w));
+                end
+                if isfield(R, 'intensity') && numel(R.intensity) >= 3
+                    v = R.intensity;
+                    sm = v;
+                    if numel(v) >= 40, sm = movmean(v, round(numel(v) / 20)); end
+                    ch = (max(sm) - min(sm)) / mean(sm);
+                    if isfinite(ch) && ch > 0.1
+                        Q = QualityChecks.add(Q, 'check', 'Illumination', sprintf(['The mean raw intensity ' ...
+                            'changes by %.0f%% over the recording (from %.4g to %.4g).'], 100 * ch, sm(1), sm(end)), ...
+                            ['A drifting laser or light path changes the coherence and the share of camera noise: ' ...
+                            'contrast and the flow index can drift with it.'], ['Let the laser warm up (10-30 min) ' ...
+                            'and check its power and the light path; a ROI on static tissue shows the drift.']);
+                    elseif isfinite(ch)
+                        Q = QualityChecks.add(Q, 'ok', 'Illumination', sprintf(['Mean raw intensity stable ' ...
+                            '(within %.1f%%).'], 100 * ch));
+                    end
+                end
+            end
+            if any(strcmp(type, {'raw', 'contrast'}))
+                T = p.ExposureMs;
+                if isfinite(T) && (T < 1 || T > 20)
+                    Q = QualityChecks.add(Q, 'check', 'Exposure', sprintf(['The exposure (%g ms) is outside ' ...
+                        'the usual 1-20 ms.'], T), ['A short exposure leaves little blurring (K high, a noisy ' ...
+                        'flow index); a long one blurs even slow flow (K low: fast flow cannot be told apart) ' ...
+                        'and adds motion.'], '5-10 ms is usual for cortex; keep it the same in every recording you compare.');
+                elseif isfinite(T)
+                    Q = QualityChecks.add(Q, 'ok', 'Exposure', sprintf('Exposure %g ms (usual: 1-20 ms).', T));
+                end
+                if isfield(R, 'roiK') && ~isempty(R.roiK)
+                    k = R.roiK(:)';
+                    names = LaserSpeckle.roiNamesOf(R, numel(k));
+                    hi = find(k > 0.4);
+                    if ~isempty(hi)
+                        parts = arrayfun(@(j) sprintf('%s (K = %.2f)', names{j}, k(j)), hi, 'UniformOutput', false);
+                        Q = QualityChecks.add(Q, 'check', 'Baseline contrast', sprintf(['The baseline contrast ' ...
+                            'is high in %s.'], strjoin(parts, ', ')), ['Static scattering (skull, dura, scar) adds ' ...
+                            'speckle that does not move: 1/K' char(178) ' then underestimates relative changes ' ...
+                            'in flow there.'], ['Image through a thinned skull or a cranial window, or use ' ...
+                            'multi-exposure speckle imaging (MESI) to separate the static part; compare such a ' ...
+                            'ROI only with itself.']);
+                    elseif any(isfinite(k))
+                        rng = sprintf('%.2f', min(k));
+                        if max(k) - min(k) >= 0.005, rng = sprintf('%.2f-%.2f', min(k), max(k)); end
+                        Q = QualityChecks.add(Q, 'ok', 'Baseline contrast', sprintf(['Baseline contrast in the ' ...
+                            'ROIs K = %s (static scattering shows as K above 0.4).'], rng));
+                    end
+                end
+            end
+            if strcmp(type, 'flow')
+                v = double(I(:));
+                v = v(isfinite(v));
+                if ~isempty(v)
+                    top = max(v);
+                    f = mean(v >= top - 1e-9 * max(abs(top), 1));
+                    if f > 0.001 && top > 0
+                        Q = QualityChecks.add(Q, 'warning', 'Export range', sprintf(['%.1f%% of the values ' ...
+                            'are at the top of the range (%.4g).'], 100 * f, top), ['The images were clipped at ' ...
+                            'the export range (e.g. PIMSoft: 0-3000 PU): the flow there and its changes are ' ...
+                            'unknown.'], 'Export with a higher range or a lower gain; keep clipped regions out of the ROIs.');
+                    else
+                        Q = QualityChecks.add(Q, 'ok', 'Export range', 'No values clipped at the top of the range.');
+                    end
+                end
+                Q = QualityChecks.add(Q, 'note', 'Units', 'Perfusion in the device''s units, as exported.', ...
+                    'Compare relative changes only between recordings made with the same device and settings.');
+            end
+            if any(strcmp(type, {'contrast', 'flow'}))
+                Q = QualityChecks.add(Q, 'note', 'Raw images', ['The dark level, saturation and speckle size ' ...
+                    'checks need the raw camera images.']);
+            end
+        end
+
+        %% shiftCheck - Field shift between frames (Check > 1 px, Warning > 3 px)
+        function Q = shiftCheck(Q, sh)
+            if isempty(sh.t), return; end
+            m = hypot(sh.dx, sh.dy);
+            [big, i] = max(m);
+            if ~isfinite(big), return; end
+            if big > 1
+                level = 'check';
+                if big > 3, level = 'warning'; end
+                first = find(m > 1, 1);
+                dx = sh.dx(i); dy = sh.dy(i);
+                dx(abs(dx) < 0.05) = 0; dy(abs(dy) < 0.05) = 0;   % no '-0.0'
+                Q = QualityChecks.add(Q, level, 'Field shift', sprintf(['The image moves by up to %.1f px ' ...
+                    '(%.1f px across, %.1f px down at %.0f s; first above 1 px at %.0f s).'], big, dx, ...
+                    dy, sh.t(i), sh.t(first)), ['The ROIs then see other tissue (a vessel moving in or ' ...
+                    'out): their flow changes for no physiological reason, and the response map blurs.'], ...
+                    ['Fix the head and the camera better; register the frames (ROI analysis: motion ' ...
+                    'correction) before this analysis, or use the part before the shift.']);
+            else
+                Q = QualityChecks.add(Q, 'ok', 'Field shift', sprintf('The image does not move (at most %.1f px).', big));
+            end
+        end
+
+        function names = roiNamesOf(R, n)
+            names = arrayfun(@(k) sprintf('ROI %d', k), 1:n, 'UniformOutput', false);
+            if isfield(R, 'roiNames') && numel(R.roiNames) == n, names = R.roiNames; end
+        end
+
+        %% peakOffset - Signed sub-pixel offset of a circular correlation peak at index i of n
+        function o = peakOffset(c, i, n)
+            l = c(mod(i - 2, n) + 1); r = c(mod(i, n) + 1); m = c(i);
+            den = l - 2 * m + r;
+            frac = 0;
+            if den ~= 0, frac = 0.5 * (l - r) / den; end
+            o = i - 1 + frac;
+            if o > n / 2, o = o - n; end
+        end
+
+        %% fwhm - Full width at half maximum of a normalised autocorrelation profile (lag 0, 1, ...)
+        function w = fwhm(a)
+            k = find(a < 0.5, 1);
+            if isempty(k), w = 2 * (numel(a) - 1); return; end
+            w = 2 * ((k - 2) + (a(k - 1) - 0.5) / (a(k - 1) - a(k)));
+        end
+
+        %% taper - 1 in the middle, cosine fall-off over the outer eighth at each end
+        function h = taper(n)
+            h = ones(n, 1);
+            m = max(1, round(n / 8));
+            r = 0.5 - 0.5 * cos(pi * (0:m - 1)' / m);
+            h(1:m) = r;
+            h(end - m + 1:end) = flipud(r);
+        end
 
         %% complete - Fill missing settings with the defaults
         function p = complete(p)

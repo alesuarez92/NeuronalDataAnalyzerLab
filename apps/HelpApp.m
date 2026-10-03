@@ -500,6 +500,9 @@ classdef HelpApp < handle
                 '| demo_ldf_cropped.mat | LDF Process | The same recording cropped to 20–280 s (`stim`, `LDF`, `t`, `Fs`) |'
                 '| demo_ldf_trials.mat | LDF Average, Signal Characterization | 8 trials from −5 to 20 s at 10 Hz (`segmentedLDF`, `segmentedTime`) |'
                 '| demo_lsci.mat | Laser Speckle | Raw laser speckle images, 64 × 80 px, 900 frames at 10 Hz, exposure 5 ms, dark level 100: cortex K = 0.22, a vessel K = 0.07, a static corner K = 0.70; four stimuli (10, 30, 50, 70 s) raise the flow of an activated disk by 25% (three ROIs included) |'
+                '| demo_ldf_faults.mat | LDF Process | The cropped LDF with faults for the **Checks** tab: the baseline drifts from 120 to 160 PU, a 0.3 s jump of +400 PU at 72 s (in trial 3) and 1 s at 0 PU at 31 s (probe lifted) |'
+                '| demo_lsci_faults.mat | Laser Speckle | The speckle demo with faults: two speckles per pixel (lower K), the field moves 4 px to the right at 45 s, the light falls by 20%, exposure 25 ms, and a fourth ROI on the static corner (Thinned skull, K = 0.49) |'
+                '| demo_perfusion_faults.mat | Laser Speckle | Perfusion images as an imager exports them (PU, one image per second, 90 s): cortex 1000 PU, the vessel clipped at 3000 PU, the activated disk +25% after each stimulus |'
                 '| demo_tank/ | Ephys Extract | 30 s TDT-like block: 8 raw channels at 24414 Hz and a whisker stimulus (20 ms pulses every 2 s from 1 s) |'
                 '| demo_lfp.mat | LFP Analysis, Signal Characterization | 8-channel LFP at 1017 Hz, 100 µm spacing: ERP with N1 at 15 ms and P2 at 40 ms, largest at channel 4 |'
                 '| demo_mua.mat | MUA Analysis | Channels 3–5 at 24414 Hz with three units that fire more for 50 ms after each stimulus |'
@@ -534,7 +537,9 @@ classdef HelpApp < handle
                 '## Sessions and reports'
                 '* Every analysis window can save a **session** (inputs with checksums, settings, results, notes), reopen it later, and write a one-page **PDF report**. See **Sessions and reports**.'
                 '## Checks before you use the numbers'
-                '* Windows with a **Checks** tab (Laser speckle, Histology / culture) look at your data and settings and list what they found, one row per check: **Result**, **Topic** and **Finding**. Click a row to read the whole check: what was found, **why it matters** and **what to try**.'
+                '* Windows with a **Checks** tab (LDF Process, Laser speckle, Histology / culture) look at your data and settings and list what they found, one row per check: **Result**, **Topic** and **Finding**. Click a row to read the whole check: what was found, **why it matters** and **what to try**. **Batch processing** puts the LDF checks in a **Checks** column.'
+                '* Blood flow is checked the same way whatever measured it (the needle probe, laser speckle or an imager''s perfusion images): baseline drift, movement artefacts, a signal stuck at 0 or at the top, trials left out, short trial baselines and the time resolution; each source adds its own checks.'
+                '* The demo files `demo_ldf_faults.mat`, `demo_lsci_faults.mat` and `demo_perfusion_faults.mat` contain faults, so you can see each check fire.'
                 '* **OK** (green): nothing to do. **Check** (amber): look at it; it may be fine. **Warning** (red): the numbers are probably wrong until you fix it. **Note** (grey): information, such as which model was used.'
                 '* The checks are saved in the session, listed on the PDF report (warnings first) and summed up in the methods text.'
                 '## Typical order'
@@ -606,13 +611,15 @@ classdef HelpApp < handle
             t.quick = {
                 '**1 Load cropped LDF**: click **Load file...** and choose the file saved by LDF Extract.'
                 '**2 Filter / downsample (optional)**: click **Settings...**, choose downsampling and filter, click **Apply**. The Filter response tab shows the filter; **Undo** returns to the loaded data. See the **Filtering** topic.'
-                '**3 Segment trials**: set **Stim threshold** (shown as a dashed line on the stimulus), **Pre-onset** and **Post-onset** (s) and **Min interval** (s), then click **Segment trials**. All trials and the mean ± SD appear in the Trials tab.'
+                '**3 Segment trials**: set **Stim threshold** (shown as a dashed line on the stimulus), **Pre-onset** and **Post-onset** (s) and **Min interval** (s), then click **Segment trials**. All trials and the mean ± SD appear in the Trials tab; the **Checks** tab lists what was checked in the recording and the settings (click a row for why it matters and what to try).'
                 '**4 Save trials**: click **Save trials...**. Choosing an existing trials file appends the new trials to it (time axes must match). Open the file(s) next in **LDF Average**.'
                 '**Session / report (optional)**: in step 4, **Save session…** stores the file (with checksum), filter and segmentation settings; **Open session…** re-runs them; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: the cropped demo recording (20–280 s of the LDF export, 1000 Hz): 9 stimulus pulses of 5 s, the first at 10 s, then every 30 s.'
                 '* **Try**: downsample 10x, low-pass ~1 Hz (removes the 6 Hz cardiac ripple), then segment with pre = 5 s and post = 20 s.'
-                '* **What you should get**: 8 complete trials (the last pulse is too close to the end for a 20 s window). The mean response rises after 0 s and **peaks ~4 s after onset at ~+30 PU** above a ~120 PU baseline.'};
+                '* **What you should get**: 8 complete trials (the last pulse is too close to the end for a 20 s window). The mean response rises after 0 s and **peaks ~4 s after onset at ~+30 PU** above a ~120 PU baseline.'
+                '* **Checks**: no warnings; one **Check**, **Trials** (1 of 9 stimuli left out: its trial does not fit); OK for the baseline (~120 PU), drift (about −1%/min from the 8 trial baselines), movement artefacts, signal range, the filter and the time resolution.'
+                '* **Faults demo**: load `demo_ldf_faults.mat` from the demo folder and segment with the same settings: **Baseline drift** is a **Check** (about +5%/min), **Movement artefacts** a **Warning** (jumps at 31 and 72 s, the second in trial 3) and **Signal range** a **Warning** (0.38% of the samples at 0).'};
             t.inputs = {
                 '`.mat` from LDF Extract with `stim`, `LDF`, `t`, `Fs` (all four are required)'};
             t.outputs = {
@@ -624,12 +631,23 @@ classdef HelpApp < handle
                 '* Processing always starts from the loaded data, so applying new settings never filters an already filtered signal.'
                 '## Segment trials'
                 '* Onsets are the samples where the stimulus rises above the threshold; a crossing closer than the minimum ISI to the last accepted onset is ignored, so a train of pulses gives one onset.'
-                '* Each trial runs from onset − pre to onset + post. Trials that would run past the start or end of the recording are skipped.'};
+                '* Each trial runs from onset − pre to onset + post. Trials that would run past the start or end of the recording are skipped.'
+                '## Checks'
+                'After **Segment trials**, one row per check (the same checks run in Batch processing and, for the shared ones, on laser speckle and perfusion images):'
+                '* **Trials**: stimuli left out because their trial does not fit; fewer than 3 trials. **Trial baseline**: shorter than 2 s or 5 samples.'
+                '* **Time resolution**: one value every dt s after downsampling: **Check** above 0.5 s (latency and rise time known to within dt), **Warning** above 2 s.'
+                '* **Baseline**: the mean before the stimuli, usually 30–600 PU for a probe on tissue; outside that a **Check** (a large vessel under the probe, no contact or bone, or a channel not in PU), never a Warning, because tissue and devices differ.'
+                '* **Filter**: a low-pass below 0.5 Hz smooths the 1–2 s rise (**Check**); a high-pass above 0.02 Hz shrinks a response lasting several seconds (**Check**; above 0.1 Hz **Warning**).'
+                '* **Baseline drift**: a linear fit, in % of the baseline per minute, over the part before the first stimulus when it lasts 60 s or more, else over the trial baselines (4 or more trials over 120 s or more): **Check** above 3%/min, **Warning** above 10%/min; a **Note** when the recording is too short to tell.'
+                '* **Movement artefacts** (on the loaded trace, before filtering): jumps away from the 1 s moving median by more than 8 robust SDs and 25% of the baseline, with their times; **Warning** when they fall in a trial, **Check** otherwise.'
+                '* **Signal range**: more than 0.1% of the samples at 0 or below (probe lifted) or stuck at the top (device or export range saturated): **Warning**.'};
             t.trouble = {
                 '"Invalid LDF file. Missing variable(s): …"', 'Load the file saved by LDF Extract (it contains stim, LDF, t, Fs), not the raw LabChart export.'
                 'No trials found', 'The threshold is above the stimulus amplitude or the minimum ISI is too long. Look at the stimulus plot and lower the threshold.'
                 'Filter error / cutoff must be below Nyquist', 'Cutoffs must be below half the sampling rate after downsampling (e.g. 1000 Hz with 10x → Nyquist 50 Hz).'
                 'Filtering fails with an undefined function (butter, filtfilt, decimate)', 'The Signal Processing Toolbox is missing (see Welcome → Requirements).'
+                'Checks: movement artefacts in a trial', 'Look at the times in the Signals tab. Leave those trials out: crop the recording again in LDF Extract, or cut the trials and remove the bad ones before averaging; fix the probe holder for the next recording.'
+                'Checks: baseline drift', 'Let the signal settle before the first stimulus (several minutes after placing the probe) and check that the probe holder and the head do not move. A high-pass at 0.02 Hz or below removes slow drift without shrinking the response.'
                 '"Time axes do not match" when saving', 'You are appending to a file made with different pre/post times or sampling rate. Save to a new file instead.'};
             t.images = {'LDFProcessWorkflow.png', 'LDFProcessPrinciple.png'};
         end
@@ -711,7 +729,10 @@ classdef HelpApp < handle
                 '* **Run with the defaults** (spatial 7 × 7, 5 frames per value = 2 Hz, dark level 100, 1/K²): 4 trials; **Activated area about +21%** in the 2–6 s window (the true mean flow change there is +21.9%; 1/K² sees +21.3%), peak about +25% near 4 s; **Control cortex and Vessel about 0%** (within ±3%). The response map shows a red disk of about +20% at the activated area and 0 elsewhere.'
                 '* **Show → Speckle contrast K**: cortex 0.22, vessel 0.07 (dark), static corner 0.70 (bright). The vessel''s edges look wider than 12 px because the 7 × 7 window mixes vessel and cortex there.'
                 '* **Flow index → 1/τc (exposure model)**: about **4000 /s** in the cortex and **40000 /s** in the vessel; the activated area rises slightly more than with 1/K² (closer to the true flow change).'
-                '* **Dark level 0** instead of 100: the contrast drops by about 5% everywhere and **Checks** has a **Check** row, **Dark level**, asking you to measure it; the relative responses hardly change.'};
+                '* **Dark level 0** instead of 100: the contrast drops by about 5% everywhere and **Checks** has a **Check** row, **Dark level**, asking you to measure it; the relative responses hardly change.'
+                '* **Checks** with the defaults: no warnings. One **Check**, **Speckle size** (about 1 px): the demo makes each pixel an independent speckle, which a real camera should not do (2 px or more per speckle). Field shift, exposure, illumination, baseline contrast (K = 0.07–0.22), trials, trial baseline (10 samples), time resolution (2 Hz), movement artefacts and signal range are OK; **Baseline drift** is a **Note**: 10 s before the first stimulus and 4 trials over 60 s are too short to judge it.'
+                '* **Faults demo** (`demo_lsci_faults.mat` in the demo folder): **Field shift** is a **Warning** (the image moves 4 px at 45 s); **Illumination** (−20%), **Exposure** (25 ms), **Baseline contrast** (Thinned skull, K = 0.49) and **Speckle size** are **Checks**; the contrast is lower everywhere (two speckles per pixel: cortex K = 0.16).'
+                '* **Perfusion demo** (`demo_perfusion_faults.mat`, opens as perfusion images): **Export range** is a **Warning** (13% of the values at 3000 PU: the vessel), **Time resolution** a **Check** (one image per second), and two **Notes**: device units, and that the dark level and speckle checks need raw images. The activated area still rises by about +20%.'};
             t.inputs = {
                 '`.mat` with the images in `frames` or `stack` (H × W × N; any numeric type); optional `t` (s per frame) or `fps`, `exposureMs`, `dark` (counts), `stim` (one value per frame, or a faster trace over the same time), `roiMasks` (H × W × K logical) with `roiNames`, and `kind` (''raw speckle'', ''contrast'' or ''perfusion'')'
                 'Multi-frame TIFF (raw camera frames or exported perfusion / flux images; the frame interval is read from ImageJ TIFFs) or a video (.avi, .mp4: frame rate from the file; avoid compressed videos for raw speckle)'
@@ -737,13 +758,18 @@ classdef HelpApp < handle
                 '* Each trial is cut from **Before** to **After** the onset and expressed as % change from its own mean before 0 s. **Average response** is the mean ± SD over trials; the **response** is its mean in the response window (robust); the **peak** is its largest value after onset (noise makes it larger).'
                 '* **Response map**: in every pixel, the flow of the response window divided by the flow before the onsets (both averaged over trials), minus 1, in %.'
                 '## Checks'
-                'One row per check (**Result**, **Topic**, **Finding**; click a row for why it matters and what to try): **Saturation** (saturated pixels lower the contrast), **Dark level** (none subtracted, or pixels below it), **Contrast window** (smaller than 5 × 5), **Speckle contrast** (outside the usual range: static tissue, wrong exposure or already processed images; values above 1), **Trials** (left out because they did not fit, fewer than 3) and a **Note** on the flow index used.'};
+                'One row per check (**Result**, **Topic**, **Finding**; click a row for why it matters and what to try).'
+                '* **Raw images**: **Saturation** (saturated pixels lower the contrast), **Dark level** (none subtracted, or pixels below it), **Contrast window** (smaller than 5 × 5), **Speckle contrast** (outside the usual range: static tissue, wrong exposure or already processed images; values above 1), **Speckle size** (width of the spatial autocorrelation of raw frames: below 1.5 px a **Check**, since below about 2 px per speckle each pixel averages several and K drops), **Illumination** (the mean raw intensity changes by more than 10%: laser or light path drift).'
+                '* **Raw and contrast images**: **Exposure** outside 1–20 ms (**Check**); **Baseline contrast** above K = 0.4 in a ROI (**Check**: static scattering through skull, dura or scar makes 1/K² underestimate relative changes; a thinned skull, a window or multi-exposure speckle imaging help); a **Note** on the flow index used.'
+                '* **Perfusion images**: **Export range** (more than 0.1% of the values at the top, e.g. PIMSoft''s 3000 PU: **Warning**), and **Notes**: values are in the device''s units (compare relative changes only with the same device and settings), and the dark level and speckle checks need the raw images.'
+                '* **Every input**: **Field shift** between frames (blocks of frames registered against the first; **Check** above 1 px, **Warning** above 3 px), then the blood-flow checks shared with the needle probe, on the ROI traces: **Trials**, **Trial baseline**, **Time resolution** (one value every dt s: **Check** above 0.5 s, **Warning** above 2 s or with fewer than 2 values in the response window), **Baseline drift**, **Movement artefacts** and **Signal range** (see **LDF Process** for the rules). With several ROIs each check is one row, the worst ROI sets its result and the text names the ROIs.'};
             t.trouble = {
                 'The contrast is close to 0 everywhere, or flow index values are huge', 'The images are probably already processed (perfusion or contrast): set **Images are** accordingly.'
                 'The contrast is above 0.6 everywhere', 'Mostly static tissue, a very short exposure, or speckles much larger than a pixel (close the aperture less / zoom out). Check the focus and the laser.'
                 'The traces are very noisy', 'Increase **Frames per value** (e.g. to one flow value per second), use larger ROIs, or record more stimuli.'
                 '"Type the frame rate"', 'The file does not say it: type the **Frame rate (Hz)** in step 1.'
                 'Stimuli left out (Checks tab)', 'Their trial (Before … After) does not fit in the recording; shorten Before / After.'
+                'Field shift (Checks tab)', 'The head or the camera moved. Register the frames first (ROI analysis, motion correction) or analyse the part before the shift; fix the head and the camera for the next recording.'
                 'The response is smaller than expected', 'With spatial contrast, keep ROIs at least half a window inside the activated area: windows that reach outside mix in unchanged tissue. Try **1/τc** with the exposure for large changes.'
                 '"drawrectangle needs the Image Processing Toolbox"', 'Save the ROIs as `roiMasks` (H × W × K) in the .mat with the images.'};
             t.images = {};
@@ -1256,7 +1282,7 @@ classdef HelpApp < handle
                 '**5 Results**: one row per file (LFP and MUA: per channel; EEG: per condition; imaging: per ROI). Green = ok, orange = warning (some channels failed), red = error, gray = skipped. **Open folder** shows the summary (.csv and .mat), the log (.txt) and, for LDF, the trial files; **Export...** saves a copy of the table (.csv, .xlsx or .mat).'};
             t.demo = {
                 '* **Data**: **Try demo batch** writes synthetic files for the chosen pipeline, each with slightly different known answers, and fills the settings.'
-                '* **LDF**: 4 cropped recordings (200 s, 7 stimuli of 5 s). **What you should get**: 7 onsets and **6 trials** per file (the last stimulus is too close to the end); peak latency **~3, 3.5, 4 and 4.5 s** and peak amplitude **~20, 25, 30 and 35 PU** (within ~2 PU); one trial file per recording in the trials folder.'
+                '* **LDF**: 4 cropped recordings (200 s, 7 stimuli of 5 s). **What you should get**: 7 onsets and **6 trials** per file (the last stimulus is too close to the end); peak latency **~3, 3.5, 4 and 4.5 s** and peak amplitude **~20, 25, 30 and 35 PU** (within ~2 PU); one trial file per recording in the trials folder. The **Checks** column of each file says **1 to check: Trials** (that left-out stimulus) and nothing else.'
                 '* **LFP**: 3 recordings, 8 channels 100 µm apart. **What you should get**: 8 rows per file; the N1 is largest and the CSD sink (SinkChannel) is on **channel 3, 4 and 5**, with the N1 at **~12, 15 and 18 ms** (roughly −100 to −140 µV on the sink channel).'
                 '* **MUA**: the demo MUA recording and a copy recorded at twice the gain, channel 4. **What you should get**: **2–3 units** and the **same spike count in both files** (sorting does not depend on the gain); the evoked rate (5–55 ms after each stimulus) is several times the baseline rate.'
                 '* **EEG**: the 3 raw recordings of the EEG demo (BrainVision, 500 Hz, 32 channels against FCz, a noisy T7, blinks in 8 trials each); the settings mark **T7** bad, filter **0.1–30 Hz**, re-reference to the **average**, cut **−200 to 800 ms** around **S 1 = Standard, S 2 = Target, S 3 = Novel**, reject above **100 µV** peak-to-peak and measure the **mean amplitude 300–400 ms at Pz**. **What you should get**: 3 rows per file (Standard, Target, Novel), **62 trials per file** with exactly the **8 blink trials rejected**, and the P300 **Target (about 5.6 to 7.7 µV) > Novel (about 3.4 to 4.7 µV) > Standard (about 0.7 to 1.9 µV)** in every file: the same numbers as EEG Analysis with the same settings.'
@@ -1271,6 +1297,7 @@ classdef HelpApp < handle
                 'Response features: any file Signal Characterization reads (`segmentedLDF` + `segmentedTime`, `lfp_data` + `t_lfp`, `t` + `y`, `t` + `LDF`)'};
             t.outputs = {
                 '`<name>_summary.csv` and `<name>_summary.mat` (table `summary` + struct `batch` with the settings, files, statuses and log): columns File, Status, Message, then the pipeline''s results'
+                'LDF: a **Checks** column: the LDF Process checks of each file in one cell (**OK**, **1 to check: Topic: …** or **2 warnings: Topic: …**, the first of the most serious kind); the log line of each file ends with the same. The checks do not change the Status: read them before using the numbers'
                 '`<name>_log.txt`: date, settings and one line per file (result or error)'
                 'LDF: `trials/<file>_segments.mat` per recording (`segmentedLDF`, `segmentedTime`, `Fs`), ready for LDF Average'};
             t.details = {

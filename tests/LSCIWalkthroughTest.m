@@ -8,7 +8,9 @@
 %   no dark level (a row to check) ->
 %   ROIs added / renamed / removed -> regular onsets -> export .csv / .mat
 %   -> trials opened by LDF Average -> session save / reopen -> report,
-%   and exported perfusion images from a TIFF. Checks the numbers against
+%   and exported perfusion images from a TIFF; the faults demos (field
+%   shift, illumination, exposure, a ROI through the skull; perfusion
+%   images clipped at 3000 PU) and their checks. Checks the numbers against
 %   the demo ground truth (core/demo/demoLSCI.m) and saves a frame after
 %   every step to test-artifacts/screens/walkthrough/LSCIAnalysisApp_<NN>_<step>.png.
 % Skipped when no display is available.
@@ -239,6 +241,42 @@ function testPerimedDatFile(tests)
     tests.verifyEqual(app.Data.pixelSizeUm, 10, 'AbsTol', 1e-9);
     tests.verifyEqual(app.Data.info.format, 'perimed');
     shot(tests, app, 'LSCIAnalysisApp_10_pimsoft_dat', '');
+end
+
+%% testLaserSpeckleFaults - The faults demos: each blood-flow check fires
+function testLaserSpeckleFaults(tests)
+    app = LSCIAnalysisApp(); c = onCleanup(@() delete(app.UIFig));
+    % Raw speckle: the field moves 4 px at 45 s, the light falls by 20%, 25 ms exposure, a ROI on the skull
+    tests.verifyTrue(logical(app.openFile(DemoData.file('lsciFaults'))));
+    tests.verifyEqual(app.FramesEdit.Value, 5);
+    tests.verifyEqual(numel(app.ROIs), 4);
+    tests.verifyTrue(logical(app.run()));
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Field shift', 'moves by up to'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Illumination', 'changes by'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Exposure', '25 ms'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Baseline contrast', 'Thinned skull'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Speckle size', 'one pixel or smaller'), txt);
+    tests.verifyTrue(contains(app.W.Status.Text, '1 warning'), app.W.Status.Text);
+    k = find(strcmp(chk(:, 2), 'Field shift'), 1);
+    UIKit.checkSelected(app.ChecksTable, struct('Indices', [k 3]), app.ChecksText);
+    tests.verifyTrue(contains(strjoin(app.ChecksText.Value, ' '), 'What to try:'));
+    shot(tests, app, 'LSCIAnalysisApp_12_checks_faults', 'Checks');
+
+    % Perfusion images from an imager: clipped at 3000 PU, one image per second
+    tests.verifyTrue(logical(app.openFile(DemoData.file('perfusionFaults'))));
+    tests.verifyEqual(app.InputDropdown.Value, 'flow');
+    tests.verifyTrue(logical(app.run()));
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Export range', '(3000)'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Time resolution', 'One value every 1 s'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Note', 'Units', 'device'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Note', 'Raw images', 'dark level'), txt);
+    tests.verifyFalse(any(strcmp(chk(:, 2), 'Speckle size')), 'no speckle checks on perfusion images');
+    tests.verifyEqual(app.Result.response(1), 20, 'AbsTol', 4, 'the activated area still rises by ~20%');
+    shot(tests, app, 'LSCIAnalysisApp_13_checks_perfusion', 'Checks');
 end
 
 %% hasCheck - A row of the Checks table with this result, topic and finding text

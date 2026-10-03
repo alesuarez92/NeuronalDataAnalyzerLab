@@ -568,7 +568,7 @@ classdef LSCIAnalysisApp < handle
             UIKit.setStatus(app.W.Status, 'Computing speckle contrast and flow', 'busy');
             try
                 [t, p.Onsets] = app.timeAndOnsets(p);
-                R = LaserSpeckle.analyze(app.Data.stack, t, masks, p);
+                R = LaserSpeckle.analyze(app.Data.stack, t, masks, p, names);
             catch ME
                 UIKit.done(dlg);
                 app.clearResults();

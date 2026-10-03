@@ -4,7 +4,7 @@
 % =========================================================================
 % Launched from Main. Built with UIKit.window: numbered step cards on the
 % left (1 Load, 2 Filter / downsample, 3 Segment trials, 4 Save) and a
-% tab group on the right (Signals | Filter response | Trials). Loads a
+% tab group on the right (Signals | Filter response | Trials | Checks). Loads a
 % cropped LDF + stimulus .mat (stim, LDF, t, Fs from ExtractLDFApp),
 % opens LDFProcessingParamsApp for downsample/filter settings (always
 % applied to the loaded raw copy, LDF decimated with anti-aliasing),
@@ -20,6 +20,10 @@
 % setSegmentParams(thr, pre, post, isi), segmentByOnsetsConfig(), saveData(path).
 % The numerics (decimate / filter, onset detection, trial cutting) live in
 % core/LDFPipeline.m, shared with scripts and Batch processing.
+% Checks tab (UIKit.checksTab): after Segment trials, LDFPipeline.checks
+% looks at the recording and the settings (trials, baseline, drift,
+% movement artefacts, signal stuck at 0 or at the top, filter, time
+% resolution); CheckRows holds the rows, sessions store them.
 % Sessions (step 4 buttons; core/Session.m, core/Report.m):
 % saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
 % sessionState(), restoreSession(s). A session stores the cropped file (with
@@ -50,6 +54,11 @@ classdef ProcessingLDFApp < handle
         SignalsTab       % Tab: stimulus + LDF
         FilterTab        % Tab: filter frequency response
         TrialsTab        % Tab: segments + average
+        ChecksUI         % UIKit.checksTab struct (Tab, Table, Text)
+        ChecksTab        % = ChecksUI.Tab
+        ChecksTable      % = ChecksUI.Table (Result | Topic | Finding)
+        ChecksText       % = ChecksUI.Text (the clicked row in full)
+        CheckRows        % QualityChecks rows of the last segmentation (LDFPipeline.checks)
         AxStim           % uiaxes: stimulus
         AxLDF            % uiaxes: LDF (loaded vs processed)
         AxFreq           % uiaxes: filter magnitude response
@@ -161,6 +170,11 @@ classdef ProcessingLDFApp < handle
             app.SignalsTab = uitab(app.Tabs, 'Title', 'Signals', 'BackgroundColor', T.cardBg);
             app.FilterTab  = uitab(app.Tabs, 'Title', 'Filter response', 'BackgroundColor', T.cardBg);
             app.TrialsTab  = uitab(app.Tabs, 'Title', 'Trials', 'BackgroundColor', T.cardBg);
+            app.ChecksUI = UIKit.checksTab(app.Tabs, ['Quality checks of the recording and the settings ' ...
+                'appear here after Segment trials (step 3).']);
+            app.ChecksTab = app.ChecksUI.Tab;
+            app.ChecksTable = app.ChecksUI.Table;
+            app.ChecksText = app.ChecksUI.Text;
 
             gs = uigridlayout(app.SignalsTab, [2 1], 'RowHeight', {'1x', '1x'}, ...
                 'Padding', [8 8 14 8], 'RowSpacing', 8, 'BackgroundColor', T.cardBg);
@@ -536,15 +550,31 @@ classdef ProcessingLDFApp < handle
             app.SegmentedTime = t_seg;
             app.plotSegments();
             app.plotAverageSegment();
+            % Quality checks of the recording and the settings (LDFPipeline, shared with Batch)
+            p = LDFPipeline.defaultParams();
+            if ~isempty(app.ProcessingParams)
+                fn = fieldnames(app.ProcessingParams);
+                for i = 1:numel(fn), p.(fn{i}) = app.ProcessingParams.(fn{i}); end
+            end
+            p.threshold = threshold; p.preSec = preSec; p.postSec = postSec; p.minISI = minISI_sec;
+            app.CheckRows = LDFPipeline.checks(app.LDF, app.t, app.Fs, onsets, nTrials, p, app.RawLDF, app.RawFs);
+            UIKit.showChecks(app.ChecksUI, app.CheckRows);
             app.Tabs.SelectedTab = app.TrialsTab;
             app.updateControls();
             skipped = numel(onsets) - nTrials;
             if skipped > 0
-                UIKit.setStatus(app.StatusLabel, sprintf(['%d trials cut (%d onsets found, %d too close to the ' ...
-                    'recording edges). Next: save the trials.'], nTrials, numel(onsets), skipped), 'success');
+                msg = sprintf('%d trials cut (%d onsets found, %d too close to the recording edges).', ...
+                    nTrials, numel(onsets), skipped);
             else
-                UIKit.setStatus(app.StatusLabel, sprintf('%d trials cut from %d onsets. Next: save the trials.', ...
-                    nTrials, numel(onsets)), 'success');
+                msg = sprintf('%d trials cut from %d onsets.', nTrials, numel(onsets));
+            end
+            nWarn = QualityChecks.count(app.CheckRows, 'warning');
+            if nWarn > 0
+                UIKit.setStatus(app.StatusLabel, sprintf(['%s %s in the Checks tab: read them before saving ' ...
+                    'the trials.'], msg, QualityChecks.plural(nWarn, 'warning')), 'warning');
+            else
+                UIKit.setStatus(app.StatusLabel, [msg ' Next: save the trials (the Checks tab says what was checked).'], ...
+                    'success');
             end
         end
 
@@ -694,6 +724,8 @@ classdef ProcessingLDFApp < handle
             UIKit.styleAxes(app.AxAvg, 'Average LDF');
             UIKit.emptyAxes(app.AxSeg, 'Segment trials (step 3) to see them here');
             UIKit.emptyAxes(app.AxAvg, 'Average ± SD appears after segmentation');
+            app.CheckRows = QualityChecks.none();      % checks belong to the trials
+            UIKit.showChecks(app.ChecksUI, app.CheckRows);
         end
 
         %% ----------------------------------------------------------------
@@ -720,7 +752,8 @@ classdef ProcessingLDFApp < handle
         %% sessionState - Settings, results and inputs for Session.capture
         % settings: processing params (as LDFProcessingParamsApp returns
         % them), segmentation fields, whether trials were cut, tab.
-        % results: trials, window, rate and the trial mean / SD.
+        % results: trials, window, rate and the trial mean / SD; checks:
+        % the Checks tab rows.
         function st = sessionState(app)
             st.inputs = [];
             st.settings = struct('processing', app.ProcessingParams, ...
@@ -729,6 +762,7 @@ classdef ProcessingLDFApp < handle
                 'segmented', ~isempty(app.SegmentedLDF), 'tab', app.Tabs.SelectedTab.Title);
             st.results = struct();
             st.summary = {};
+            st.checks = QualityChecks.none();
             if isempty(app.RawLDF), return; end
             st.inputs = Session.fileInfo(app.FilePath, 'Cropped LDF file');
             st.summary{end+1} = sprintf('Loaded %d samples at %g Hz; processed rate %g Hz', ...
@@ -743,6 +777,7 @@ classdef ProcessingLDFApp < handle
                 tp = t(post);
                 st.summary{end+1} = sprintf('%d trials, %.2f to %.2f s; trial mean peaks at %.4g, %.3g s after onset', ...
                     size(app.SegmentedLDF, 1), t(1), t(end), pk, tp(i));
+                st.checks = app.CheckRows;
             end
         end
 

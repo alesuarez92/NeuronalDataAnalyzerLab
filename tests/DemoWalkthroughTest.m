@@ -20,6 +20,7 @@ function setupOnce(tests)
     addpath(fullfile(root, 'core'));
     addpath(fullfile(root, 'core', 'imaging'));
     addpath(fullfile(root, 'core', 'io'));
+    addpath(fullfile(root, 'core', 'demo'));
     tests.TestData.outDir = fullfile(root, 'test-artifacts', 'screens', 'walkthrough');
     if ~exist(tests.TestData.outDir, 'dir'), mkdir(tests.TestData.outDir); end
 end
@@ -69,6 +70,37 @@ function testProcessingLDF(tests)
     shot(tests, app, 'ProcessingLDFApp_03_filter_response', 'Filter response');
     app.segmentByOnsetsConfig();
     shot(tests, app, 'ProcessingLDFApp_04_trials', 'Trials');
+    % Checks tab: the clean demo gives no warnings
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyFalse(any(strcmp(chk(:, 1), 'Warning')), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Baseline drift', '8 trials'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Filter', 'low-pass at 1 Hz'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Time resolution', 'after downsampling by 10'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Trials', '1 of 9 stimuli were left out'), txt);
+    st = app.sessionState();
+    tests.verifyEqual({st.checks.topic}, {app.CheckRows.topic}, 'the checks go into sessions');
+    shot(tests, app, 'ProcessingLDFApp_05_checks', 'Checks');
+
+    % The faults demo: drift, a movement artefact in trial 3, a dropout to 0 between trials
+    tests.verifyTrue(logical(app.openFile(DemoData.file('ldfFaults'))));
+    tests.verifyEmpty(app.ChecksTable.Data, 'a new file clears the checks');
+    app.setSegmentParams(2.5, 5, 20, 10);
+    app.segmentByOnsetsConfig();
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Baseline drift', '%/min'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Movement artefacts', 'trial 3'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Signal range', 'at 0'), txt);
+    tests.verifyTrue(contains(app.StatusLabel.Text, '2 warnings'), app.StatusLabel.Text);
+    k = find(strcmp(chk(:, 2), 'Movement artefacts'), 1);
+    UIKit.checkSelected(app.ChecksTable, struct('Indices', [k 3]), app.ChecksText);
+    shot(tests, app, 'ProcessingLDFApp_06_checks_faults', 'Checks');
+end
+
+%% hasCheck - A row of a Checks table with this result, topic and finding text
+function tf = hasCheck(chk, result, topic, finding)
+    tf = any(strcmp(chk(:, 1), result) & strcmp(chk(:, 2), topic) & contains(chk(:, 3), finding));
 end
 
 function testLDFGrandAverage(tests)

@@ -48,9 +48,23 @@
 %   r = LDFPipeline.run(LDF, stim, t, Fs, p)
 %       process + segment in one call. r: segmentedLDF, segmentedTime, Fs
 %       (after downsampling), onsets (samples of the processed signal),
-%       nOnsets, nTrials, LDF, stim, t (processed signals). Throws
+%       nOnsets, nTrials, LDF, stim, t (processed signals), checkRows
+%       (LDFPipeline.checks). Throws
 %       'NeuroAnalyzer:LDFPipeline:invalidFilter' (validateProcessing
 %       message) or 'NeuroAnalyzer:LDFPipeline:noTrials'.
+%   Q = LDFPipeline.checks(LDF, t, Fs, onsets, nTrials, p, rawLDF, rawFs)
+%       Quality checks of the probe recording (QualityChecks rows): the
+%       blood-flow checks every source shares (PerfusionChecks: trials,
+%       trial baseline, time resolution after downsampling, baseline
+%       drift on the processed trace; movement artefacts and signal stuck
+%       at 0 or at the top on the loaded trace rawLDF at rawFs, before
+%       the filter smooths them) plus the probe's own: baseline
+%       plausibility (about 30-600 PU: Check outside, never a Warning:
+%       tissue and devices differ) and the filter against the response
+%       time course (low-pass below 0.5 Hz: Check; high-pass above
+%       0.02 Hz: Check, above 0.1 Hz: Warning). onsets: samples of the
+%       processed signal; p: the run settings (defaultParams fields).
+%       rawLDF / rawFs omitted: the processed trace for everything.
 %
 % Requires the Signal Processing Toolbox when downsampling (decimate,
 % downsample) or filtering (butter, cheby1, fir1, filtfilt).
@@ -224,6 +238,7 @@ classdef LDFPipeline
             if ~isempty(msg)
                 error('NeuroAnalyzer:LDFPipeline:invalidFilter', '%s', msg);
             end
+            raw = LDF; rawFs = Fs;
             [LDF, stim, t, Fs] = LDFPipeline.process(LDF, stim, t, Fs, p);
             [seg, tSeg, onsets] = LDFPipeline.segment(LDF, stim, Fs, p.threshold, p.preSec, p.postSec, p.minISI);
             if isempty(seg)
@@ -238,6 +253,118 @@ classdef LDFPipeline
             r = struct('segmentedLDF', seg, 'segmentedTime', tSeg, 'Fs', Fs, ...
                 'onsets', onsets, 'nOnsets', numel(onsets), 'nTrials', size(seg, 1), ...
                 'LDF', LDF, 'stim', stim, 't', t);
+            r.checkRows = LDFPipeline.checks(LDF, t, Fs, onsets, r.nTrials, p, raw, rawFs);
+        end
+
+        %% checks - Blood-flow checks of a probe recording (QualityChecks rows)
+        function Q = checks(LDF, t, Fs, onsets, nTrials, p, rawLDF, rawFs) %#ok<INUSL>
+            d = LDFPipeline.defaultParams();
+            if nargin < 6 || isempty(p), p = d; end
+            fn = fieldnames(d);
+            for i = 1:numel(fn)
+                if ~isfield(p, fn{i}), p.(fn{i}) = d.(fn{i}); end
+            end
+            y = double(LDF(:)');
+            N = numel(y);
+            tt = (0:N - 1) / Fs;                       % onsets are samples of this trace
+            preSamp = round(p.preSec * Fs);
+            postSamp = round(p.postSec * Fs);
+            onsets = double(onsets(:)');
+            kept = onsets(onsets - preSamp > 0 & onsets + postSamp <= N);
+            o = PerfusionChecks.options();
+            o.onsets = (onsets - 1) / Fs;
+            o.trialOnsets = (kept - 1) / Fs;
+            o.preSec = p.preSec;
+            o.postSec = p.postSec;
+            o.responseSec = [0 min(p.postSec, 10)];
+            if nargin < 7 || isempty(rawLDF)
+                rawLDF = LDF; rawFs = Fs;
+            end
+            yr = double(rawLDF(:)');
+            tr = (0:numel(yr) - 1) / rawFs;
+
+            Q = QualityChecks.none();
+            Q = PerfusionChecks.trials(Q, o);
+            Q = PerfusionChecks.trialBaseline(Q, 1 / Fs, o);
+            extra = '';
+            if abs(rawFs - Fs) > 1e-9 * Fs
+                extra = sprintf(' after downsampling by %g (loaded at %g Hz)', round(rawFs / Fs), rawFs);
+            end
+            Q = PerfusionChecks.timeResolution(Q, 1 / Fs, o, extra);
+            Q = LDFPipeline.baselineCheck(Q, y, tt, o);
+            Q = LDFPipeline.filterCheck(Q, p);
+            Q = PerfusionChecks.drift(Q, y, tt, o);
+            Q = PerfusionChecks.artefacts(Q, yr, tr, o);
+            Q = PerfusionChecks.stuck(Q, yr, o);
+        end
+    end
+
+    methods(Static, Hidden)
+
+        %% baselineCheck - Probe baseline in about 30-600 PU (a Check outside, never a Warning)
+        function Q = baselineCheck(Q, y, t, o)
+            in = false(size(y));
+            for j = 1:numel(o.trialOnsets)
+                in = in | (t >= o.trialOnsets(j) - o.preSec & t < o.trialOnsets(j));
+            end
+            what = 'before the stimuli';
+            if ~any(in), in = true(size(y)); what = 'over the recording'; end
+            b = mean(y(in & isfinite(y)));
+            if ~isfinite(b), return; end
+            if b < 30 || b > 600
+                Q = QualityChecks.add(Q, 'check', 'Baseline', sprintf(['The baseline is %.4g PU %s, outside ' ...
+                    'the usual 30-600 PU of a probe on tissue.'], b, what), ['Very high values come from a large ' ...
+                    'vessel under the probe; very low ones from no contact, bone or blood on the tip; or the ' ...
+                    'channel is not in PU (e.g. volts).'], ['Move the probe off large surface vessels and check its ' ...
+                    'contact; check the channel''s units and scaling in the acquisition software.']);
+            else
+                Q = QualityChecks.add(Q, 'ok', 'Baseline', sprintf('Baseline %.0f PU %s (usual for a probe: 30-600 PU).', ...
+                    b, what));
+            end
+        end
+
+        %% filterCheck - Filter cut-offs against a response that rises in 1-2 s and lasts several seconds
+        function Q = filterCheck(Q, p)
+            designs = {'Butterworth', 'Chebyshev I', 'FIR'};
+            dsg = designs{min(max(round(p.designType), 1), 3)};
+            switch p.filterType
+                case 1
+                    Q = QualityChecks.add(Q, 'ok', 'Filter', 'No filter: the response keeps its time course.');
+                    return;
+                case 2
+                    name = sprintf('%s low-pass at %g Hz', dsg, p.cutoffHigh);
+                case 3
+                    name = sprintf('%s high-pass at %g Hz', dsg, p.cutoffLow);
+                case 4
+                    name = sprintf('%s band-pass %g-%g Hz', dsg, p.cutoffLow, p.cutoffHigh);
+                otherwise
+                    name = sprintf('%s band-stop %g-%g Hz', dsg, p.cutoffLow, p.cutoffHigh);
+            end
+            level = 'ok'; found = {}; why = {}; act = {};
+            if ismember(p.filterType, [2 4]) && p.cutoffHigh < 0.5
+                level = 'check';
+                found{end+1} = sprintf('the low-pass cut-off %g Hz is below 0.5 Hz', p.cutoffHigh);
+                why{end+1} = 'it smooths the 1-2 s rise of the response (later, lower peak)';
+                act{end+1} = 'a low-pass at 1 Hz or above';
+            end
+            if ismember(p.filterType, [3 4]) && p.cutoffLow > 0.02
+                if p.cutoffLow > 0.1, level = 'warning'; elseif ~strcmp(level, 'warning'), level = 'check'; end
+                found{end+1} = sprintf('the high-pass cut-off %g Hz is above 0.02 Hz', p.cutoffLow);
+                why{end+1} = 'it shrinks a response that lasts several seconds and adds an undershoot';
+                act{end+1} = 'a high-pass at 0.02 Hz or below (or none)';
+            end
+            if p.filterType == 5 && p.cutoffLow < 0.5
+                level = 'check';
+                found{end+1} = sprintf('the stop band starts at %g Hz, inside the response (below 0.5 Hz)', p.cutoffLow);
+                why{end+1} = 'it removes part of the response itself';
+                act{end+1} = 'a stop band above 0.5 Hz (e.g. the heart rate)';
+            end
+            if strcmp(level, 'ok')
+                Q = QualityChecks.add(Q, 'ok', 'Filter', sprintf('%s: keeps the response''s time course.', name));
+            else
+                Q = QualityChecks.add(Q, level, 'Filter', sprintf('%s: %s.', name, strjoin(found, '; ')), ...
+                    [PerfusionChecks.upperFirst(strjoin(why, '; ')) '.'], ['Use ' strjoin(act, ', and ') '.']);
+            end
         end
     end
 end

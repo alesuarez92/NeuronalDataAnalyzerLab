@@ -25,6 +25,36 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   "Checks: …" line in the key results), the PDF report lists them with the
   warnings first, and the methods text says what they reported. Laser
   speckle's status bar now says when a run gave warnings.
+- **Quality checks for blood flow, needle probe and images together**
+  (quality checks step 2). `core/PerfusionChecks.m` holds the checks every
+  blood-flow source shares, on a probe trace (PU) or on the flow of each
+  ROI of laser speckle or perfusion images: baseline drift (%/min, before
+  the first stimulus or across the trial baselines; Check above 3%/min,
+  Warning above 10%/min), movement artefacts (jumps away from a 1 s moving
+  median; Warning inside a trial), a signal stuck at 0 or at the top,
+  stimuli left out and too few trials, short trial baselines and the time
+  resolution (Check above 0.5 s per value, Warning above 2 s). With several
+  ROIs each check is one row naming the ROIs.
+  - **LDF Process** gets a **Checks** tab (filled after Segment trials,
+    kept in sessions): the shared checks plus the probe's own, baseline
+    plausibility (about 30–600 PU; a Check, never a Warning) and the
+    filter against the response (low-pass below 0.5 Hz, high-pass above
+    0.02 Hz). `LDFPipeline.checks`; `LDFPipeline.run` returns `checkRows`.
+  - **Batch processing** (LDF): a **Checks** column with each file's checks
+    in one cell, and the same at the end of its log line.
+  - **Laser speckle**: field shift between frames (Check above 1 px,
+    Warning above 3 px), speckle size (autocorrelation of raw frames),
+    exposure outside 1–20 ms, illumination drift, high baseline contrast in
+    a ROI (static scattering), perfusion images clipped at the export range
+    (e.g. PIMSoft 0–3000 PU), notes on device units and on the checks that
+    need raw images, then the shared checks on the ROI traces.
+    `LaserSpeckle.analyze` takes the ROI names and returns `roiNames`,
+    `roiK`, `intensity` and `shift`.
+  - **Demo data with each fault**: `demo_ldf_faults.mat` (drift, a movement
+    artefact in trial 3, a dropout to 0), `demo_lsci_faults.mat` (field
+    shift, speckles smaller than a pixel, illumination drift, 25 ms
+    exposure, a ROI through the skull) and `demo_perfusion_faults.mat`
+    (perfusion images clipped at 3000 PU, one per second).
 
 ## [0.9.0] - 2026-10-03
 

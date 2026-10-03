@@ -79,11 +79,15 @@ function testLDF(tests)
     end
     % Larger simulated responses give larger measured ones (file order)
     verifyTrue(tests, all(diff(T.PeakAmp(good)) > 0));
+    % Quality checks: only the last stimulus, whose trial does not fit, is to check
+    verifyTrue(tests, all(strncmp(T.Checks(good), '1 to check: Trials: 1 of 7 stimuli', 34)), strjoin(T.Checks(good), ' | '));
+    verifyEqual(tests, T.Checks{3}, '', 'no checks for a file that failed');
 
     checkOutputs(tests, R, numel(files));
     logText = fileread(R.paths.log);
     verifySubstring(tests, logText, 'corrupt_ldf.mat: ERROR');
     verifySubstring(tests, logText, 'threshold = 2.5');
+    verifySubstring(tests, logText, 'checks: 1 to check: Trials');
 end
 
 %% testERP - N1 latency and CSD sink channel per file (folder input)

@@ -55,7 +55,11 @@
 %               around onsets: threshold, preSec, postSec, minISI) -> the
 %               response features of the mean trial (t0 = 0, baseline =
 %               the pre-onset window). Row per file: Fs_Hz, nOnsets,
-%               nTrials, Baseline, features, TrialFile.
+%               nTrials, Baseline, features, TrialFile, Checks (the
+%               quality checks of LDF Process, LDFPipeline.checks, in
+%               one cell: 'OK', '1 to check: Topic: ...' or '2 warnings:
+%               Topic: ...'; the log line says the same). The checks do
+%               not change the file's Status.
 %   'erp'       LFP .mat (lfp_data, stim_data, lfp_fs, stim_fs from Extract
 %               Ephys) -> ERPAnalysis (onsets: threshold on the mean-
 %               subtracted stimulus, minISI; epochs preTime..postTime) and,
@@ -132,7 +136,7 @@ classdef Batch
                 case 'ldf'
                     d = struct('label', 'LDF: trials + response features', ...
                         'input', 'Cropped LDF .mat files (stim, LDF, t, Fs) from LDF Extract', ...
-                        'output', 'One row per file: trials, peak latency / amplitude and the other response features of the mean trial; trial files for LDF Average', ...
+                        'output', 'One row per file: trials, peak latency / amplitude and the other response features of the mean trial, the quality checks; trial files for LDF Average', ...
                         'extensions', {{'.mat'}});
                 case 'erp'
                     d = struct('label', 'LFP: ERP (+ CSD) per channel', ...
@@ -499,7 +503,7 @@ classdef Batch
             switch pipeline
                 case 'ldf'
                     cols = [{'Fs_Hz', 'double'; 'nOnsets', 'double'; 'nTrials', 'double'; ...
-                        'Baseline', 'double'}; feat; {'TrialFile', 'char'}];
+                        'Baseline', 'double'}; feat; {'TrialFile', 'char'; 'Checks', 'char'}];
                 case 'erp'
                     cols = {'Channel', 'double'; 'nOnsets', 'double'; 'nEpochs', 'double'; ...
                         'N1Latency_ms', 'double'; 'N1Amp', 'double'; 'P2Latency_ms', 'double'; ...
@@ -572,7 +576,8 @@ classdef Batch
             meanTrial = mean(r.segmentedLDF, 1);
             [vals, baseVal] = Batch.seriesFeatures(tSeg, meanTrial, 0, [tSeg(1) 0], p.direction);
             row = struct('Status', 'ok', 'Message', '', 'Fs_Hz', r.Fs, 'nOnsets', r.nOnsets, ...
-                'nTrials', r.nTrials, 'Baseline', baseVal, 'TrialFile', '');
+                'nTrials', r.nTrials, 'Baseline', baseVal, 'TrialFile', '', ...
+                'Checks', QualityChecks.brief(r.checkRows));
             row = Batch.addFeatures(row, vals);
             if p.saveTrials && ~isempty(outFolder)
                 trialDir = fullfile(outFolder, 'trials');
@@ -584,8 +589,8 @@ classdef Batch
                 row.TrialFile = fullfile('trials', [nm '_segments.mat']);
             end
             rows = row;
-            info = sprintf('%d trials of %d onsets, peak %.2f s, amplitude %.3g', r.nTrials, r.nOnsets, ...
-                vals(1), vals(8));
+            info = sprintf('%d trials of %d onsets, peak %.2f s, amplitude %.3g; checks: %s', r.nTrials, ...
+                r.nOnsets, vals(1), vals(8), row.Checks);
         end
 
         %% ldfProcessingParams - Batch settings -> LDFPipeline params

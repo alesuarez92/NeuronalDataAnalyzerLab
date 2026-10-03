@@ -17,7 +17,9 @@
 %   5 Results       Open output folder, Export summary...
 % The table lists the queued files while running and the summary after
 % (one row per file, channel, ROI or series; rows coloured by Status:
-% ok / warning / error / skipped). The log shows Batch.run's log. All the
+% ok / warning / error / skipped; the LDF summary's Checks column, shown
+% before Message, holds the quality checks of each file). The log shows
+% Batch.run's log. All the
 % computing is done by core/Batch.m (Batch.run), which also writes the
 % summary CSV / MAT and the log to the output folder.
 %
@@ -602,18 +604,21 @@ classdef BatchApp < handle
 
         %% showSummary - The summary table of the last batch
         % Display only: the results come right after File / Status and the
-        % (long) Message goes last with a fixed width, so the numbers are
-        % visible without scrolling. The saved summary keeps its order.
+        % (long) Checks and Message go last with a fixed width, so the
+        % numbers are visible without scrolling. The saved summary keeps
+        % its order.
         function showSummary(app)
             d = app.Result.summary;
             v = d.Properties.VariableNames;
-            if ismember('Message', v)
-                d = d(:, [v(~strcmp(v, 'Message')), {'Message'}]);
+            last = intersect({'Checks', 'Message'}, v, 'stable');
+            if ~isempty(last)
+                d = d(:, [v(~ismember(v, last)), last]);
                 v = d.Properties.VariableNames;
             end
             w = repmat({'auto'}, 1, numel(v));
             w(strcmp(v, 'File')) = {150};
             w(strcmp(v, 'Status')) = {62};
+            w(strcmp(v, 'Checks')) = {240};
             w(strcmp(v, 'Message')) = {220};
             app.showTable(d, w);
         end
@@ -702,7 +707,8 @@ function s = demoMessage(pipeline, n)
     switch pipeline
         case 'ldf'
             s = sprintf(['Demo loaded: %d cropped LDF recordings (7 stimuli each) with responses of 20, 25, 30 ' ...
-                'and 35 PU peaking 3, 3.5, 4 and 4.5 s after onset. Next: Run batch: expect 6 trials per file.'], n);
+                'and 35 PU peaking 3, 3.5, 4 and 4.5 s after onset. Next: Run batch: expect 6 trials per file ' ...
+                '(Checks: 1 to check, the last stimulus''s trial does not fit).'], n);
         case 'erp'
             s = sprintf(['Demo loaded: %d LFP recordings (8 channels, 10 stimuli) with N1 at 12, 15 and 18 ms and ' ...
                 'the CSD sink on channels 3, 4 and 5. Next: Run batch.'], n);

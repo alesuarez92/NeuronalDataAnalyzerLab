@@ -18,12 +18,25 @@ function s = demoLSCI(opts)
 %   * Illumination: Gaussian fall-off, mean intensity about 1300-2000
 %     counts; a camera dark level of 100 counts is added; uint16 frames.
 %
+% With Faults = true the same recording carries faults that the quality
+% checks find (demo_lsci_faults.mat):
+%   * speckles smaller than a pixel: each pixel averages 2 independent
+%     speckles, so the contrast is 1/sqrt(2) of the model (cortex K = 0.16);
+%   * the whole field (vessel, activated area, static corner, illumination)
+%     shifts 4 px to the right at 45 s, as when the head or camera moves;
+%   * the illumination falls linearly by 20% over the recording;
+%   * the file says exposure 25 ms (outside the usual 1-20 ms; the flow
+%     itself is simulated as above);
+%   * a fourth ROI 'Thinned skull' on the static corner (K = 0.49 there:
+%     static scattering).
+%
 % Usage:
 %   s = demoLSCI();
 %   s = demoLSCI(struct('Seconds', 30));   % shorter recording (tests)
+%   s = demoLSCI(struct('Faults', true));  % the faults demo
 %
 % INPUT:
-%   opts - (optional) struct: Seconds (90), Seed (20260930).
+%   opts - (optional) struct: Seconds (90), Seed (20260930), Faults (false).
 % OUTPUT:
 %   s - struct saved as the demo .mat file:
 %       frames     - 64 x 80 x N uint16 raw speckle images
@@ -42,30 +55,37 @@ function s = demoLSCI(opts)
 %                    responsePeak (0.25), peakLatency (4 s), flowRatio
 %                    (1 x N, true flow / baseline in the activated area),
 %                    invK2Ratio (1 x N, the same seen through 1/K^2),
-%                    peakInvK2Pct (%, 1/K^2 change at the peak), staticK.
+%                    peakInvK2Pct (%, 1/K^2 change at the peak), staticK,
+%                    faults (struct: speckleAverage 1 | 2, shiftPx [dx dy],
+%                    shiftSec, illuminationDrop, exposureMs as written).
 %
 % Deterministic (RandStream 'mt19937ar', fixed seed). Base MATLAB only.
 %
 if nargin < 1 || isempty(opts), opts = struct(); end
 secs = getOpt(opts, 'Seconds', 90);
 seed = getOpt(opts, 'Seed', 20260930);
+faulty = logical(getOpt(opts, 'Faults', false));
 rs = RandStream('mt19937ar', 'Seed', seed);
 
 H = 64; W = 80; fps = 10; Tms = 5; beta = 1; dark = 100;
 N = round(secs * fps);
 t = (0:N-1) / fps;
 [X, Y] = meshgrid(1:W, 1:H);
+faults = struct('speckleAverage', 1, 'shiftPx', [0 0], 'shiftSec', NaN, 'illuminationDrop', 0, ...
+    'exposureMs', Tms);
+if faulty
+    faults = struct('speckleAverage', 2, 'shiftPx', [4 0], 'shiftSec', 45, 'illuminationDrop', 0.2, ...
+        'exposureMs', 25);
+end
 
-% --- Baseline flow: x = T / tau_c per pixel ---
-xBase = 20 * ones(H, W);                          % parenchyma
-vessel = X >= 14 & X <= 25;
-xBase(vessel) = 200;
-static = X >= 68 & Y >= 52;
+% --- Baseline flow: x = T / tau_c per pixel (the scene before any shift) ---
 staticK = 0.7;
 activeCenter = [52 28]; activeRadius = 12;
-active = hypot(X - activeCenter(1), Y - activeCenter(2)) <= activeRadius;
-Kbase = sqrt(modelK2(xBase, beta));
-Kbase(static) = staticK;
+[xBase, Kbase, active, ~, I0] = scene(X, Y, beta, staticK, activeCenter, activeRadius);
+if faulty
+    [~, KbaseS, activeS, ~, I0S] = scene(X - faults.shiftPx(1), Y - faults.shiftPx(2), beta, staticK, ...
+        activeCenter, activeRadius);
+end
 
 % --- Stimuli and the flow response of the activated area ---
 onsets = 10:20:secs - 15;
@@ -85,13 +105,22 @@ kActive2 = modelK2(20 * flowRatio, beta);         % K^2 of the activated parench
 invK2Ratio = modelK2(20, beta) ./ kActive2;
 
 % --- Illumination and the speckle images ---
-I0 = 1300 + 700 * exp(-((X - 40) .^ 2 + (Y - 32) .^ 2) / (2 * 30 ^ 2));
 frames = zeros(H, W, N, 'uint16');
+nAvg = faults.speckleAverage;
 for n = 1:N
-    K = Kbase;
-    K(active) = sqrt(kActive2(n));
+    Kb = Kbase; act = active; Ib = I0;
+    if faulty && t(n) >= faults.shiftSec
+        Kb = KbaseS; act = activeS; Ib = I0S;
+    end
+    K = Kb;
+    K(act) = sqrt(kActive2(n));
     a = 1 ./ K .^ 2;                              % gamma shape: SD / mean = K
-    I = gammaSample(rs, a) .* (I0 ./ a) + dark;
+    g = gammaSample(rs, a);
+    for j = 2:nAvg                                % speckles smaller than a pixel: their mean
+        g = g + gammaSample(rs, a);
+    end
+    g = g / nAvg;
+    I = g .* (Ib ./ a) * (1 - faults.illuminationDrop * t(n) / max(t(end), eps)) + dark;
     frames(:, :, n) = uint16(min(round(I), 65535));
 end
 
@@ -101,15 +130,33 @@ roiMasks(:, :, 1) = hypot(X - activeCenter(1), Y - activeCenter(2)) <= 7;
 roiMasks(:, :, 2) = hypot(X - 40, Y - 50) <= 8;
 roiMasks(:, :, 3) = X >= 18 & X <= 21 & Y >= 8 & Y <= 56;
 roiNames = {'Activated area', 'Control cortex', 'Vessel'};
+if faulty
+    roiMasks(:, :, 4) = X >= 74 & X <= 79 & Y >= 55 & Y <= 63;
+    roiNames{4} = 'Thinned skull';
+    Kbase = Kbase / sqrt(nAvg);
+end
 
 truth = struct('fps', fps, 'exposureMs', Tms, 'beta', beta, 'dark', dark, ...
     'onsets', onsets, 'stimSec', stimSec, 'xBase', xBase, 'Kbase', Kbase, ...
     'activeMask', active, 'activeCenter', activeCenter, 'activeRadius', activeRadius, ...
     'responsePeak', 0.25, 'peakLatency', 4, 'flowRatio', flowRatio, ...
-    'invK2Ratio', invK2Ratio, 'peakInvK2Pct', 100 * (max(invK2Ratio) - 1), 'staticK', staticK);
-s = struct('frames', frames, 't', t, 'fps', fps, 'exposureMs', Tms, 'dark', dark, ...
+    'invK2Ratio', invK2Ratio, 'peakInvK2Pct', 100 * (max(invK2Ratio) - 1), 'staticK', staticK / sqrt(nAvg), ...
+    'faults', faults);
+s = struct('frames', frames, 't', t, 'fps', fps, 'exposureMs', faults.exposureMs, 'dark', dark, ...
     'stim', stim, 'kind', 'raw speckle', 'roiMasks', roiMasks, 'roiNames', {roiNames}, ...
     'truth', truth);
+end
+
+%% scene - Flow (x = T / tau_c), baseline contrast, activated / static areas and illumination at X, Y
+function [xBase, Kbase, active, static, I0] = scene(X, Y, beta, staticK, activeCenter, activeRadius)
+xBase = 20 * ones(size(X));                       % parenchyma
+vessel = X >= 14 & X <= 25;
+xBase(vessel) = 200;
+static = X >= 68 & Y >= 52;
+active = hypot(X - activeCenter(1), Y - activeCenter(2)) <= activeRadius;
+Kbase = sqrt(modelK2(xBase, beta));
+Kbase(static) = staticK;
+I0 = 1300 + 700 * exp(-((X - 40) .^ 2 + (Y - 32) .^ 2) / (2 * 30 ^ 2));
 end
 
 %% modelK2 - K^2 = beta (exp(-2x) - 1 + 2x) / (2 x^2)

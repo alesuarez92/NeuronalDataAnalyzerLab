@@ -84,6 +84,8 @@ function testBatchPipelines(tests)
         verifyEqual(tests, T.nTrials(1:4)', [6 6 6 6]);
         verifyEqual(tests, T.PeakAmp(1:4)', [20 25 30 35], 'AbsTol', 3);
         verifyEqual(tests, T.PeakLatency_s(1:4)', [3 3.5 4 4.5], 'AbsTol', 0.4);
+        verifyTrue(tests, all(strncmp(T.Checks(1:4), '1 to check: Trials', 18)), strjoin(T.Checks(1:4), ' | '));
+        verifyTrue(tests, any(strcmp(app.Table.ColumnName, 'Checks')), 'the summary shows the Checks column');
         verifyEqual(tests, T.Status{5}, 'error');
         verifyEqual(tests, height(app.Table.Data), 5);
         verifyEqual(tests, exist(R.paths.csv, 'file'), 2);

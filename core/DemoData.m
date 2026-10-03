@@ -11,6 +11,9 @@
 %   d  = DemoData.ldfExport()     LabChart-style export (data/datastart/dataend)
 %   s  = DemoData.ldfCropped()    stim, LDF, t, Fs   (as saved by Extract LDF)
 %   s  = DemoData.ldfTrials()     segmentedLDF, segmentedTime, Fs (Process LDF)
+%   s  = DemoData.ldfFaults()     the cropped LDF with faults for the quality
+%                                 checks: drift 120 -> 160 PU, a movement
+%                                 artefact in trial 3, a 1 s dropout to 0
 %   tk = DemoData.tdtTank()       TDTbin2mat-like struct (streams.Whis / xRAW)
 %   s  = DemoData.lfpFile()       lfp_data, t_lfp, lfp_fs, stim_* (Extract Ephys)
 %   s  = DemoData.muaFile()       mua_data, t_mua, mua_fs, stim_* (Extract Ephys)
@@ -25,6 +28,12 @@
 %   'histology'        demoHistology: two culture images (nuclei + marker)
 %   'lsci'             demoLSCI: raw laser speckle images, 90 s at 10 Hz, with
 %                      a known +25% flow response in an activated area
+%   'lsciFaults'       demoLSCI with faults for the quality checks: speckles
+%                      smaller than a pixel, the field shifted by 4 px at
+%                      45 s, illumination falling by 20%, exposure 25 ms,
+%                      a high-contrast ROI through the skull
+%   'perfusionFaults'  demoPerfusion: perfusion images as a commercial imager
+%                      exports them (PU, 0-3000), the vessel clipped at 3000
 %   'groups'           demoGroups: folder of 3 conditions x 8 animals (LDF trials)
 %   'intan' | 'openephys' | 'nwb'   demoFormats: the demo tank in that format
 % core/demo/demoLDFFormats writes the LDF demo as a LabChart text export,
@@ -47,9 +56,10 @@ classdef DemoData
     methods(Static)
 
         %% file - Path to one demo file, generated on first use and cached
-        % kind: 'ldfExport' | 'ldfCropped' | 'ldfTrials' | 'tdtTank' | 'lfp' |
-        %       'mua' | 'imaging' | 'lfpOscillations' | 'imagingAdvanced' |
-        %       'histology' | 'lsci' | 'groups' | 'intan' | 'openephys' | 'nwb'. Files live in
+        % kind: 'ldfExport' | 'ldfCropped' | 'ldfTrials' | 'ldfFaults' | 'tdtTank' |
+        %       'lfp' | 'mua' | 'imaging' | 'lfpOscillations' | 'imagingAdvanced' |
+        %       'histology' | 'lsci' | 'lsciFaults' | 'perfusionFaults' | 'groups' |
+        %       'intan' | 'openephys' | 'nwb'. Files live in
         % DemoData.folder(). For 'tdtTank' the returned path is the tank
         % folder (demo_tank/); for 'groups' the folder of group files; for
         % 'openephys' the session folder.
@@ -64,7 +74,9 @@ classdef DemoData
                 'ldfTrials', 'demo_ldf_trials.mat', 'tdtTank', fullfile('demo_tank', 'demo_tank.mat'), ...
                 'lfp', 'demo_lfp.mat', 'mua', 'demo_mua.mat', 'imaging', 'demo_imaging.mat', ...
                 'lfpOscillations', 'demo_lfp_oscillations.mat', 'imagingAdvanced', 'demo_imaging_advanced.mat', ...
-                'histology', 'demo_histology.mat', 'lsci', 'demo_lsci.mat');
+                'histology', 'demo_histology.mat', 'lsci', 'demo_lsci.mat', ...
+                'ldfFaults', 'demo_ldf_faults.mat', 'lsciFaults', 'demo_lsci_faults.mat', ...
+                'perfusionFaults', 'demo_perfusion_faults.mat');
             if ~isfield(names, kind)
                 error('NeuroAnalyzer:DemoData:unknownKind', 'Unknown demo data kind ''%s''.', kind);
             end
@@ -82,6 +94,9 @@ classdef DemoData
                     case 'imagingAdvanced', DemoData.ensureDemoPath(); s = demoImagingAdvanced();
                     case 'histology',  DemoData.ensureDemoPath(); s = demoHistology();
                     case 'lsci',       DemoData.ensureDemoPath(); s = demoLSCI();
+                    case 'ldfFaults',  s = DemoData.ldfFaults();
+                    case 'lsciFaults', DemoData.ensureDemoPath(); s = demoLSCI(struct('Faults', true));
+                    case 'perfusionFaults', DemoData.ensureDemoPath(); s = demoPerfusion();
                     case 'tdtTank',    tank = DemoData.tdtTank(); %#ok<NASGU>
                 end
                 if strcmp(kind, 'tdtTank')
@@ -153,6 +168,10 @@ classdef DemoData
             files.ldfTrials = fullfile(folder, 'demo_ldf_trials.mat');
             save(files.ldfTrials, '-struct', 's');
 
+            s = DemoData.ldfFaults();
+            files.ldfFaults = fullfile(folder, 'demo_ldf_faults.mat');
+            save(files.ldfFaults, '-struct', 's');
+
             tank = DemoData.tdtTank();
             files.tdtTank = fullfile(folder, 'demo_tank', 'demo_tank.mat');
             if ~exist(fileparts(files.tdtTank), 'dir'), mkdir(fileparts(files.tdtTank)); end
@@ -186,6 +205,14 @@ classdef DemoData
             s = demoLSCI();
             files.lsci = fullfile(folder, 'demo_lsci.mat');
             save(files.lsci, '-struct', 's');
+
+            s = demoLSCI(struct('Faults', true));
+            files.lsciFaults = fullfile(folder, 'demo_lsci_faults.mat');
+            save(files.lsciFaults, '-struct', 's');
+
+            s = demoPerfusion();
+            files.perfusionFaults = fullfile(folder, 'demo_perfusion_faults.mat');
+            save(files.perfusionFaults, '-struct', 's');
 
             g = demoGroups(fullfile(folder, 'groups'));
             files.groups = g.folder;                     % folder of 24 trial files
@@ -245,6 +272,31 @@ classdef DemoData
             s.Fs = Fs;
             s.truth = d.truth;
             s.truth.onsets = d.truth.onsets - 20;   % relative to crop start
+        end
+
+        %% ldfFaults - The cropped LDF with faults that the quality checks find
+        % The recording of ldfCropped (260 s, 9 stimuli at 10, 40, ..., 250 s)
+        % with three faults:
+        %   drift     the baseline rises linearly from 120 to 160 PU (about
+        %             +5%/min of the trial baselines: Check)
+        %   artefact  a 0.3 s jump of +400 PU at 72 s, inside trial 3
+        %             (onset 70 s): a movement artefact (Warning)
+        %   dropout   1 s at 0 PU at 31 s, between trials 1 and 2 (probe
+        %             lifted: Signal range Warning, also a jump)
+        % truth: the ldfCropped truth plus driftPU ([0 40]), artefactSec
+        % ([72 72.3]), artefactPU (400), dropoutSec ([31 32]).
+        function s = ldfFaults()
+            s = DemoData.ldfCropped();
+            t = s.t;
+            s.LDF = s.LDF + 40 * t / t(end);
+            art = t >= 72 & t < 72.3;
+            s.LDF(art) = s.LDF(art) + 400;
+            drop = t >= 31 & t < 32;
+            s.LDF(drop) = 0;
+            s.truth.driftPU = [0 40];
+            s.truth.artefactSec = [72 72.3];
+            s.truth.artefactPU = 400;
+            s.truth.dropoutSec = [31 32];
         end
 
         %% ldfTrials - Trials cut around each onset (-5 s .. +20 s), 10 Hz
