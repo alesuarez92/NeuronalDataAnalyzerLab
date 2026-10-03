@@ -5,6 +5,7 @@
 % Drives LSCIAnalysisApp through its public methods (no dialogs):
 %   demo -> Run (spatial contrast, 1/K^2) -> response map, average
 %   response, checks -> contrast and flow displays -> exposure model ->
+%   no dark level (a row to check) ->
 %   ROIs added / renamed / removed -> regular onsets -> export .csv / .mat
 %   -> trials opened by LDF Average -> session save / reopen -> report,
 %   and exported perfusion images from a TIFF. Checks the numbers against
@@ -92,9 +93,17 @@ function testLaserSpeckleDemo(tests)
     tests.verifyTrue(contains(app.W.Status.Text, '4 trials'), app.W.Status.Text);
     shot(tests, app, 'LSCIAnalysisApp_03_response_map', 'Average response');
     shot(tests, app, 'LSCIAnalysisApp_04_flow_over_time', 'Flow over time');
-    checks = strjoin(app.ChecksArea.Value, ' ');
-    tests.verifyTrue(contains(checks, 'OK: 4 trials averaged'), checks);
-    tests.verifyTrue(contains(checks, 'OK: no saturated pixels'), checks);
+    chk = app.ChecksTable.Data;
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Trials', '4 trials averaged'), strjoin(chk(:, 3), ' | '));
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Saturation', 'No saturated pixels'), strjoin(chk(:, 3), ' | '));
+    tests.verifyTrue(hasCheck(chk, 'Note', 'Flow index', '1/K'), strjoin(chk(:, 3), ' | '));
+    tests.verifyFalse(any(strcmp(chk(:, 1), 'Warning')), 'No warnings on the demo');
+    tests.verifyTrue(any(contains(R.checks, 'OK: 4 trials averaged')), 'R.checks keeps its lines');
+    % A click on a row shows it in full (found, why it matters, what to try)
+    k = find(strcmp(chk(:, 2), 'Flow index'), 1);
+    UIKit.checkSelected(app.ChecksTable, struct('Indices', [k 3]), app.ChecksText);
+    txt = strjoin(app.ChecksText.Value, ' ');
+    tests.verifyTrue(contains(txt, 'Why it matters:') && contains(txt, 'What to try:'), txt);
     shot(tests, app, 'LSCIAnalysisApp_05_checks', 'Checks');
 
     % 3. The other displays
@@ -111,8 +120,15 @@ function testLaserSpeckleDemo(tests)
     tests.verifyTrue(logical(app.run()));
     tests.verifyEqual(mean(app.Result.roiFlow(2, :)), 4000, 'RelTol', 0.06);
     tests.verifyGreaterThan(app.Result.response(1), R.response(1));
-    tests.verifyTrue(contains(strjoin(app.ChecksArea.Value, ' '), 'exposure model'));
+    tests.verifyTrue(hasCheck(app.ChecksTable.Data, 'Note', 'Flow index', 'exposure model'));
     app.setParams(struct('FlowModel', 'invK2'));
+    % No dark level: the Checks tab asks for it (the demo camera has an offset of 100)
+    app.setParams(struct('Dark', 0));
+    tests.verifyTrue(logical(app.run()));
+    tests.verifyTrue(hasCheck(app.ChecksTable.Data, 'Check', 'Dark level', 'no dark level was subtracted'), ...
+        strjoin(app.ChecksTable.Data(:, 3), ' | '));
+    shot(tests, app, 'LSCIAnalysisApp_11_checks_dark_level', 'Checks');
+    app.setParams(struct('Dark', 100));
 
     % 5. ROIs: add one, rename it, remove it; regular onsets give the same trials
     m = false(64, 80); m(40:50, 45:60) = true;
@@ -157,6 +173,13 @@ function testLaserSpeckleDemo(tests)
     tests.verifyEqual({b.ROIs.Name}, {'Activated area', 'Control cortex', 'Vessel'});
     tests.verifyEqual(b.OnsetDropdown.Value, 'regular');
     tests.verifyEqual(b.Result.response, app.Result.response, 'AbsTol', 1e-9);
+    s = Session.load(ps);
+    tests.verifyEqual({s.checks.topic}, {app.Result.checkRows.topic}, 'the checks are in the session');
+    tests.verifyTrue(any(strcmp(s.summary, ['Checks: ' QualityChecks.summary(s.checks)])), strjoin(s.summary, newline));
+    left = Report.lines(s);
+    tests.verifyTrue(any(strncmp(left, 'CHECKS (', 8)), 'the report has a CHECKS block');
+    tests.verifyTrue(contains(MethodsWriter.fromSession(s), 'quality checks'), 'the methods text names the checks');
+    tests.verifyEqual(b.ChecksTable.Data, app.ChecksTable.Data, 'the reopened window shows the same checks');
     shot(tests, b, 'LSCIAnalysisApp_08_session_reopened');
     pdf = fullfile(tests.TestData.tmp, 'lsci.pdf');
     tests.verifyTrue(logical(app.makeReport(pdf)));
@@ -216,4 +239,9 @@ function testPerimedDatFile(tests)
     tests.verifyEqual(app.Data.pixelSizeUm, 10, 'AbsTol', 1e-9);
     tests.verifyEqual(app.Data.info.format, 'perimed');
     shot(tests, app, 'LSCIAnalysisApp_10_pimsoft_dat', '');
+end
+
+%% hasCheck - A row of the Checks table with this result, topic and finding text
+function tf = hasCheck(chk, result, topic, finding)
+    tf = any(strcmp(chk(:, 1), result) & strcmp(chk(:, 2), topic) & contains(chk(:, 3), finding));
 end

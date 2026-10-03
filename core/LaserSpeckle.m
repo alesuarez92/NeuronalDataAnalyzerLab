@@ -54,11 +54,13 @@
 %       %, largest value of the average trial after onset: noise adds to
 %       it) and R.peakTime (K x 1, s), R.responseMap (H x W, % change in
 %       ResponseSec vs the pre-stimulus window), R.units, R.checks
-%       (plain-language checks, cellstr) and R.params.
+%       (plain-language checks, cellstr 'OK: / Check: / Warning: ...'),
+%       R.checkRows (the same checks as QualityChecks rows) and R.params.
 %   onsets = LaserSpeckle.onsetsFromStimulus(stim, t, minISI)
 %       Rising edges of a stimulus trace (mid-range threshold, crossings
 %       closer than minISI s to the last kept one are ignored), in s.
-%   c = LaserSpeckle.checks(I, p, R)           plain-language quality checks
+%   [c, Q] = LaserSpeckle.checks(I, p, R)      plain-language quality checks
+%       (lines and QualityChecks rows)
 %   s = LaserSpeckle.flowLabel(p)              axis label of the flow index
 %
 % Errors: NeuroAnalyzer:LaserSpeckle:input, :window, :frames, :exposure,
@@ -338,7 +340,7 @@ classdef LaserSpeckle
                     R.responseMap = 100 * (toFlow(vResp / nT) ./ toFlow(vPre / nT) - 1);
                 end
             end
-            R.checks = LaserSpeckle.checks(I, p, R);
+            [R.checks, R.checkRows] = LaserSpeckle.checks(I, p, R);
         end
 
         %% onsetsFromStimulus - Rising edges (s) of a stimulus trace sampled at times t
@@ -360,8 +362,10 @@ classdef LaserSpeckle
         end
 
         %% checks - Plain-language quality checks (what was found and why it matters)
-        function c = checks(I, p, R)
-            c = {};
+        % c: one 'OK: / Check: / Warning: ...' line per check (R.checks);
+        % Q: the same checks as QualityChecks rows (R.checkRows).
+        function [c, Q] = checks(I, p, R)
+            Q = QualityChecks.none();
             p = LaserSpeckle.complete(p);
             if strcmpi(p.InputType, 'raw')
                 % Saturation: pixels at the top of the integer range
@@ -369,24 +373,27 @@ classdef LaserSpeckle
                     top = double(intmax(class(I)));
                     sat = mean(double(I(:)) >= top);
                     if sat > 0.001
-                        c{end+1} = sprintf(['Warning: %.1f%% of the pixels are saturated (at %d). Saturated speckles ' ...
-                            'lower the contrast and make flow look faster: reduce the laser power, the gain or the exposure.'], ...
-                            100 * sat, top);
+                        Q = QualityChecks.add(Q, 'warning', 'Saturation', sprintf(['%.1f%% of the pixels are ' ...
+                            'saturated (at %d).'], 100 * sat, top), ['Saturated speckles lower the contrast and ' ...
+                            'make flow look faster.'], 'Reduce the laser power, the gain or the exposure.');
                     else
-                        c{end+1} = 'OK: no saturated pixels.';
+                        Q = QualityChecks.add(Q, 'ok', 'Saturation', 'No saturated pixels.');
                     end
                 end
                 lo = double(min(I(:)));
                 if p.Dark > 0 && lo < p.Dark
-                    c{end+1} = sprintf(['Warning: some pixels (min %g) are below the dark level (%g): check the dark ' ...
-                        'level (image the camera with the laser off).'], lo, p.Dark);
+                    Q = QualityChecks.add(Q, 'warning', 'Dark level', sprintf(['Some pixels (min %g) are below the ' ...
+                        'dark level (%g).'], lo, p.Dark), 'A dark level that is too high raises the contrast.', ...
+                        'Check the dark level: image the camera with the laser off.');
                 elseif p.Dark == 0 && lo > 0
-                    c{end+1} = sprintf(['Check: no dark level was subtracted (the darkest pixel is %g). A camera offset ' ...
-                        'lowers the measured contrast; measure it with the laser off and type it in Dark level.'], lo);
+                    Q = QualityChecks.add(Q, 'check', 'Dark level', sprintf(['The darkest pixel is %g, but no dark ' ...
+                        'level was subtracted.'], lo), 'A camera offset lowers the measured contrast.', ...
+                        'Measure it with the laser off and type it in Dark level.');
                 end
                 if strcmpi(p.Contrast, 'spatial') && p.Window < 5
-                    c{end+1} = sprintf(['Warning: a %d x %d window holds few speckles, so the contrast is biased low and ' ...
-                        'noisy; 5 x 5 or 7 x 7 is usual.'], p.Window, p.Window);
+                    Q = QualityChecks.add(Q, 'warning', 'Contrast window', sprintf(['A %d x %d window holds few ' ...
+                        'speckles.'], p.Window, p.Window), 'The contrast is then biased low and noisy.', ...
+                        '5 x 5 or 7 x 7 is usual.');
                 end
             end
             if isfield(R, 'K2Mean') && ~isempty(R.K2Mean)
@@ -394,44 +401,53 @@ classdef LaserSpeckle
                 if ~isempty(k)
                     mk = median(k);
                     if mk > 0.6
-                        c{end+1} = sprintf(['Check: the median speckle contrast is high (K = %.2f): mostly static tissue, ' ...
-                            'a very short exposure or speckles much larger than a pixel.'], mk);
+                        Q = QualityChecks.add(Q, 'check', 'Speckle contrast', sprintf(['The median speckle ' ...
+                            'contrast is high (K = %.2f).'], mk), ['Mostly static tissue, a very short exposure or ' ...
+                            'speckles much larger than a pixel.']);
                     elseif mk < 0.02
-                        c{end+1} = sprintf(['Check: the median speckle contrast is very low (K = %.3f): the exposure may ' ...
-                            'be too long, the speckles smaller than a pixel, or the images were already processed ' ...
-                            '(choose the right "Images are" type).'], mk);
+                        Q = QualityChecks.add(Q, 'check', 'Speckle contrast', sprintf(['The median speckle ' ...
+                            'contrast is very low (K = %.3f).'], mk), ['The exposure may be too long, the speckles ' ...
+                            'smaller than a pixel, or the images were already processed.'], ...
+                            'Choose the right "Images are" type.');
                     else
-                        c{end+1} = sprintf('OK: median speckle contrast K = %.2f (typical for tissue: 0.05-0.5).', mk);
+                        Q = QualityChecks.add(Q, 'ok', 'Speckle contrast', sprintf(['Median speckle contrast ' ...
+                            'K = %.2f (typical for tissue: 0.05-0.5).'], mk));
                     end
                     if any(k > 1.05)
-                        c{end+1} = ['Check: some contrast values are above 1, which a speckle pattern cannot give: ' ...
-                            'look for noise, edges of the image or a wrong dark level.'];
+                        Q = QualityChecks.add(Q, 'check', 'Speckle contrast', ['Some contrast values are above 1, ' ...
+                            'which a speckle pattern cannot give.'], '', ...
+                            'Look for noise, edges of the image or a wrong dark level.');
                     end
                 end
             end
             if strcmpi(p.FlowModel, 'tauc')
-                c{end+1} = sprintf(['Flow index = 1/tau_c from the exposure model (T = %g ms, beta = %g); relative ' ...
-                    'changes do not depend on beta, absolute values do.'], p.ExposureMs, p.Beta);
+                Q = QualityChecks.add(Q, 'note', 'Flow index', sprintf(['Flow index = 1/tau_c from the exposure ' ...
+                    'model (T = %g ms, beta = %g).'], p.ExposureMs, p.Beta), ...
+                    'Relative changes do not depend on beta, absolute values do.');
             elseif ~strcmpi(p.InputType, 'flow')
-                c{end+1} = ['Flow index = 1/K' char(178) ' (speckle flow index): relative changes are close to changes in flow, ' ...
-                    'slightly smaller for large changes. Use the correlation-time model with the exposure for a closer estimate.'];
+                Q = QualityChecks.add(Q, 'note', 'Flow index', ['Flow index = 1/K' char(178) ' (speckle flow index).'], ...
+                    'Relative changes are close to changes in flow, slightly smaller for large changes.', ...
+                    'Use the correlation-time model with the exposure for a closer estimate.');
             end
             if isfield(R, 'onsets')
                 nOn = numel(p.Onsets);
                 nT = numel(R.onsets);
                 if nOn == 0
-                    c{end+1} = 'No stimulus onsets: no trials or response map (only the traces over time).';
+                    Q = QualityChecks.add(Q, 'note', 'Trials', ...
+                        'No stimulus onsets: no trials or response map (only the traces over time).');
                 elseif nT < nOn
-                    c{end+1} = sprintf(['Check: %d of %d stimuli were left out because their trial (%g s before to ' ...
-                        '%g s after) does not fit in the recording.'], nOn - nT, nOn, p.PreSec, p.PostSec);
+                    Q = QualityChecks.add(Q, 'check', 'Trials', sprintf(['%d of %d stimuli were left out because ' ...
+                        'their trial (%g s before to %g s after) does not fit in the recording.'], nOn - nT, nOn, ...
+                        p.PreSec, p.PostSec), '', 'Shorten Before / After to keep them.');
                 end
                 if nT > 0 && nT < 3
-                    c{end+1} = sprintf(['Check: only %d trial(s): the average and its SD are unreliable; record more ' ...
-                        'stimuli for a clear response.'], nT);
+                    Q = QualityChecks.add(Q, 'check', 'Trials', sprintf('Only %d trial(s).', nT), ...
+                        'The average and its SD are unreliable.', 'Record more stimuli for a clear response.');
                 elseif nT >= 3
-                    c{end+1} = sprintf('OK: %d trials averaged.', nT);
+                    Q = QualityChecks.add(Q, 'ok', 'Trials', sprintf('%d trials averaged.', nT));
                 end
             end
+            c = QualityChecks.lines(Q);
         end
 
         %% flowLabel - Axis label of the flow index

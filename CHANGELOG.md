@@ -10,6 +10,22 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+### Added
+
+- **Quality checks, one format for every window** (quality checks step 1).
+  A check is a row with a result (**OK**, **Check**, **Warning** or
+  **Note**), a topic, what was found, why it matters and what to try
+  (`core/QualityChecks.m`). One shared **Checks** tab (`UIKit.checksTab`):
+  a table Result / Topic / Finding, coloured by result, and the whole row
+  when you click it. Laser speckle and Histology / culture now use it,
+  with their checks split into what was found, why and what to try
+  (`Histology.checks` and `LaserSpeckle.checks` also return the rows;
+  `R.checks` keeps its "OK: / Check: / Warning:" lines, `R.checkRows`
+  holds the rows). Sessions store the checks (`session.checks`, and a
+  "Checks: …" line in the key results), the PDF report lists them with the
+  warnings first, and the methods text says what they reported. Laser
+  speckle's status bar now says when a run gave warnings.
+
 ## [0.9.0] - 2026-10-03
 
 ### Added

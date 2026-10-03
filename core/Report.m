@@ -7,8 +7,9 @@
 %     top    - an image of the window as it is now (plots included);
 %     bottom - a text summary in two columns: window, Neuronal Data Analyzer Lab and
 %              MATLAB versions, OS, date, notes, every input file with its
-%              size, modification date and MD5; the settings and the key
-%              results of the session s (default: Session.capture(app)).
+%              size, modification date and MD5, the window's quality checks
+%              (most serious first); the settings and the key results of
+%              the session s (default: Session.capture(app)).
 %   ok is false (and msg says why) when the PDF could not be written; it
 %   never throws, so an analysis never fails because of its report.
 % ok = Report.forApp(app, pdfPath)
@@ -136,6 +137,11 @@ classdef Report
                 left = [left, Report.wrap({['   path: ' in.path]}, W)]; %#ok<AGROW>
                 left{end+1} = sprintf('   %s bytes, modified %s', Report.thousands(in.bytes), in.modified); %#ok<AGROW>
                 left{end+1} = sprintf('   MD5 %s', in.md5); %#ok<AGROW>
+            end
+            if isfield(s, 'checks') && ~isempty(s.checks)
+                left{end+1} = '';
+                left{end+1} = sprintf('CHECKS (%s)', QualityChecks.summary(s.checks));
+                left = [left, Report.wrap(QualityChecks.reportLines(s.checks), W)];
             end
             right = {'SETTINGS'};
             right = [right, Report.wrap(Session.describe(s.settings, ''), W)];

@@ -25,6 +25,15 @@
 %   lim = UIKit.dataLimits(ax, dim)          Data range along 'x' / 'y' (+5%).
 %   UIKit.footer(parent)
 %
+% Quality checks (see core/QualityChecks.m):
+%   K = UIKit.checksTab(tabGroup, placeholder)
+%       'Checks' tab: a table Result | Topic | Finding (Result coloured:
+%       OK green, Check amber, Warning red, Note grey) above a text box
+%       that shows the whole row (what was found, why it matters, what to
+%       try) when a row is clicked. K: struct Tab, Table, Text, Placeholder.
+%   UIKit.showChecks(K, Q)   fill it with QualityChecks rows (Q empty:
+%       the placeholder); the rows are kept in K.Table.UserData
+%
 % Sessions and reports (see core/Session.m, core/Report.m):
 %   B = UIKit.sessionButtons(parent, app)
 %       'Save session…', 'Open session…' (row 1), 'Report (PDF)…' and
@@ -293,6 +302,44 @@ classdef UIKit
             ax.XTick = []; ax.YTick = [];
         end
 
+        %% checksTab - Shared Checks tab: Result | Topic | Finding + the whole row on click
+        function K = checksTab(tabGroup, placeholder)
+            T = UITheme;
+            K.Placeholder = placeholder;
+            K.Tab = uitab(tabGroup, 'Title', 'Checks', 'BackgroundColor', T.cardBg);
+            g = uigridlayout(K.Tab, [2 1], 'RowHeight', {'1x', 76}, 'Padding', [6 6 6 6], 'RowSpacing', 6, ...
+                'BackgroundColor', T.cardBg);
+            K.Table = uitable(g, 'RowName', {}, 'ColumnName', {'Result', 'Topic', 'Finding'}, ...
+                'ColumnWidth', {70, 120, 'auto'}, 'FontSize', T.fontSmall + 1, 'Data', cell(0, 3), ...
+                'UserData', QualityChecks.none());
+            K.Text = uitextarea(g, 'Value', {placeholder}, 'Editable', 'off', 'FontSize', T.fontBody, ...
+                'FontColor', T.sectionTitleColor);
+            K.Table.CellSelectionCallback = @(src, e) UIKit.checkSelected(src, e, K.Text);
+        end
+
+        %% showChecks - Fill a Checks tab with QualityChecks rows (empty: placeholder)
+        function showChecks(K, Q)
+            T = UITheme;
+            if isempty(K.Table) || ~isvalid(K.Table), return; end
+            Q = QualityChecks.ensure(Q);
+            K.Table.UserData = Q;
+            K.Table.Data = QualityChecks.tableData(Q);
+            removeStyle(K.Table);
+            if isempty(Q)
+                K.Table.Data = cell(0, 3);
+                K.Text.Value = {K.Placeholder};
+                return;
+            end
+            colors = struct('ok', T.success, 'check', T.warning, 'warning', T.danger, 'note', T.mutedColor);
+            for f = fieldnames(colors)'
+                rows = find(strcmp({Q.level}, f{1}));
+                if ~isempty(rows)
+                    addStyle(K.Table, uistyle('FontColor', colors.(f{1})), 'cell', [rows(:), ones(numel(rows), 1)]);
+                end
+            end
+            K.Text.Value = {sprintf('%s. Click a row to read it in full.', UIKit.capitalFirst(QualityChecks.summary(Q)))};
+        end
+
         %% dataLimits - [low high] of the data drawn in ax along 'x' or 'y', 5% margin
         % Read from the plotted objects, not from the axes: before the first
         % draw (a new window, a tab not shown yet) ylim(ax) and linkaxes can
@@ -480,6 +527,19 @@ classdef UIKit
             if isempty(d) || ~isfolder(d), d = ProjectManager.getExportDir(); end
             if isempty(d) || ~isfolder(d), d = Exporter.getLastUsedPath(); end
             if isempty(d) || ~isfolder(d), d = pwd; end
+        end
+
+        %% checkSelected - The whole row of the clicked check in the text box
+        function checkSelected(tbl, e, txt)
+            Q = tbl.UserData;
+            if isempty(e.Indices) || ~isstruct(Q) || isempty(Q), return; end
+            r = e.Indices(1, 1);
+            if r <= numel(Q), txt.Value = QualityChecks.detail(Q(r)); end
+        end
+
+        %% capitalFirst - First letter in upper case
+        function t = capitalFirst(t)
+            if ~isempty(t), t(1) = upper(t(1)); end
         end
 
         %% centeredPosition - [x y w h] centered on the primary screen

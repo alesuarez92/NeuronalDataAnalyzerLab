@@ -79,8 +79,10 @@ classdef HistologyApp < handle
         Tabs
         CountsTable
         CellsTable
-        ChecksTable
-        ChecksText
+        ChecksUI            % UIKit.checksTab struct (Tab, Table, Text)
+        ChecksTable         % = ChecksUI.Table (Result | Topic | Finding)
+        ChecksText          % = ChecksUI.Text (the clicked row in full)
+        Checks              % QualityChecks rows of the last count
         % Data
         Files = {}          % loaded file paths ('' = demo)
         Raw = {}            % images as loaded, 1 x N cell of H x W x C
@@ -280,14 +282,9 @@ classdef HistologyApp < handle
             tcl = uitab(app.Tabs, 'Title', 'Cells', 'BackgroundColor', T.cardBg);
             g2 = uigridlayout(tcl, [1 1], 'Padding', [6 6 6 6], 'BackgroundColor', T.cardBg);
             app.CellsTable = uitable(g2, 'RowName', {}, 'FontSize', T.fontSmall + 1);
-            tk = uitab(app.Tabs, 'Title', 'Checks', 'BackgroundColor', T.cardBg);
-            g3 = uigridlayout(tk, [2 1], 'RowHeight', {'1x', 60}, 'Padding', [6 6 6 6], 'RowSpacing', 6, ...
-                'BackgroundColor', T.cardBg);
-            app.ChecksTable = uitable(g3, 'RowName', {}, 'ColumnName', {'Result', 'Topic', 'What it means'}, ...
-                'ColumnWidth', {70, 110, 'auto'}, 'FontSize', T.fontSmall + 1, ...
-                'CellSelectionCallback', @(~, e)app.showCheck(e));
-            app.ChecksText = uitextarea(g3, 'Value', {'Count cells (step 3) to see the checks.'}, 'Editable', 'off', ...
-                'FontSize', T.fontBody, 'FontColor', T.sectionTitleColor);
+            app.ChecksUI = UIKit.checksTab(app.Tabs, 'Count cells (step 3) to see the checks.');
+            app.ChecksTable = app.ChecksUI.Table;
+            app.ChecksText = app.ChecksUI.Text;
 
             UIKit.setStatus(app.StatusLabel, ['Step 1: load your images (or Try demo data). Type the pixel size if ' ...
                 'the file does not give it.'], 'info');
@@ -503,7 +500,7 @@ classdef HistologyApp < handle
             app.showImage();
             app.selectTab('Counts');
             app.updateControls();
-            nWarn = nnz(strcmp(app.ChecksTable.Data(:, 1), 'Warning'));
+            nWarn = QualityChecks.count(app.Checks, 'warning');
             if nWarn > 0
                 UIKit.setStatus(app.StatusLabel, sprintf(['Counted. %d warning(s) in the Checks tab: read them before ' ...
                     'using the numbers.'], nWarn), 'warning');
@@ -754,6 +751,7 @@ classdef HistologyApp < handle
                 st.summary{end + 1} = app.alignSummary();
             end
             if isempty(app.Results), return; end
+            st.checks = app.Checks;
             st.results.counts = app.countsRows();
             st.results.countsHeader = app.countsHeader();
             o = app.CountSettings;
@@ -870,9 +868,10 @@ classdef HistologyApp < handle
         function clearResults(app)
             app.Results = {}; app.Positives = {}; app.RegionStats = {};
             app.CountSettings = [];
+            app.Checks = QualityChecks.none();
+            if ~isempty(app.ChecksUI), UIKit.showChecks(app.ChecksUI, app.Checks); end
             if ~isempty(app.CountsTable) && isvalid(app.CountsTable)
-                app.CountsTable.Data = {}; app.CellsTable.Data = {}; app.ChecksTable.Data = cell(0, 3);
-                app.ChecksText.Value = {'Count cells (step 3) to see the checks.'};
+                app.CountsTable.Data = {}; app.CellsTable.Data = {};
             end
             if ~isempty(app.CountInfo) && isvalid(app.CountInfo), app.CountInfo.Text = 'Not counted yet'; end
         end
@@ -915,33 +914,13 @@ classdef HistologyApp < handle
 
         %% fillChecks - Checks tab from Histology.checks
         function fillChecks(app)
-            T = UITheme;
             ctx = struct('pixelSizeUm', app.CountSettings.pixelSizeUm, 'pixelSizeFromFile', app.PixelSizeFromFile, ...
                 'nImages', numel(app.Images), 'alignMethod', app.AlignedMethod, 'shifts', app.Shifts, ...
                 'peak', app.Peaks, 'landmarkRms', app.LandmarkRms, 'channelShifts', [], ...
                 'hasRegions', ~isempty(app.Regions));
             if ~isempty(app.ChannelShifts), ctx.channelShifts = app.ChannelShifts{1}; end
-            C = Histology.checks(app.Results, app.Positives, ctx);
-            label = struct('ok', 'OK', 'check', 'Check', 'warning', 'Warning');
-            res = cellfun(@(s) label.(s), C(:, 1), 'UniformOutput', false);
-            app.ChecksTable.Data = [res, C(:, 2), C(:, 3)];
-            removeStyle(app.ChecksTable);
-            colors = struct('ok', T.success, 'check', T.warning, 'warning', T.danger);
-            for f = fieldnames(colors)'
-                rows = find(strcmp(C(:, 1), f{1}));
-                if ~isempty(rows)
-                    addStyle(app.ChecksTable, uistyle('FontColor', colors.(f{1})), 'cell', [rows(:), ones(numel(rows), 1)]);
-                end
-            end
-            app.ChecksText.Value = {sprintf('%d OK, %d to check, %d warning(s). Click a row to read it in full.', ...
-                nnz(strcmp(C(:, 1), 'ok')), nnz(strcmp(C(:, 1), 'check')), nnz(strcmp(C(:, 1), 'warning')))};
-        end
-
-        %% showCheck - Full text of the selected check
-        function showCheck(app, e)
-            if isempty(e.Indices) || isempty(app.ChecksTable.Data), return; end
-            r = e.Indices(1, 1);
-            app.ChecksText.Value = {sprintf('%s: %s', app.ChecksTable.Data{r, 2}, app.ChecksTable.Data{r, 3})};
+            [~, app.Checks] = Histology.checks(app.Results, app.Positives, ctx);
+            UIKit.showChecks(app.ChecksUI, app.Checks);
         end
 
         %% countsHeader / countsRows - One row per image and region

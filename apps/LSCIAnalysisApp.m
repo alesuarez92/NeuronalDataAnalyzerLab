@@ -66,11 +66,13 @@ classdef LSCIAnalysisApp < handle
         AxesImage
         AxesTrace
         AxesAvg
-        ChecksArea
         ResultTabs
         TraceTab
         AvgTab
-        ChecksTab
+        ChecksTab           % = ChecksUI.Tab
+        ChecksUI            % UIKit.checksTab struct (Tab, Table, Text)
+        ChecksTable         % = ChecksUI.Table (Result | Topic | Finding)
+        ChecksText          % = ChecksUI.Text (the clicked row in full)
         Data = []            % readImageStack struct (stack, t, fps, stim, ...)
         MeanImage = []       % mean over all frames (H x W double), for Show: Mean image
         KindGuessed = false  % Images are was guessed from the content (the file did not say)
@@ -293,10 +295,11 @@ classdef LSCIAnalysisApp < handle
             tg = uigridlayout(app.AvgTab, [1 1], 'Padding', [6 4 6 4], 'BackgroundColor', T.cardBg);
             app.AxesAvg = uiaxes(tg);
             UIKit.emptyAxes(app.AxesAvg, 'The average response to the stimuli appears here after Run');
-            app.ChecksTab = uitab(app.ResultTabs, 'Title', 'Checks', 'BackgroundColor', T.cardBg);
-            tg = uigridlayout(app.ChecksTab, [1 1], 'Padding', [6 4 6 4], 'BackgroundColor', T.cardBg);
-            app.ChecksArea = uitextarea(tg, 'Editable', 'off', 'FontSize', T.fontBody, ...
-                'Value', {'Plain-language checks of the images and settings appear here after Run.'});
+            app.ChecksUI = UIKit.checksTab(app.ResultTabs, ...
+                'Plain-language checks of the images and settings appear here after Run.');
+            app.ChecksTab = app.ChecksUI.Tab;
+            app.ChecksTable = app.ChecksUI.Table;
+            app.ChecksText = app.ChecksUI.Text;
 
             UIKit.setStatus(app.W.Status, 'Load laser speckle images (or Try demo data) to begin (step 1).', 'info');
         end
@@ -591,7 +594,11 @@ classdef LSCIAnalysisApp < handle
                 app.ResultTabs.SelectedTab = app.AvgTab;
             end
             app.updateControls();
-            if isempty(R.onsets)
+            nWarn = QualityChecks.count(R.checkRows, 'warning');
+            if nWarn > 0
+                UIKit.setStatus(app.W.Status, sprintf(['Flow computed, but %s in the Checks tab: read them ' ...
+                    'before using the numbers.'], QualityChecks.plural(nWarn, 'warning')), 'warning');
+            elseif isempty(R.onsets)
                 UIKit.setStatus(app.W.Status, sprintf(['Flow computed for %d ROI(s) at %.3g Hz (%d values). ' ...
                     'No stimulus onsets, so no trials. Next: Export (step 5).'], numel(names), R.fps, numel(R.t)), 'success');
             else
@@ -748,6 +755,7 @@ classdef LSCIAnalysisApp < handle
                 size(app.Data.stack, 3), p.InputType, numel(app.ROIs));
             if isempty(app.Result), return; end
             R = app.Result;
+            st.checks = R.checkRows;
             st.results = struct('t', R.t, 'fps', R.fps, 'roiNames', {app.ResultROINames}, ...
                 'roiFlow', R.roiFlow, 'roiRel', R.roiRel, 'onsets', R.onsets, 'trialTime', R.trialTime, ...
                 'trialMean', R.trialMean, 'trialSD', R.trialSD, 'response', R.response, 'peak', R.peak, ...
@@ -1009,7 +1017,7 @@ classdef LSCIAnalysisApp < handle
                     numel(R.onsets), char(177)), 'Time from onset (s)', 'Flow change (%)');
                 legend(ax, 'Location', 'best', 'Interpreter', 'none', 'Box', 'off');
             end
-            app.ChecksArea.Value = R.checks(:);
+            UIKit.showChecks(app.ChecksUI, R.checkRows);
         end
 
         function clearResults(app)
@@ -1021,7 +1029,7 @@ classdef LSCIAnalysisApp < handle
             UIKit.emptyAxes(app.AxesTrace, 'The flow of each ROI over time appears here after Run (step 4)');
             cla(app.AxesAvg, 'reset');
             UIKit.emptyAxes(app.AxesAvg, 'The average response to the stimuli appears here after Run');
-            app.ChecksArea.Value = {'Plain-language checks of the images and settings appear here after Run.'};
+            UIKit.showChecks(app.ChecksUI, QualityChecks.none());
             if ~any(strcmp(app.ShowDropdown.Value, {'Mean image'}))
                 app.ShowDropdown.Value = 'Mean image';
                 if ~isempty(app.Data), app.showImage(); end

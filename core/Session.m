@@ -19,12 +19,16 @@
 %   results                the window's result structs; leaves larger
 %                          than Session.MaxLeafBytes are replaced by a
 %                          text placeholder (they are re-computed on open)
-%   summary                cellstr of key results, one line each (report)
+%   summary                cellstr of key results, one line each (report);
+%                          with checks, a last line 'Checks: 6 OK, ...'
+%   checks                 the window's quality checks (QualityChecks rows:
+%                          level, topic, found, why, action; none: 0 x 1)
 %   notes                  free text entered when saving
 %
 % Each window provides two public methods:
 %   st = app.sessionState()      struct with settings, results, inputs
-%                                (built with Session.fileInfo) and summary
+%                                (built with Session.fileInfo), summary and,
+%                                in windows with a Checks tab, checks
 %   ok = app.restoreSession(s)   reload s.inputs (paths already resolved),
 %                                re-apply s.settings, re-run the analysis
 %                                (or restore stored results where re-running
@@ -90,6 +94,7 @@ classdef Session
             s.settings = struct();
             s.results = struct();
             s.summary = {};
+            s.checks = QualityChecks.none();
             s.notes = '';
         end
 
@@ -107,6 +112,10 @@ classdef Session
             if isfield(st, 'results'), s.results = Session.limitSize(st.results, Session.MaxLeafBytes); end
             if isfield(st, 'inputs') && ~isempty(st.inputs), s.inputs = st.inputs(:)'; end
             if isfield(st, 'summary'), s.summary = cellstr(st.summary); end
+            if isfield(st, 'checks') && ~isempty(st.checks)
+                s.checks = QualityChecks.ensure(st.checks);
+                s.summary{end+1} = ['Checks: ' QualityChecks.summary(s.checks)];
+            end
             s.notes = Session.notesText(notes);
         end
 
@@ -141,6 +150,7 @@ classdef Session
             Session.validate(s, p);
             if isempty(s.inputs), s.inputs = Session.emptyInputs(); end
             if ~isfield(s, 'summary'), s.summary = {}; end
+            if ~isfield(s, 'checks'), s.checks = QualityChecks.none(); end
             if ~isfield(s, 'notes'), s.notes = ''; end
             if ~isfield(s, 'appTitle'), s.appTitle = ''; end
         end

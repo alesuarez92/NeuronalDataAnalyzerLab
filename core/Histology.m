@@ -36,6 +36,8 @@
 %   R   = Histology.countCells(ch, opts)         the whole pipeline (below)
 %   P   = Histology.positive(L, ch, opts)        per-cell co-localisation
 %   S   = Histology.regionCounts(R, P, regions, pixelSizeUm)  counts per region
+%   [C, Q] = Histology.checks(R, P, ctx)         plain-language checks (Checks
+%       tab): K x 3 {level, topic, text} and the QualityChecks rows
 %
 % countCells steps: (1) background = grey-level opening with a square of
 % side 2 x BackgroundRadiusPx + 1 (minimum then maximum filter, like a
@@ -481,34 +483,39 @@ classdef Histology
         % px, NaN = none), channelShifts (C x 2, px; [] = not aligned),
         % hasRegions. R: countCells results (cell, one per image); P: cell of
         % cells of positive() results. C: K x 3 cell {level, topic, text};
-        % level 'ok' | 'check' | 'warning'.
-        function C = checks(R, P, ctx)
-            C = cell(0, 3);
+        % level 'ok' | 'check' | 'warning'. Q: the same rows in the
+        % QualityChecks format (found, why it matters, what to try).
+        function [C, Q] = checks(R, P, ctx)
+            Q = QualityChecks.none();
             if ctx.pixelSizeFromFile
-                C = addRow(C, 'ok', 'Pixel size', sprintf('%.4g um per pixel, read from the file.', ctx.pixelSizeUm));
+                Q = QualityChecks.add(Q, 'ok', 'Pixel size', sprintf('%.4g um per pixel, read from the file.', ctx.pixelSizeUm));
             else
-                C = addRow(C, 'warning', 'Pixel size', sprintf(['%.4g um per pixel was typed or assumed (the file does not say). ' ...
-                    'Sizes (um2) and densities (cells per mm2) are only right if this is the true pixel size of your ' ...
-                    'microscope and objective.'], ctx.pixelSizeUm));
+                Q = QualityChecks.add(Q, 'warning', 'Pixel size', sprintf(['%.4g um per pixel was typed or assumed ' ...
+                    '(the file does not say).'], ctx.pixelSizeUm), ['Sizes (um2) and densities (cells per mm2) are ' ...
+                    'only right if this is the true pixel size of your microscope and objective.'], ...
+                    'Type the um per pixel of your objective and camera (including binning) in step 1.');
             end
             if ctx.nImages > 1
                 switch ctx.alignMethod
                     case 'none'
                         if ctx.hasRegions
-                            C = addRow(C, 'warning', 'Alignment', ['The images are not aligned, but the regions are drawn once ' ...
-                                'for all of them: a region covers different tissue in each image unless they were taken ' ...
-                                'at exactly the same position. Align them in step 2.']);
+                            Q = QualityChecks.add(Q, 'warning', 'Alignment', ['The images are not aligned, but the ' ...
+                                'regions are drawn once for all of them.'], ['A region covers different tissue in each ' ...
+                                'image unless they were taken at exactly the same position.'], 'Align them in step 2.');
                         else
-                            C = addRow(C, 'check', 'Alignment', 'The images are not aligned (fine when you only need a count per whole image).');
+                            Q = QualityChecks.add(Q, 'check', 'Alignment', 'The images are not aligned.', ...
+                                'Fine when you only need a count per whole image.', ...
+                                'Align them in step 2 before drawing regions or comparing positions.');
                         end
                     case 'shift'
                         for k = 2:ctx.nImages
                             if ctx.peak(k) < 0.03
-                                C = addRow(C, 'warning', 'Alignment', sprintf(['Image %d: the automatic shift (%.1f, %.1f px) is ' ...
-                                    'unreliable (weak match, %.3f): the images may show different fields, be rotated or ' ...
-                                    'too different. Check the overlay or use landmarks.'], k, ctx.shifts(k, 2), ctx.shifts(k, 1), ctx.peak(k)));
+                                Q = QualityChecks.add(Q, 'warning', 'Alignment', sprintf(['Image %d: the automatic shift ' ...
+                                    '(%.1f, %.1f px) is unreliable (weak match, %.3f).'], k, ctx.shifts(k, 2), ctx.shifts(k, 1), ...
+                                    ctx.peak(k)), 'The images may show different fields, be rotated or too different.', ...
+                                    'Check the overlay or use landmarks.');
                             else
-                                C = addRow(C, 'ok', 'Alignment', sprintf('Image %d moved %s to match image 1 (clear match, %.2f).', ...
+                                Q = QualityChecks.add(Q, 'ok', 'Alignment', sprintf('Image %d moved %s to match image 1 (clear match, %.2f).', ...
                                     k, moveText(-ctx.shifts(k, 1), -ctx.shifts(k, 2)), ctx.peak(k)));
                             end
                         end
@@ -516,12 +523,14 @@ classdef Histology
                         for k = 2:ctx.nImages
                             e = ctx.landmarkRms(k);
                             if ~isfinite(e)
-                                C = addRow(C, 'warning', 'Alignment', sprintf('Image %d has no landmarks: it was left as it is.', k));
+                                Q = QualityChecks.add(Q, 'warning', 'Alignment', sprintf(['Image %d has no landmarks: it ' ...
+                                    'was left as it is.'], k), '', 'Click 3 or more matching points on it and image 1.');
                             elseif e > 3
-                                C = addRow(C, 'warning', 'Alignment', sprintf(['Image %d: the landmarks disagree by %.1f px on ' ...
-                                    'average. Some points were probably not placed on the same feature: re-pick them.'], k, e));
+                                Q = QualityChecks.add(Q, 'warning', 'Alignment', sprintf(['Image %d: the landmarks ' ...
+                                    'disagree by %.1f px on average.'], k, e), ...
+                                    'Some points were probably not placed on the same feature.', 'Re-pick them.');
                             else
-                                C = addRow(C, 'ok', 'Alignment', sprintf('Image %d: landmarks agree to %.1f px on average.', k, e));
+                                Q = QualityChecks.add(Q, 'ok', 'Alignment', sprintf('Image %d: landmarks agree to %.1f px on average.', k, e));
                             end
                         end
                 end
@@ -530,11 +539,12 @@ classdef Histology
                 sh = ctx.channelShifts;
                 big = find(hypot(sh(:, 1), sh(:, 2)) > 0.5);
                 if isempty(big)
-                    C = addRow(C, 'ok', 'Channels', 'The channels were already aligned to within half a pixel.');
+                    Q = QualityChecks.add(Q, 'ok', 'Channels', 'The channels were already aligned to within half a pixel.');
                 else
                     for c = big'
-                        C = addRow(C, 'check', 'Channels', sprintf(['Channel %d was %.1f px off (corrected; accuracy about ' ...
-                            'half a pixel). Check the composite: markers should sit on their nuclei.'], c, hypot(sh(c, 1), sh(c, 2))));
+                        Q = QualityChecks.add(Q, 'check', 'Channels', sprintf(['Channel %d was %.1f px off ' ...
+                            '(corrected; accuracy about half a pixel).'], c, hypot(sh(c, 1), sh(c, 2))), '', ...
+                            'Check the composite: markers should sit on their nuclei.');
                     end
                 end
             end
@@ -544,37 +554,42 @@ classdef Histology
                 pre = '';
                 if numel(R) > 1, pre = sprintf('Image %d: ', k); end
                 if r.thresholdAuto
-                    C = addRow(C, 'ok', 'Threshold', sprintf(['%sautomatic threshold %.3g (Otsu %.3g, noise floor %.3g). ' ...
-                        'Switch the view to "What was thresholded" to see what counts as a cell.'], pre, r.threshold, r.otsu, r.noiseFloor));
+                    Q = QualityChecks.add(Q, 'ok', 'Threshold', sprintf('%sautomatic threshold %.3g (Otsu %.3g, noise floor %.3g).', ...
+                        pre, r.threshold, r.otsu, r.noiseFloor), '', ...
+                        'Switch the view to "What was thresholded" to see what counts as a cell.');
                 elseif r.threshold < r.noiseFloor
-                    C = addRow(C, 'warning', 'Threshold', sprintf(['%syour threshold %.3g is below the noise floor %.3g: ' ...
-                        'background noise will be counted as cells.'], pre, r.threshold, r.noiseFloor));
+                    Q = QualityChecks.add(Q, 'warning', 'Threshold', sprintf('%syour threshold %.3g is below the noise floor %.3g.', ...
+                        pre, r.threshold, r.noiseFloor), 'Background noise will be counted as cells.', ...
+                        'Raise the threshold, or type 0 for the automatic one.');
                 else
-                    C = addRow(C, 'ok', 'Threshold', sprintf('%syour threshold %.3g (automatic would be %.3g).', pre, r.threshold, max(r.otsu, r.noiseFloor)));
+                    Q = QualityChecks.add(Q, 'ok', 'Threshold', sprintf('%syour threshold %.3g (automatic would be %.3g).', ...
+                        pre, r.threshold, max(r.otsu, r.noiseFloor)));
                 end
                 if r.n == 0
-                    C = addRow(C, 'warning', 'Count', sprintf('%sno cells found. Check the channel, the threshold and the size limits.', pre));
+                    Q = QualityChecks.add(Q, 'warning', 'Count', sprintf('%sno cells found.', pre), '', ...
+                        'Check the channel, the threshold and the size limits.');
                 end
                 rj = r.nRejected;
                 if rj.tooLarge > 0
-                    C = addRow(C, 'check', 'Size filter', sprintf(['%s%d object(s) were larger than the maximum size and were not ' ...
-                        'counted: clumps that could not be split, or tissue. If they are cells, raise the maximum size.'], pre, rj.tooLarge));
+                    Q = QualityChecks.add(Q, 'check', 'Size filter', sprintf(['%s%d object(s) were larger than the ' ...
+                        'maximum size and were not counted.'], pre, rj.tooLarge), ...
+                        'They may be clumps that could not be split, or tissue.', 'If they are cells, raise the maximum size.');
                 end
                 if rj.tooSmall > 0
-                    C = addRow(C, 'ok', 'Size filter', sprintf('%s%d small object(s) (debris, noise) were not counted.', pre, rj.tooSmall));
+                    Q = QualityChecks.add(Q, 'ok', 'Size filter', sprintf('%s%d small object(s) (debris, noise) were not counted.', pre, rj.tooSmall));
                 end
                 if rj.elongated > 0
-                    C = addRow(C, 'ok', 'Shape filter', sprintf('%s%d elongated object(s) (fibres, vessels, processes) were not counted.', pre, rj.elongated));
+                    Q = QualityChecks.add(Q, 'ok', 'Shape filter', sprintf('%s%d elongated object(s) (fibres, vessels, processes) were not counted.', pre, rj.elongated));
                 end
                 if r.nSplit > 0
-                    C = addRow(C, 'ok', 'Touching cells', sprintf('%s%d extra cell(s) found by splitting touching cells.', pre, r.nSplit));
+                    Q = QualityChecks.add(Q, 'ok', 'Touching cells', sprintf('%s%d extra cell(s) found by splitting touching cells.', pre, r.nSplit));
                 end
                 if r.n > 0
                     [H, W] = size(r.L);
                     edge = r.centroid(:, 1) < 3 | r.centroid(:, 2) < 3 | r.centroid(:, 1) > W - 2 | r.centroid(:, 2) > H - 2;
                     if nnz(edge) > 0
-                        C = addRow(C, 'check', 'Border', sprintf(['%s%d cell(s) are cut by the image border; they are counted ' ...
-                            '(a region drawn inside the image avoids this).'], pre, nnz(edge)));
+                        Q = QualityChecks.add(Q, 'check', 'Border', sprintf(['%s%d cell(s) are cut by the image border; ' ...
+                            'they are counted.'], pre, nnz(edge)), '', 'A region drawn inside the image avoids this.');
                     end
                 end
                 if nargin >= 2 && k <= numel(P)
@@ -583,13 +598,14 @@ classdef Histology
                         if isempty(q), continue; end
                         amb = nnz(q.fraction > 0.3 & q.fraction < 0.7);
                         if r.n > 0 && amb > 0.2 * r.n
-                            C = addRow(C, 'check', 'Markers', sprintf(['%s%d of %d cells are only partly covered by marker %d ' ...
-                                '(30-70%% of the cell): the marker call is uncertain for them. Check the channel alignment and ' ...
-                                'the marker threshold.'], pre, amb, r.n, c));
+                            Q = QualityChecks.add(Q, 'check', 'Markers', sprintf(['%s%d of %d cells are only partly ' ...
+                                'covered by marker %d (30-70%% of the cell).'], pre, amb, r.n, c), ...
+                                'The marker call is uncertain for them.', 'Check the channel alignment and the marker threshold.');
                         end
                     end
                 end
             end
+            C = QualityChecks.toCells(Q);
         end
 
         %% polygonAreaPx - Pixels of the image inside a polygon (clipped to the image)
@@ -726,13 +742,8 @@ function o = parabolaPeak(v)
     o = max(-0.5, min(0.5, 0.5 * (v(1) - v(3)) / den));
 end
 
-%% addRow - Append one {level, topic, text} row to a checks table
 %% moveText - '9.2 px right and 6.4 px up' for a move of (dy, dx) px
 function t = moveText(dy, dx)
     lr = {'right', 'left'}; ud = {'down', 'up'};
     t = sprintf('%.1f px %s and %.1f px %s', abs(dx), lr{1 + (dx < 0)}, abs(dy), ud{1 + (dy < 0)});
-end
-
-function C = addRow(C, lvl, topic, txt)
-    C(end + 1, :) = {lvl, topic, txt};
 end

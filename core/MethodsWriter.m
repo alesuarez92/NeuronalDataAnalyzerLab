@@ -319,12 +319,34 @@ classdef MethodsWriter
                     paras = {sprintf('[please add: describe the analysis done in %s.]', ttl)};
             end
             paras = paras(~cellfun(@isempty, paras));
+            q = MethodsWriter.checksSentence(s);
+            if ~isempty(paras) && ~isempty(q), paras{end} = [paras{end} ' ' q]; end
             if isempty(paras)
                 ttl = MethodsWriter.getf(s, 'appTitle', '');
                 if isempty(ttl), ttl = s.app; end
                 paras = {sprintf(['[please add: the %s session holds no analysis yet (run the analysis ' ...
                     'before saving the session).]'], ttl)};
             end
+        end
+
+        %% checksSentence - What the window's quality checks reported ('' when none)
+        function t = checksSentence(s)
+            t = '';
+            Q = QualityChecks.ensure(MethodsWriter.getf(s, 'checks', []));
+            if isempty(Q), return; end
+            parts = {sprintf('%d OK', QualityChecks.count(Q, 'ok'))};
+            for lv = {'check', 'warning'}
+                k = find(strcmp({Q.level}, lv{1}));
+                topics = MethodsWriter.uniqueStable({Q(k).topic});
+                if strcmp(lv{1}, 'check')
+                    if isempty(k), w = 'none to check'; else, w = sprintf('%d to check', numel(k)); end
+                else
+                    w = QualityChecks.plural(numel(k), 'warning');
+                end
+                if ~isempty(k), w = sprintf('%s (%s)', w, strjoin(topics, ', ')); end
+                parts{end+1} = w; %#ok<AGROW>
+            end
+            t = sprintf('The built-in quality checks reported %s, %s and %s.', parts{:});
         end
 
         %% extractLDF - Recording format, channels, sampling rate and crop

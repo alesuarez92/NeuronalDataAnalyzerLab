@@ -5,7 +5,8 @@
 % Drives HistologyApp through its public methods (no dialogs):
 %   demo -> align channels and images (automatic shift) -> count cells ->
 %   threshold view -> regions A / B -> checks -> export .csv / .mat ->
-%   session save / reopen, and the landmark alignment. Checks the results
+%   session save / reopen, the landmark alignment, and the Checks tab warning
+%   when regions are drawn on images that were not aligned. Checks the results
 %   against the demo ground truth (core/demo/demoHistology.m) and saves a
 %   frame after every step to
 %   test-artifacts/screens/walkthrough/HistologyApp_<NN>_<step>.png.
@@ -122,6 +123,14 @@ function testHistologyDemo(tests)
     tests.verifyNotEmpty(chk);
     tests.verifyFalse(any(strcmp(chk(:, 1), 'Warning')), 'No warnings on the aligned demo');
     tests.verifyTrue(any(strcmp(chk(:, 2), 'Touching cells')));
+    tests.verifyEqual(app.ChecksText.Value{1}, sprintf('%s. Click a row to read it in full.', ...
+        QualityChecks.summary(app.Checks)));
+    % A click on the channel row: what was found and what to try
+    k = find(strcmp(chk(:, 2), 'Channels'), 1);
+    tests.verifyEqual(chk{k, 1}, 'Check');
+    UIKit.checkSelected(app.ChecksTable, struct('Indices', [k 2]), app.ChecksText);
+    tests.verifyEqual(app.ChecksText.Value{1}, 'Check: Channels');
+    tests.verifyTrue(any(startsWith(app.ChecksText.Value, 'What to try: ')), strjoin(app.ChecksText.Value, ' '));
     shot(tests, app, 'HistologyApp_06_checks', 'Checks');
 
     % 6. Export .csv (+ _counts.csv) and .mat
@@ -151,11 +160,35 @@ function testHistologyDemo(tests)
     tests.verifyEqual(b.PixelSizeNote.Text, 'Read from the file.');
     tests.verifyNumElements(b.Regions, 2);
     tests.verifyEqual(b.CountsTable.Data, app.CountsTable.Data);
+    tests.verifyEqual(b.ChecksTable.Data, app.ChecksTable.Data, 'the same checks after reopening');
+    s = Session.load(p);
+    tests.verifyEqual(s.checks, app.Checks);
     shot(tests, b, 'HistologyApp_07_session_reopened', 'Counts');
 
-    % Methods text of this analysis
+    % Methods text of this analysis, with what the checks reported
     txt = MethodsWriter.fromSession(Session.capture(app));
     tests.verifyTrue(contains(txt, 'Cells were counted in the Nuclei (DAPI) channel'));
+    tests.verifyTrue(contains(txt, 'The built-in quality checks reported'), txt);
+end
+
+function testHistologyChecksWarn(tests)
+    % The demo counted without aligning, with regions: the Checks tab warns
+    app = HistologyApp(); c = onCleanup(@() delete(app.UIFig));
+    tests.verifyTrue(logical(app.loadDemo()));
+    tr = app.DemoTruth;
+    tests.verifyTrue(logical(app.countCells()));
+    for r = 1:numel(tr.regions)
+        app.addRegion(tr.regions(r).name, tr.regions(r).xy);
+    end
+    chk = app.ChecksTable.Data;
+    k = find(strcmp(chk(:, 2), 'Alignment'));
+    tests.verifyNumElements(k, 1);
+    tests.verifyEqual(chk{k, 1}, 'Warning');
+    tests.verifyEqual(QualityChecks.count(app.Checks, 'warning'), 1);
+    tests.verifyTrue(contains(app.ChecksText.Value{1}, '1 warning'), app.ChecksText.Value{1});
+    UIKit.checkSelected(app.ChecksTable, struct('Indices', [k 1]), app.ChecksText);
+    tests.verifyEqual(app.ChecksText.Value{end}, 'What to try: Align them in step 2.');
+    shot(tests, app, 'HistologyApp_10_checks_warning', 'Checks');
 end
 
 function testHistologyLandmarks(tests)
