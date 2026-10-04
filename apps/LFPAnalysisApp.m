@@ -41,7 +41,16 @@
 %                     the first ERP run).
 % Tabs: Stimulus (with threshold and detected onsets), ERP overlay, ERP per
 % channel (mean ± SD), CSD map, Spectrum, Spectrogram, ERSP / ITPC, Band
-% power. Help button opens HelpApp on "LFP Analysis".
+% power, Checks. Help button opens HelpApp on "LFP Analysis".
+% Checks tab (UIKit.checksTab): ERPAnalysis.checks after Run ERP (epochs,
+% a stimulus artefact lasting into the N1 window) and again after Compute
+% CSD (plus the electrode spacing and whether the CSD sink is at the edge
+% of the probe); CheckRows holds the rows, sessions store them. The
+% Spacing box is filled from the file's lfp_spacing_um when it has one
+% (SpacingSource 'file'), else it shows the default 100 um ('default':
+% the checks ask for the probe's spacing); editing it makes it 'typed', and
+% so does computeCSD(spacingUm, ...) with a value other than the box's
+% (computeCSD() uses the box as it is, like the Compute CSD button).
 % "Try demo data" (loadDemo) opens DemoData's synthetic LFP, selects all
 % channels and pre-fills CSD spacing 100 um / order 1..8. "Try oscillation
 % demo" (loadOscillationDemo) opens core/demo/demoLFPOscillations (the same
@@ -115,6 +124,10 @@ classdef LFPAnalysisApp < handle
         TabSpectrogram
         TabERSP
         TabBandPower
+        ChecksUI         % UIKit.checksTab struct (Tab, Table, Text)
+        ChecksTab        % = ChecksUI.Tab
+        ChecksTable      % = ChecksUI.Table (Result | Topic | Finding)
+        ChecksText       % = ChecksUI.Text (the clicked row in full)
         AxStim           % Stimulus (mean-subtracted) + threshold + onsets
         AxOverlay        % ERP overlay, all selected channels
         AxContainer      % Panel with the per-channel ERP tiles
@@ -150,6 +163,9 @@ classdef LFPAnalysisApp < handle
         LastCSDMethod = ''   % CSDMethods id used for LastCSD
         LastCSDParams        % Method parameters used (UI values; RUm / lambda 0 = cross-validated)
         LastCSDInfo          % CSDMethods info struct (unit, grid, chosen kCSD R / lambda, ...)
+        CheckRows            % QualityChecks rows of the last ERP / CSD (ERPAnalysis.checks)
+        SpacingSource = 'default'   % where the Spacing box value came from: 'file' | 'typed' | 'default'
+        FileSpacingUm = NaN  % lfp_spacing_um of the loaded file (NaN: the file does not give it)
         Exported = false
 
         % Time-frequency results (step 6)
@@ -164,6 +180,7 @@ classdef LFPAnalysisApp < handle
 
     properties (Constant, Access = private)
         DefaultOnsetParams = struct('threshold', 0.5, 'minISI', 0.5)   % until an ERP was run
+        DefaultSpacingUm = 100   % Spacing box when the file does not give lfp_spacing_um
     end
 
     methods
@@ -242,9 +259,11 @@ classdef LFPAnalysisApp < handle
             app.CSDMethodDrop.ItemsData = CSDMethods.methodIds();
             app.CSDMethodDrop.Value = 'standard';
             app.CSDMethodDrop.ValueChangedFcn = @(~,~)app.onCSDMethodChanged();
-            [app.SpacingEdit, spacingLbl] = labelledField(g, 'Spacing (µm)', 'numeric', 100, ...
-                'Distance between neighbouring electrode contacts in micrometres', [0 Inf]);
+            [app.SpacingEdit, spacingLbl] = labelledField(g, 'Spacing (µm)', 'numeric', app.DefaultSpacingUm, ...
+                ['Distance between neighbouring electrode contacts in micrometres (from the probe''s datasheet; ' ...
+                'filled from the file when it gives lfp_spacing_um)'], [0 Inf]);
             app.SpacingEdit.LowerLimitInclusive = 'off';
+            app.SpacingEdit.ValueChangedFcn = @(~,~)app.onSpacingEdited();
             [app.ChannelOrderEdit, orderLbl] = labelledField(g, 'Channel order', 'text', '', ...
                 ['Channels from the last ERP, top (superficial) to bottom (deep), ' ...
                 'e.g. "5 4 3 2 1". At least 3.']);
@@ -340,6 +359,11 @@ classdef LFPAnalysisApp < handle
             app.TabSpectrogram = uitab(app.Tabs, 'Title', 'Spectrogram', 'BackgroundColor', T.cardBg);
             app.TabERSP        = uitab(app.Tabs, 'Title', 'ERSP / ITPC', 'BackgroundColor', T.cardBg);
             app.TabBandPower   = uitab(app.Tabs, 'Title', 'Band power', 'BackgroundColor', T.cardBg);
+            app.ChecksUI = UIKit.checksTab(app.Tabs, ['Quality checks of the ERP appear here after Run ERP ' ...
+                '(step 3), and of the CSD after Compute CSD (step 4).']);
+            app.ChecksTab = app.ChecksUI.Tab;
+            app.ChecksTable = app.ChecksUI.Table;
+            app.ChecksText = app.ChecksUI.Text;
             app.AxStim    = uiaxes(tabGrid(app.TabStim));
             app.AxOverlay = uiaxes(tabGrid(app.TabOverlay));
             app.AxContainer = uipanel(tabGrid(app.TabChannels), 'BorderType', 'none', ...
@@ -468,6 +492,21 @@ classdef LFPAnalysisApp < handle
             app.LastSpectrum = []; app.LastSpectrogram = []; app.LastERSP = []; app.LastBandPower = [];
             app.TFDone = struct('spectrum', false, 'spectrogram', false, 'ersp', false, 'bandpower', false);
             app.TFFocus = false;
+            app.CheckRows = QualityChecks.none();      % checks belong to the results
+            UIKit.showChecks(app.ChecksUI, app.CheckRows);
+
+            % Electrode spacing from the file (lfp_spacing_um); without it a
+            % typed spacing is kept, otherwise the default (the checks ask for it)
+            app.FileSpacingUm = NaN;
+            if isfield(s, 'lfp_spacing_um') && isnumeric(s.lfp_spacing_um) && isscalar(s.lfp_spacing_um) && ...
+                    isfinite(s.lfp_spacing_um) && s.lfp_spacing_um > 0
+                app.FileSpacingUm = double(s.lfp_spacing_um);
+                app.SpacingEdit.Value = app.FileSpacingUm;
+                app.SpacingSource = 'file';
+            elseif ~strcmp(app.SpacingSource, 'typed')
+                app.SpacingEdit.Value = app.DefaultSpacingUm;
+                app.SpacingSource = 'default';
+            end
 
             % Channel list: row index (used by ERP/CSD), plus TDT channel if saved
             nChan = size(app.LFP, 1);
@@ -647,6 +686,7 @@ classdef LFPAnalysisApp < handle
             app.LastCSDMethod = ''; app.LastCSDParams = []; app.LastCSDInfo = [];
             app.Exported = false;
             app.ChannelOrderEdit.Value = num2str(chIdx);
+            app.updateChecks();                         % epochs, stimulus artefact
             resetAxes(app.AxCSD);
             UIKit.emptyAxes(app.AxCSD, 'Compute CSD (step 4) for this ERP');
 
@@ -670,8 +710,8 @@ classdef LFPAnalysisApp < handle
             app.updateControls();
             nextHint = 'Next: Export.';
             if numel(chIdx) >= 3, nextHint = 'Next: Compute CSD or Export.'; end
-            UIKit.setStatus(app.StatusLabel, sprintf('ERP: averaged %d epochs (%d onsets detected, %d skipped at edges). %s', ...
-                nValid, numel(onsetTimes), numel(onsetTimes) - nValid, nextHint), 'success');
+            app.checksStatus(sprintf('ERP: averaged %d epochs (%d onsets detected, %d skipped at edges). %s', ...
+                nValid, numel(onsetTimes), numel(onsetTimes) - nValid, nextHint));
         end
 
         %% computeCSD - Validate spacing / channel order, CSD with the selected method
@@ -681,6 +721,8 @@ classdef LFPAnalysisApp < handle
         % them with setCSDMethod). 'standard' is ERPAnalysis.csd, exactly as
         % before (V/m^2, no conductivity); the other methods are
         % core/CSDMethods on contacts at depths (0:n-1) * spacing (A/m^3).
+        % A spacingUm other than the box's counts as typed (SpacingSource);
+        % the same value keeps where the box's value came from.
         % Returns true on success.
         function ok = computeCSD(app, spacingUm, order)
             ok = false;
@@ -688,7 +730,11 @@ classdef LFPAnalysisApp < handle
                 UIKit.alert(app.UIFig, 'No ERP data available. Run ERP analysis first.', 'CSD');
                 return;
             end
-            if nargin >= 2 && ~isempty(spacingUm), app.SpacingEdit.Value = spacingUm; end
+            if nargin >= 2 && ~isempty(spacingUm)
+                typed = ~isequal(double(spacingUm), app.SpacingEdit.Value);
+                app.SpacingEdit.Value = spacingUm;
+                if typed, app.SpacingSource = 'typed'; end
+            end
             if nargin >= 3 && ~isempty(order)
                 if isnumeric(order), order = num2str(order(:)'); end
                 app.ChannelOrderEdit.Value = char(order);
@@ -750,13 +796,14 @@ classdef LFPAnalysisApp < handle
             app.LastCSDInfo = info;
             app.Exported = false;
 
+            app.updateChecks();                         % + electrode spacing, CSD sink
             app.plotCSD();
             app.Tabs.SelectedTab = app.TabCSD;
             app.updateCSDInfo();
             app.updateControls();
             ok = true;
-            UIKit.setStatus(app.StatusLabel, sprintf('CSD (%s%s) computed over %d channels (%g µm spacing). Next: Export.', ...
-                label, app.csdParamText(), numel(chan_order), app.LastCSDSpacing), 'success');
+            app.checksStatus(sprintf('CSD (%s%s) computed over %d channels (%g µm spacing). Next: Export.', ...
+                label, app.csdParamText(), numel(chan_order), app.LastCSDSpacing));
         end
 
         %% setCSDMethod - Choose the CSD method and its parameters (no dialog)
@@ -1099,12 +1146,13 @@ classdef LFPAnalysisApp < handle
         % settings: channel selection, ERP parameters and channels, CSD
         % spacing / order, step-6 fields and band table, and the arguments of
         % each time-frequency analysis that was run (tfRuns). results: ERP,
-        % CSD and time-frequency result structs.
+        % CSD and time-frequency result structs. checks: the Checks tab rows.
         function st = sessionState(app)
             st.inputs = [];
             st.settings = struct();
             st.results = struct();
             st.summary = {};
+            st.checks = QualityChecks.none();
             if isempty(app.LFP), return; end
             st.inputs = Session.fileInfo(app.FilePath, 'LFP file');
             [bn, br, bp] = app.tableBands();
@@ -1116,7 +1164,8 @@ classdef LFPAnalysisApp < handle
             st.settings.csd = struct('spacingUm', app.SpacingEdit.Value, 'order', app.ChannelOrderEdit.Value, ...
                 'computed', ~isempty(app.LastCSD), 'usedOrder', app.LastCSDOrder, 'usedSpacingUm', app.LastCSDSpacing, ...
                 'method', app.CSDMethodDrop.Value, 'params', app.csdFieldValues(), ...
-                'usedMethod', app.LastCSDMethod, 'usedParams', app.LastCSDParams);
+                'usedMethod', app.LastCSDMethod, 'usedParams', app.LastCSDParams, ...
+                'spacingSource', app.SpacingSource);
             st.settings.tf = struct('channel', app.TFChannelDrop.Value, ...
                 'fRange', [app.TFFminEdit.Value, app.TFFmaxEdit.Value], 'cycles', app.TFCyclesEdit.Value, ...
                 'epoch', [app.TFEpochFromEdit.Value, app.TFEpochToEdit.Value], ...
@@ -1149,6 +1198,7 @@ classdef LFPAnalysisApp < handle
                     numel(app.LastOnsetTimes), mat2str(app.SelectedChannels), app.ERPParams.preTime, app.ERPParams.postTime);
                 st.summary{end+1} = sprintf('ERP minimum per channel: %s at %s s', mat2str(mn(:)', 3), ...
                     mat2str(app.LastTime(iMin(:)'), 3));
+                st.checks = app.CheckRows;
             end
             if ~isempty(app.LastCSD)
                 st.results.csd = struct('csd', app.LastCSD, 'order', app.LastCSDOrder, 'spacingUm', app.LastCSDSpacing, ...
@@ -1188,6 +1238,9 @@ classdef LFPAnalysisApp < handle
             if isempty(s.inputs), ok = true; return; end
             if ~app.openFile(s.inputs(1).path), return; end
             cfg = s.settings;
+            if isfield(cfg, 'csd') && isfield(cfg.csd, 'spacingSource') && isequal(cfg.csd.spacingSource, 'typed')
+                app.SpacingSource = 'typed';    % a typed spacing stays typed (the checks say where it came from)
+            end
             if isfield(cfg, 'tf'), app.applyTFFields(cfg.tf); end
             if isfield(cfg, 'erp') && ~isempty(cfg.erp)
                 app.setChannels(cfg.erp.channels);
@@ -1823,6 +1876,43 @@ classdef LFPAnalysisApp < handle
         function csdInvalid(app, msg)
             UIKit.setStatus(app.StatusLabel, msg, 'error');
             UIKit.alert(app.UIFig, msg, 'CSD Parameters');
+        end
+
+        %% updateChecks - Quality checks of the last ERP (and CSD, when computed) into the Checks tab
+        function updateChecks(app)
+            o = ERPAnalysis.checkOptions();
+            o.channels = app.SelectedChannels;
+            o.nOnsets = numel(app.LastOnsetTimes);
+            o.nEpochs = app.LastNValid;
+            o.preSec = app.ERPParams.preTime;
+            o.postSec = app.ERPParams.postTime;
+            if ~isempty(app.LastCSD)
+                o.computeCSD = true;
+                o.csd = app.LastCSD;
+                o.csdOrder = app.LastCSDOrder;
+                o.csdMethod = app.LastCSDMethod;
+                o.spacingUm = app.LastCSDSpacing;
+                o.spacingFile = app.FileSpacingUm;
+                o.spacingSource = app.SpacingSource;
+            end
+            app.CheckRows = ERPAnalysis.checks(app.LastERP, app.LastTime, o);
+            UIKit.showChecks(app.ChecksUI, app.CheckRows);
+        end
+
+        %% checksStatus - Success status, or a warning that names the warnings in the Checks tab
+        function checksStatus(app, msg)
+            nWarn = QualityChecks.count(app.CheckRows, 'warning');
+            if nWarn > 0
+                UIKit.setStatus(app.StatusLabel, sprintf('%s %s in the Checks tab: read them before using the numbers.', ...
+                    msg, QualityChecks.plural(nWarn, 'warning')), 'warning');
+            else
+                UIKit.setStatus(app.StatusLabel, msg, 'success');
+            end
+        end
+
+        %% onSpacingEdited - A spacing typed in the box (no longer the file's or the default)
+        function onSpacingEdited(app)
+            app.SpacingSource = 'typed';
         end
     end
 end

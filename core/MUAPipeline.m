@@ -30,6 +30,27 @@
 %   [results, qc] = MUAPipeline.qualityMetrics(results, labels, waves, locs, t, fs, params)
 %       (Re)compute per-cluster waveforms, SNR and ISI checks, e.g. after
 %       merging or splitting clusters.
+%   Q = MUAPipeline.checks(results, info, params)
+%       Quality checks of the channel just sorted (QualityChecks rows, the
+%       Checks tab of MUA Analysis and the Checks column of Batch): info
+%       needs qc (from sort or qualityMetrics, after cluster edits) and
+%       waves (aligned waveform per spike; without it no amplitude row).
+%       Refractory period: % of intervals shorter than refractoryMs per
+%       unit; OK when every kept unit is at or below ISICheck (1%), Check
+%       above it or when a unit was rejected for ISI violations, Warning
+%       when a kept unit is above ISIWarning (2%). Signal-to-noise (SNR as
+%       qualityMetrics): Check when a kept unit is below SNRCheck (3),
+%       Warning when no unit reaches SNRClear (3.5): noise alone, cut at
+%       about 4 noise SDs, gives clusters of SNR 2-3, so nothing on the
+%       channel stands clearly out of the noise; clusters rejected for
+%       SNR < 2 are named as noise. Amplitude drift: the spike peak of
+%       each kept unit with at least DriftMinSpikes (50) spikes over time
+%       (a line through the medians of five consecutive groups of spikes;
+%       change from the first to the last spike, % of the start); units
+%       with the same shape that fire one after the other (a drifting
+%       neuron split in two) are also measured together. Check above
+%       DriftCheck (20%), Warning above DriftWarning (40%). Never throws:
+%       rows it cannot compute are left out.
 %
 % Settings (defaultParams): detectMethod ('Standard' | 'MAD' | 'NEO' |
 % 'Rolling MAD' | 'Percentile'), threshold (k), polarity ('positive' |
@@ -59,6 +80,17 @@
 % =========================================================================
 
 classdef MUAPipeline
+    properties(Constant)
+        ISICheck = 1             % % of intervals shorter than the refractory period (kept unit)
+        ISIWarning = 2           % the QC rejection limit (qualityMetrics)
+        SNRCheck = 3             % peak-to-peak / (2 x noise SD): a kept unit below it, Check
+        SNRClear = 3.5           % no unit reaching it: Warning (noise crossings alone give 2-3)
+        SNRReject = 2            % qualityMetrics rejects units below this as noise
+        DriftCheck = 20          % % change of a unit's spike amplitude over the recording
+        DriftWarning = 40
+        DriftMinSpikes = 50      % spikes a unit needs for the amplitude drift
+    end
+
     methods(Static)
 
         %% defaultParams - Spike sorting defaults (same as the original dialog)
@@ -593,6 +625,31 @@ classdef MUAPipeline
             end
         end
 
+        %% checks - Quality checks of one sorted channel (QualityChecks rows)
+        % results: spikeTimes and clusterIdx (from sort, or after cluster
+        % edits); info: qc (per cluster) and waves (aligned waveform per
+        % spike, same order as clusterIdx; [] = no amplitude drift row);
+        % params: the sorting settings (refractoryMs). Checks never change
+        % the results; a check that cannot be computed gives no row.
+        function Q = checks(results, info, params)
+            Q = QualityChecks.none();
+            if nargin < 3, params = []; end
+            if ~isstruct(info) || ~isfield(info, 'qc') || isempty(info.qc) || ~isstruct(info.qc), return; end
+            try
+                params = MUAPipeline.completeParams(params);
+                qc = info.qc(:)';
+                units = qc([qc.id] > 0);
+            catch
+                return;
+            end
+            if isempty(units), return; end
+            waves = [];
+            if isfield(info, 'waves'), waves = info.waves; end
+            try, Q = MUAPipeline.refractoryCheck(Q, units, params); catch, end
+            try, Q = MUAPipeline.snrCheck(Q, units); catch, end
+            try, Q = MUAPipeline.driftCheck(Q, results, units, waves); catch, end
+        end
+
         %% Cluster merging for drift correction
         % Across time bins, a cluster joins the previous bin's cluster with
         % the best shape correlation >= 0.85 and relative distance <= 0.5
@@ -875,7 +932,270 @@ classdef MUAPipeline
         end
     end
 
+    methods(Static, Hidden)
+
+        %% refractoryCheck - % of intervals shorter than the refractory period per unit
+        % units: qc elements with id > 0 (isiPct, rejected, reason).
+        function Q = refractoryCheck(Q, units, params)
+            ref = params.refractoryMs;
+            ids = [units.id];
+            pct = double([units.isiPct]);
+            rej = logical([units.rejected]);
+            isiRej = rej & ~cellfun(@isempty, strfind({units.reason}, 'ISI'));
+            kept = ~rej;
+            rule = sprintf('Intervals between spikes shorter than the refractory period (%g ms)', ref);
+            bad = (kept & pct > MUAPipeline.ISICheck) | isiRej;
+            if ~any(bad)
+                if ~any(kept)
+                    return;                              % every unit rejected for SNR: the SNR row says so
+                end
+                v = pct;
+                v(~kept) = -Inf;
+                [mx, k] = max(v);
+                Q = QualityChecks.add(Q, 'ok', 'Refractory period', sprintf('%s: at most %s (unit %d); check above %g%%.', ...
+                    rule, MUAPipeline.pctText(mx), ids(k), MUAPipeline.ISICheck));
+                return;
+            end
+            idx = find(bad);
+            [~, order] = sort(pct(idx), 'descend');
+            idx = idx(order);
+            parts = cell(1, min(3, numel(idx)));
+            for j = 1:numel(parts)
+                k = idx(j);
+                parts{j} = sprintf('unit %d %s', ids(k), MUAPipeline.pctText(pct(k)));
+                if isiRej(k), parts{j} = [parts{j} ' (rejected for it)']; end
+            end
+            list = strjoin(parts, ', ');
+            if numel(idx) > 3, list = [list ', ...']; end
+            level = 'check';
+            if any(kept & pct > MUAPipeline.ISIWarning), level = 'warning'; end
+            Q = QualityChecks.add(Q, level, 'Refractory period', sprintf('%s: %s.', rule, list), ...
+                ['A neuron cannot fire twice within about 1-2 ms (its refractory period): shorter intervals ' ...
+                'mean the unit mixes two or more neurons, or noise crossings, so its rate and its spike times ' ...
+                'are not those of one neuron.'], ['Look at the unit''s ISI histogram and waveforms (Quality tab): ' ...
+                'split it (Split selected), raise the threshold or try other features; report a rejected unit ' ...
+                'as multi-unit activity, not as one neuron.']);
+        end
+
+        %% snrCheck - Signal-to-noise of the units (peak-to-peak / (2 x noise SD))
+        function Q = snrCheck(Q, units)
+            ids = [units.id];
+            snr = double([units.snr]);
+            rej = logical([units.rejected]);
+            ok = isfinite(snr);
+            if ~any(ok), return; end
+            noiseRej = rej & ~cellfun(@isempty, strfind({units.reason}, 'SNR'));
+            noise = '';
+            if any(noiseRej)
+                n = nnz(noiseRej);
+                noise = sprintf(' %s %s rejected as noise (SNR below %g).', ...
+                    MUAPipeline.upperFirst(MUAPipeline.idList(ids(noiseRej), 'cluster')), ...
+                    MUAPipeline.ifelse(n == 1, 'was', 'were'), MUAPipeline.SNRReject);
+            end
+            lim = MUAPipeline.SNRCheck;
+            [best, kb] = max(snr(ok));
+            okIds = ids(ok);
+            low = find(ok & ~rej & snr < lim);
+            if best < MUAPipeline.SNRClear
+                [~, order] = sort(snr(ok));             % worst first
+                Q = QualityChecks.add(Q, 'warning', 'Signal-to-noise', sprintf('No unit reaches SNR %g: %s.%s', ...
+                    MUAPipeline.SNRClear, MUAPipeline.valueList(okIds, snr(ok), order), noise), ...
+                    ['SNR = peak-to-peak of the mean spike / (2 x noise SD). Noise alone, cut at a threshold of ' ...
+                    'about 4 noise SDs, gives clusters of SNR 2-3: here no unit stands clearly above that, so many ' ...
+                    'spikes are missed and noise crossings join the units; the rates count noise more than ' ...
+                    'neurons.'], ['Improve the grounding and the reference, use electrodes of lower ' ...
+                    'impedance or choose another channel; a higher threshold keeps only the clearest spikes. ' ...
+                    'Treat this channel as multi-unit activity at most.']);
+            elseif ~isempty(low)
+                [~, order] = sort(snr(low));
+                Q = QualityChecks.add(Q, 'check', 'Signal-to-noise', sprintf('SNR below %g: %s; best: unit %d (%.1f).%s', ...
+                    lim, MUAPipeline.valueList(ids(low), snr(low), order), okIds(kb), best, noise), ...
+                    ['SNR = peak-to-peak of the mean spike / (2 x noise SD); noise crossings alone give 2-3. A unit ' ...
+                    'that close to the noise loses the spikes that do not cross the threshold and gains noise ' ...
+                    'crossings: its rate is less certain than that of the clear units.'], ['Use the clear units ' ...
+                    'for single-neuron results; raise the threshold or report the weak unit as multi-unit ' ...
+                    'activity. Better grounding and reference, or electrodes of lower impedance, help in the next ' ...
+                    'recordings.']);
+            else
+                keptOk = ok & ~rej;
+                if ~any(keptOk)
+                    Q = QualityChecks.add(Q, 'note', 'Signal-to-noise', sprintf('Best SNR %.1f (unit %d), but no unit was kept.%s', ...
+                        best, okIds(kb), noise));
+                    return;
+                end
+                v = snr;
+                v(~keptOk) = Inf;
+                [mn, km] = min(v);
+                Q = QualityChecks.add(Q, 'ok', 'Signal-to-noise', sprintf(['SNR of every kept unit at or above %g ' ...
+                    '(lowest: unit %d, %.1f; best: %.1f); check below %g.%s'], lim, ids(km), mn, best, lim, noise));
+            end
+        end
+
+        %% driftCheck - Spike amplitude of each kept unit over the recording
+        % The peak of each spike's aligned waveform (centre sample), over
+        % time; units with the same shape (r >= 0.9) whose spikes fall one
+        % after the other (median times > 1/4 of the recording apart: a
+        % drifting neuron that the clustering split by size) are also
+        % measured together.
+        function Q = driftCheck(Q, results, units, waves)
+            if isempty(waves) || ~isnumeric(waves) || ~isstruct(results) || ...
+                    ~isfield(results, 'spikeTimes') || ~isfield(results, 'clusterIdx'), return; end
+            lab = double(results.clusterIdx(:));
+            st = double(results.spikeTimes(:));
+            if numel(lab) ~= size(waves, 1) || numel(st) ~= numel(lab) || size(waves, 2) < 3, return; end
+            amp = abs(double(waves(:, round((size(waves, 2) + 1) / 2))));
+            kept = units(~logical([units.rejected]));
+            if isempty(kept), return; end
+            minN = MUAPipeline.DriftMinSpikes;
+            E = struct('name', {}, 'change', {}, 'a0', {}, 'a1', {}, 'span', {});
+            for u = kept
+                m = lab == u.id;
+                if nnz(m) < minN, continue; end
+                [chg, a0, a1, span] = MUAPipeline.amplitudeChange(st(m), amp(m));
+                if isfinite(chg)
+                    E(end + 1) = struct('name', sprintf('unit %d', u.id), 'change', chg, 'a0', a0, ...
+                        'a1', a1, 'span', span); %#ok<AGROW>
+                end
+            end
+            % Units with the same shape firing one after the other: measured together
+            ids = [kept.id];
+            ids = ids(arrayfun(@(k) nnz(lab == k), ids) >= 20);
+            if numel(ids) >= 2 && max(st) > min(st)
+                M = ClusterTools.meanWaveforms(lab, double(waves), ids);
+                tMed = arrayfun(@(k) median(st(lab == k)), ids);
+                grp = 1:numel(ids);
+                for i = 1:numel(ids)
+                    for j = i + 1:numel(ids)
+                        if abs(tMed(i) - tMed(j)) >= 0.25 * (max(st) - min(st)) && ...
+                                ClusterTools.similarity(M(i, :), M(j, :)) >= 0.9
+                            grp(grp == grp(j)) = grp(i);
+                        end
+                    end
+                end
+                for g = unique(grp)
+                    members = ids(grp == g);
+                    if numel(members) < 2, continue; end
+                    m = ismember(lab, members);
+                    [chg, a0, a1, span] = MUAPipeline.amplitudeChange(st(m), amp(m));
+                    own = [E(ismember({E.name}, arrayfun(@(k) sprintf('unit %d', k), members, ...
+                        'UniformOutput', false))).change];
+                    if isfinite(chg) && (isempty(own) || abs(chg) > max(abs(own)))
+                        E(end + 1) = struct('name', sprintf(['units %s (the same shape, one after the other: ' ...
+                            'probably one neuron split in two)'], strjoin(arrayfun(@num2str, members, ...
+                            'UniformOutput', false), ' + ')), 'change', chg, 'a0', a0, 'a1', a1, 'span', span); %#ok<AGROW>
+                    end
+                end
+            end
+            if isempty(E)
+                Q = QualityChecks.add(Q, 'note', 'Amplitude drift', sprintf(['Not judged: no kept unit has %d ' ...
+                    'spikes or more.'], minN));
+                return;
+            end
+            [~, order] = sort(abs([E.change]), 'descend');
+            E = E(order);
+            parts = cell(1, min(3, numel(E)));
+            for j = 1:numel(parts)
+                parts{j} = sprintf('%s %s (%s over %.0f s)', E(j).name, MUAPipeline.changeText(E(j).change), ...
+                    MUAPipeline.ampText(E(j).a0, E(j).a1), E(j).span);
+            end
+            list = strjoin(parts, '; ');
+            if numel(E) > 3, list = [list '; ...']; end
+            worst = abs(E(1).change);
+            if worst > MUAPipeline.DriftCheck
+                level = 'check';
+                if worst > MUAPipeline.DriftWarning, level = 'warning'; end
+                Q = QualityChecks.add(Q, level, 'Amplitude drift', sprintf(['Spike amplitude from the first to ' ...
+                    'the last spike: %s.'], list), ['The electrode moves relative to the neuron. Spikes that ' ...
+                    'shrink towards the threshold are missed, so the rate falls with the amplitude rather than ' ...
+                    'with the activity, and one neuron can split into two clusters (or two merge).'], ...
+                    ['Turn on drift correction (Time binning) in Configure..., analyse the stable part of the ' ...
+                    'recording (segments), and let the probe settle for several minutes before recording.']);
+            else
+                Q = QualityChecks.add(Q, 'ok', 'Amplitude drift', sprintf(['Spike amplitude stable from the first ' ...
+                    'to the last spike: %s; check above %g%%.'], list, MUAPipeline.DriftCheck));
+            end
+        end
+
+        %% amplitudeChange - % change of the amplitude from the first to the last spike
+        % A line through the medians (time, amplitude) of five consecutive
+        % groups of spikes (robust to outliers and to rate changes); a0 / a1:
+        % the line at the first / last spike, span: their distance (s).
+        function [chg, a0, a1, span] = amplitudeChange(t, a)
+            chg = NaN; a0 = NaN; a1 = NaN; span = NaN;
+            ok = isfinite(t) & isfinite(a);
+            t = t(ok); a = a(ok);
+            n = numel(t);
+            if n < 10, return; end
+            [t, order] = sort(t(:));
+            a = a(order);
+            edges = round(linspace(0, n, 6));
+            tm = zeros(1, 5); am = zeros(1, 5);
+            for g = 1:5
+                k = edges(g) + 1:edges(g + 1);
+                tm(g) = median(t(k));
+                am(g) = median(a(k));
+            end
+            span = t(end) - t(1);
+            if ~(span > 0) || ~(tm(5) > tm(1)), return; end
+            c = polyfit(tm - tm(1), am, 1);
+            a0 = polyval(c, t(1) - tm(1));
+            a1 = max(0, polyval(c, t(end) - tm(1)));
+            if a0 > 0, chg = 100 * (a1 - a0) / a0; end
+        end
+    end
+
     methods(Static, Access = private)
+
+        %% pctText - '9.5%', '0.12%', '0%'
+        function s = pctText(v)
+            if v == 0
+                s = '0%';
+            elseif v < 1
+                s = sprintf('%.2g%%', v);
+            else
+                s = sprintf('%.1f%%', v);
+            end
+        end
+
+        %% changeText - '-45%', '+3%', '0%'
+        function s = changeText(v)
+            if round(v) == 0, s = '0%'; else, s = sprintf('%+.0f%%', v); end
+        end
+
+        %% ampText - '110 -> 60 uV' (data in V: shown in uV), else in the data's units
+        function s = ampText(a0, a1)
+            if max(a0, a1) < 0.05
+                s = sprintf('%.0f -> %.0f uV', 1e6 * a0, 1e6 * a1);
+            else
+                s = sprintf('%.3g -> %.3g', a0, a1);
+            end
+        end
+
+        %% idList - 'cluster 3', 'clusters 3 and 4', 'clusters 2, 3 and 5'
+        function s = idList(ids, word)
+            txt = arrayfun(@num2str, ids, 'UniformOutput', false);
+            if numel(txt) == 1
+                s = sprintf('%s %s', word, txt{1});
+            else
+                s = sprintf('%ss %s and %s', word, strjoin(txt(1:end-1), ', '), txt{end});
+            end
+        end
+
+        %% valueList - 'unit 2 (1.8), unit 1 (2.4), ...' in the given order (up to 3)
+        function s = valueList(ids, v, order)
+            k = order(1:min(3, numel(order)));
+            parts = arrayfun(@(i) sprintf('unit %d (%.1f)', ids(i), v(i)), k, 'UniformOutput', false);
+            s = strjoin(parts, ', ');
+            if numel(order) > 3, s = [s ', ...']; end
+        end
+
+        function s = upperFirst(s)
+            if ~isempty(s), s(1) = upper(s(1)); end
+        end
+
+        function v = ifelse(c, a, b)
+            if c, v = a; else, v = b; end
+        end
 
         %% fail - Throw a pipeline error with a user-facing message
         function fail(stage, msg)

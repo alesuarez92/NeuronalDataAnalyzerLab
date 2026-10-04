@@ -114,6 +114,16 @@ function testERP(tests)
         verifyEqual(tests, ch(iMin), tr.sinkChannel);
     end
     verifyEqual(tests, unique(T.AmpUnit), {'uV'});
+    % Quality checks: nothing to check on the demo (10 of 10 stimuli, no
+    % stimulus artefact, spacing 100 um as in the files, the sink inside the probe)
+    verifyEqual(tests, unique(T.Checks), {'OK'}, strjoin(unique(T.Checks), ' | '));
+    verifySubstring(tests, fileread(R.paths.log), 'CSD sink ch 3; checks: OK');
+
+    % Spacing 0 = each file's lfp_spacing_um (100 um): the same sinks
+    p = demo.params; p.spacingUm = 0;
+    R4 = Batch.run('erp', demo.files, p, fullfile(tests.TestData.dir, 'out_erp'), 'Name', 'erp_filespacing');
+    verifyEqual(tests, R4.summary.SinkChannel, T.SinkChannel);
+    verifyEqual(tests, unique(R4.summary.Checks), {'OK'});
 
     % Subset of channels, CSD off
     p = demo.params; p.channels = [2 3 4]; p.computeCSD = false;
@@ -201,9 +211,14 @@ function testMUA(tests)
         verifyGreaterThan(tests, T.EvokedRate_Hz(k), 3 * T.BaselineRate_Hz(k));
         verifyEqual(tests, T.nOnsets(k), numel(demo.truth(k).demo.onsets));
         verifyGreaterThan(tests, T.MeanSNR(k), 2);
+        % Checks (MUAPipeline.checks): no warnings on the demo; a weak cluster may be a Check
+        verifyTrue(tests, ~isempty(T.Checks{k}) && isempty(strfind(T.Checks{k}, 'warning')), T.Checks{k}); %#ok<STREMP>
     end
-    % Twice the gain: the same spikes (sorting is scale-invariant)
+    % Twice the gain: the same spikes (sorting is scale-invariant), the same checks
     verifyEqual(tests, T.nSpikes(2), T.nSpikes(1), 'RelTol', 0.05);
+    verifyEqual(tests, strtok(T.Checks{2}, ':'), strtok(T.Checks{1}, ':'));
+    logText = fileread(R.paths.log);
+    verifyTrue(tests, ~isempty(strfind(logText, '; checks: ')), logText); %#ok<STREMP>
     % Seeded: the same file gives the same result again
     R2 = Batch.run('mua', demo.files(1), demo.params, fullfile(tests.TestData.dir, 'out_mua'), 'Name', 'mua_again');
     verifyEqual(tests, [R2.summary.nSpikes R2.summary.nUnits], [T.nSpikes(1) T.nUnits(1)]);
@@ -240,6 +255,9 @@ function testEEG(tests)
         v = @(c) f.Value_uV(strcmp(f.Condition, c));
         verifyGreaterThan(tests, v('Target'), v('Novel'), ['P300: Target > Novel, ' tag]);
         verifyGreaterThan(tests, v('Novel'), v('Standard'), ['P300: Novel > Standard, ' tag]);
+        % Quality checks: the same cell on every row of the file; fewer than 20 Target or Novel trials, no warnings
+        verifyNumElements(tests, unique(f.Checks), 1, ['one Checks text per file, ' tag]);
+        verifyFalse(tests, isempty(regexp(f.Checks{1}, '^\d to check: Trials per condition: ', 'once')), f.Checks{1});
         if k == 1
             % The steps of EEG Analysis, one by one: the same numbers
             e = EEGAnalysis.filter(EEGAnalysis.markBad(EEGSource.open(demo.files{1}), 'T7'), 'HighPass', 0.1, 'LowPass', 30);
@@ -254,6 +272,8 @@ function testEEG(tests)
         end
     end
     verifySubstring(tests, fileread(R.paths.log), '62 trials (8 rejected); Mean amplitude from 300 to 400 ms, at Pz: Standard');
+    verifySubstring(tests, fileread(R.paths.log), ' to check: Trials per condition: Fewest trials in a condition');
+    verifyEqual(tests, S.Checks{strcmp(S.Status, 'error')}, '', 'no checks for a file that failed');
     % N1: negative peak at Cz with a latency; a channel marked bad gives a plain error row
     p = demo.params;
     p.measure = 'Peak amplitude'; p.polarity = 'Negative'; p.windowMs = [50 150]; p.channels = 'Cz';

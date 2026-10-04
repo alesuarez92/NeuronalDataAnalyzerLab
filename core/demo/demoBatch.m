@@ -28,7 +28,8 @@
 %               truth: amplitude, peakDelay, baseline, onsets (s), nOnsets
 %               (7), nTrials (6 with pre 5 s / post 20 s).
 %   'erp'       LFP file (lfp_data, lfp_channels, lfp_fs, t_lfp, stim_data,
-%               stim_fs, t_stim as saved by Extract Ephys), n = 3: 8
+%               stim_fs, t_stim as saved by Extract Ephys, and the contact
+%               spacing lfp_spacing_um), n = 3: 8
 %               channels 100 um apart, 20 s at 1000 Hz, 10 stimuli (20 ms,
 %               amplitude 1) every 2 s from 1 s. Evoked potential: N1 at
 %               9 + 3k ms (12, 15, 18) of -(80 + 20k) uV and P2 25 ms later
@@ -159,7 +160,7 @@ function [files, truth, params] = makeERP(folder, n, rs)
             local = filter(1, [1 -0.9], randn(rs, 1, nL)) * 0.3e-6;
             lfp(c, :) = profile(c) * evoked + shared + local + 1e-6 * randn(rs, 1, nL);
         end
-        s = struct('lfp_data', lfp, 'lfp_channels', 1:nCh, 'lfp_fs', fs, 't_lfp', tL, ...
+        s = struct('lfp_data', lfp, 'lfp_channels', 1:nCh, 'lfp_spacing_um', spacing, 'lfp_fs', fs, 't_lfp', tL, ...
             'stim_data', stim, 'stim_fs', fs, 't_stim', tL);
         s.truth = struct('n1LatencyMs', 1000 * n1, 'n1AmplitudeUv', 1e6 * a1, 'sinkChannel', sinkCh, ...
             'onsets', onsets, 'nOnsets', numel(onsets));

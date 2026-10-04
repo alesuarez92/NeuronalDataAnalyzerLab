@@ -15,8 +15,18 @@
 %                                 checks: drift 120 -> 160 PU, a movement
 %                                 artefact in trial 3, a 1 s dropout to 0
 %   tk = DemoData.tdtTank()       TDTbin2mat-like struct (streams.Whis / xRAW)
-%   s  = DemoData.lfpFile()       lfp_data, t_lfp, lfp_fs, stim_* (Extract Ephys)
+%   s  = DemoData.lfpFile()       lfp_data, t_lfp, lfp_fs, stim_* (Extract Ephys),
+%                                 lfp_spacing_um (100)
+%   s  = DemoData.lfpFaults()     the demo LFP with faults for the ERP / CSD
+%                                 checks: a stimulus artefact on every
+%                                 contact, the sink at the deepest contact,
+%                                 no electrode spacing in the file
 %   s  = DemoData.muaFile()       mua_data, t_mua, mua_fs, stim_* (Extract Ephys)
+%   s  = DemoData.muaFaults()     MUA like muaFile with one fault per channel
+%                                 for the spike sorting checks: ch 3 noise
+%                                 40 uV (low SNR), ch 4 a unit without a
+%                                 refractory period, ch 5 a unit shrinking
+%                                 to half its size (amplitude drift)
 %   s  = DemoData.imagingStack()  stack, timeVec, roiMask (ROI analysis)
 %
 %   p  = DemoData.file(kind)      cached demo file path (generated on first use),
@@ -34,13 +44,18 @@
 %                      a high-contrast ROI through the skull
 %   'perfusionFaults'  demoPerfusion: perfusion images as a commercial imager
 %                      exports them (PU, 0-3000), the vessel clipped at 3000
+%   'eegFaults'        demoEEG faults: one EEG participant (an EEGLAB EEG
+%                      variable, trials) with the faults of the EEG checks:
+%                      blinks in 9 of 15 Target trials, 8 of 32 channels
+%                      noisy or flat, Pz interpolated (in the history)
 %   'groups'           demoGroups: folder of 3 conditions x 8 animals (LDF trials)
 %   'intan' | 'openephys' | 'nwb'   demoFormats: the demo tank in that format
 % core/demo/demoLDFFormats writes the LDF demo as a LabChart text export,
 % an AcqKnowledge .acq, a PeriSoft-style table, a Spike2 export and a table
 % without a time column (Extract LDF's other inputs).
 % writeAll also writes eeg/ (core/demo/demoEEG: oddball scalp EEG of 8
-% participants and a continuous rodent recording, in every EEG format).
+% participants and a continuous rodent recording, in every EEG format) and
+% demo_eeg_faults.mat (its faults participant).
 %
 % Ground truth is in the .truth field of each struct (and saved as 'truth').
 % =========================================================================
@@ -57,8 +72,8 @@ classdef DemoData
 
         %% file - Path to one demo file, generated on first use and cached
         % kind: 'ldfExport' | 'ldfCropped' | 'ldfTrials' | 'ldfFaults' | 'tdtTank' |
-        %       'lfp' | 'mua' | 'imaging' | 'lfpOscillations' | 'imagingAdvanced' |
-        %       'histology' | 'lsci' | 'lsciFaults' | 'perfusionFaults' | 'groups' |
+        %       'lfp' | 'lfpFaults' | 'mua' | 'muaFaults' | 'imaging' | 'lfpOscillations' | 'imagingAdvanced' |
+        %       'histology' | 'lsci' | 'lsciFaults' | 'perfusionFaults' | 'eegFaults' | 'groups' |
         %       'intan' | 'openephys' | 'nwb'. Files live in
         % DemoData.folder(). For 'tdtTank' the returned path is the tank
         % folder (demo_tank/); for 'groups' the folder of group files; for
@@ -74,13 +89,17 @@ classdef DemoData
                 'ldfTrials', 'demo_ldf_trials.mat', 'tdtTank', fullfile('demo_tank', 'demo_tank.mat'), ...
                 'lfp', 'demo_lfp.mat', 'mua', 'demo_mua.mat', 'imaging', 'demo_imaging.mat', ...
                 'lfpOscillations', 'demo_lfp_oscillations.mat', 'imagingAdvanced', 'demo_imaging_advanced.mat', ...
-                'histology', 'demo_histology.mat', 'lsci', 'demo_lsci.mat', ...
+                'histology', 'demo_histology.mat', 'lsci', 'demo_lsci.mat', 'eegFaults', 'demo_eeg_faults.mat', ...
                 'ldfFaults', 'demo_ldf_faults.mat', 'lsciFaults', 'demo_lsci_faults.mat', ...
-                'perfusionFaults', 'demo_perfusion_faults.mat');
+                'perfusionFaults', 'demo_perfusion_faults.mat', 'lfpFaults', 'demo_lfp_faults.mat', ...
+                'muaFaults', 'demo_mua_faults.mat');
             if ~isfield(names, kind)
                 error('NeuroAnalyzer:DemoData:unknownKind', 'Unknown demo data kind ''%s''.', kind);
             end
             p = fullfile(folder, names.(kind));
+            if strcmp(kind, 'lfp') && exist(p, 'file') && ~any(strcmp(who('-file', p), 'lfp_spacing_um'))
+                delete(p);              % cached before the demo LFP carried its electrode spacing
+            end
             if ~exist(p, 'file')
                 if ~exist(fileparts(p), 'dir'), mkdir(fileparts(p)); end
                 switch kind
@@ -88,12 +107,15 @@ classdef DemoData
                     case 'ldfCropped', s = DemoData.ldfCropped();
                     case 'ldfTrials',  s = DemoData.ldfTrials();
                     case 'lfp',        s = DemoData.lfpFile();
+                    case 'lfpFaults',  s = DemoData.lfpFaults();
                     case 'mua',        s = DemoData.muaFile();
+                    case 'muaFaults',  s = DemoData.muaFaults();
                     case 'imaging',    s = DemoData.imagingStack();
                     case 'lfpOscillations', DemoData.ensureDemoPath(); s = demoLFPOscillations();
                     case 'imagingAdvanced', DemoData.ensureDemoPath(); s = demoImagingAdvanced();
                     case 'histology',  DemoData.ensureDemoPath(); s = demoHistology();
                     case 'lsci',       DemoData.ensureDemoPath(); s = demoLSCI();
+                    case 'eegFaults',  DemoData.ensureDemoPath(); f = demoEEG(); s = load(f.faults.eeglab, '-mat');
                     case 'ldfFaults',  s = DemoData.ldfFaults();
                     case 'lsciFaults', DemoData.ensureDemoPath(); s = demoLSCI(struct('Faults', true));
                     case 'perfusionFaults', DemoData.ensureDemoPath(); s = demoPerfusion();
@@ -101,6 +123,8 @@ classdef DemoData
                 end
                 if strcmp(kind, 'tdtTank')
                     save(p, 'tank', '-v7.3');
+                elseif strcmp(kind, 'eegFaults')
+                    save(p, '-struct', 's', '-v7');      % as EEGLAB saves a dataset
                 else
                     save(p, '-struct', 's', '-v7.3');
                 end
@@ -181,9 +205,17 @@ classdef DemoData
             files.lfp = fullfile(folder, 'demo_lfp.mat');
             save(files.lfp, '-struct', 's');
 
+            s = DemoData.lfpFaults();
+            files.lfpFaults = fullfile(folder, 'demo_lfp_faults.mat');
+            save(files.lfpFaults, '-struct', 's');
+
             s = DemoData.muaFile();
             files.mua = fullfile(folder, 'demo_mua.mat');
             save(files.mua, '-struct', 's', '-v7.3');
+
+            s = DemoData.muaFaults();
+            files.muaFaults = fullfile(folder, 'demo_mua_faults.mat');
+            save(files.muaFaults, '-struct', 's', '-v7.3');
 
             s = DemoData.imagingStack();
             files.imaging = fullfile(folder, 'demo_imaging.mat');
@@ -222,6 +254,9 @@ classdef DemoData
             files.nwb = f.nwb;
             e = demoEEG(fullfile(folder, 'eeg'));
             files.eeg = e.folder;                        % folder: scalp/ (8 participants) and rodent/
+            s = load(e.faults.eeglab, '-mat');           % the EEG faults participant (EEG variable)
+            files.eegFaults = fullfile(folder, 'demo_eeg_faults.mat');
+            save(files.eegFaults, '-struct', 's');
 
             files.folder = folder;
         end
@@ -343,16 +378,57 @@ classdef DemoData
         end
 
         %% lfpFile - What Extract Ephys saves after LFP processing
+        % plus lfp_spacing_um, the probe's contact spacing (um), which the
+        % LFP window and Batch use for the CSD.
         function s = lfpFile()
             [lfpLow, ~, stim, info] = DemoData.ephysComponents();
             s.lfp_data = lfpLow;
             s.lfp_channels = 1:size(lfpLow, 1);
+            s.lfp_spacing_um = info.channelSpacingUm;
             s.lfp_fs = DemoData.FsStimTDT;
             s.t_lfp = (0:size(lfpLow, 2) - 1) / s.lfp_fs;
             s.stim_data = stim;
             s.stim_fs = DemoData.FsStimTDT;
             s.t_stim = (0:numel(stim) - 1) / s.stim_fs;
             s.truth = info;
+        end
+
+        %% lfpFaults - The demo LFP with faults that the ERP / CSD checks find
+        % The recording of lfpFile (30 s, 8 channels 100 um apart, 15 stimuli
+        % at 1, 3, ..., 29 s; the same noise) with three faults:
+        %   artefact  a stimulus artefact, the same on every contact: +800 uV
+        %             at each onset, decaying with a 3 ms time constant
+        %             (still ~150 uV at 5 ms, where the N1 window starts):
+        %             Stimulus artefact Warning
+        %   sink      the response's depth profile is centred on the deepest
+        %             contact (8) instead of 4: the CSD sink is at the edge
+        %             of the probe (CSD sink Warning)
+        %   spacing   no lfp_spacing_um: the CSD uses the default 100 um
+        %             (Electrode spacing Check)
+        % truth: the lfpFile truth (sinkChannel 8) plus artefactUV (800),
+        % artefactTauMs (3), sinkAtEdge (true), spacingInFile (false).
+        function s = lfpFaults()
+            [lfpLow, ~, stim, info] = DemoData.ephysComponents(struct('sinkContact', 8));
+            fs = DemoData.FsStimTDT;
+            t = (0:size(lfpLow, 2) - 1) / fs;
+            art = zeros(1, numel(t));
+            for k = 1:numel(info.onsets)
+                x = t - info.onsets(k);
+                on = x >= 0 & x < 0.1;
+                art(on) = art(on) + 800e-6 * exp(-x(on) / 0.003);
+            end
+            s.lfp_data = lfpLow + repmat(art, size(lfpLow, 1), 1);
+            s.lfp_channels = 1:size(lfpLow, 1);
+            s.lfp_fs = fs;
+            s.t_lfp = t;
+            s.stim_data = stim;
+            s.stim_fs = fs;
+            s.t_stim = (0:numel(stim) - 1) / s.stim_fs;
+            s.truth = info;
+            s.truth.artefactUV = 800;
+            s.truth.artefactTauMs = 3;
+            s.truth.sinkAtEdge = true;
+            s.truth.spacingInFile = false;
         end
 
         %% muaFile - What Extract Ephys saves after MUA processing (ch 3-5)
@@ -370,6 +446,106 @@ classdef DemoData
                 'lowCutoff', 300, 'highCutoff', 3000, 'order', 4, ...
                 'savedSignal', 'synthetic: spikes + noise (already bandpassed)');
             s.truth = info;
+        end
+
+        %% muaFaults - MUA like muaFile (ch 3-5) with one fault per channel for the checks
+        % The layout, rate, duration (30 s), stimulus (1, 3, ..., 29 s) and
+        % unit shapes of muaFile, generated with its own random stream
+        % (stream 31), one fault per channel:
+        %   ch 3  low SNR: noise 40 uV (instead of 10) over units of ~90 and
+        %         ~110 uV (24 and 12 spikes/s): the spikes barely cross the
+        %         threshold (Signal-to-noise Warning)
+        %   ch 4  a unit without a refractory period: ~70 uV, 30 spikes/s at
+        %         random (Poisson), a quarter of them followed 0.78-0.95 ms
+        %         later by a second, smaller spike (Refractory period: the
+        %         unit is rejected for ISI violations), next to a clean
+        %         ~90 uV unit (2 ms refractory period)
+        %   ch 5  amplitude drift: the ~110 uV unit shrinks linearly to half
+        %         its size over the recording (Amplitude drift Warning)
+        % truth: duration, onsets, units (channel, amplitudeUV, baseRateHz,
+        % evokedRateHz, refractoryMs, spikeTimes), noiseUV (per channel),
+        % faults (channel, fault, check), doubletFraction, doubletGapMs,
+        % doubletAmplitude, driftTo (amplitude at the end / at the start).
+        function s = muaFaults()
+            rs = DemoData.stream(31);
+            T = 30; fsL = DemoData.FsStimTDT; fsR = DemoData.FsRaw;
+            nL = round(T * fsL); nR = round(T * fsR);
+            tL = (0:nL-1) / fsL; tR = (0:nR-1) / fsR;
+            onsets = 1:2:29;
+            stim = zeros(1, nL);
+            for k = 1:numel(onsets)
+                stim(tL >= onsets(k) & tL < onsets(k) + 0.02) = 1;
+            end
+            % The unit shapes of ephysComponents
+            wlen = round(1.2e-3 * fsR);
+            tw = (0:wlen-1) / fsR;
+            shapes = { -90e-6 * exp(-(tw - 2.5e-4).^2 / (2 * 0.7e-4^2)) + 35e-6 * exp(-(tw - 6e-4).^2 / (2 * 2.5e-4^2)), ...
+                       -50e-6 * exp(-(tw - 2e-4).^2 / (2 * 1e-4^2)) + 30e-6 * exp(-(tw - 6e-4).^2 / (2 * 2e-4^2)), ...
+                       -110e-6 * exp(-(tw - 3e-4).^2 / (2 * 0.8e-4^2)) + 20e-6 * exp(-(tw - 8e-4).^2 / (2 * 2e-4^2)) };
+            noiseUV = [40 10 10];
+            dblFrac = 0.25; dblGapMs = [0.78 0.95]; dblAmp = 0.8; driftTo = 0.5;
+            U = struct('channel', {3, 3, 4, 4, 5}, 'shape', {1, 3, 1, 2, 3}, 'gain', {1, 1, 1, 1.4, 1}, ...
+                'baseRateHz', {24, 12, 6, 30, 6}, 'evokedRateHz', {80, 120, 80, 30, 120}, ...
+                'refractoryMs', {2, 2, 2, 0, 2}, 'endGain', {1, 1, 1, 1, driftTo});
+            mua = zeros(3, nR);
+            for c = 1:3
+                mua(c, :) = noiseUV(c) * 1e-6 * randn(rs, 1, nR);
+            end
+            spikeTimes = cell(1, numel(U));
+            for u = 1:numel(U)
+                rate = U(u).baseRateHz * ones(1, nR);
+                for k = 1:numel(onsets)
+                    rate(tR >= onsets(k) + 0.005 & tR < onsets(k) + 0.055) = U(u).evokedRateHz;
+                end
+                st = find(rand(rs, 1, nR) < rate / fsR);
+                st = st(st + wlen - 1 <= nR);
+                if U(u).refractoryMs > 0
+                    keep = true(size(st)); last = -Inf;
+                    for i = 1:numel(st)
+                        if st(i) - last > round(U(u).refractoryMs * 1e-3 * fsR), last = st(i); else, keep(i) = false; end
+                    end
+                    st = st(keep);
+                end
+                g = U(u).gain * (1 + (U(u).endGain - 1) * (st - 1) / (nR - 1));
+                if U(u).refractoryMs == 0                  % doublets: a second, smaller spike < 1 ms later
+                    dbl = rand(rs, size(st)) < dblFrac;
+                    gap = round((dblGapMs(1) + diff(dblGapMs) * rand(rs, 1, nnz(dbl))) * 1e-3 * fsR);
+                    st2 = st(dbl) + gap;
+                    g2 = dblAmp * g(dbl);
+                    in = st2 + wlen - 1 <= nR;
+                    [st, order] = sort([st, st2(in)]);
+                    g = [g, g2(in)];
+                    g = g(order);
+                end
+                spikeTimes{u} = (st - 1) / fsR;
+                c = U(u).channel - 2;
+                w = shapes{U(u).shape};
+                for j = 1:numel(st)
+                    mua(c, st(j):st(j) + wlen - 1) = mua(c, st(j):st(j) + wlen - 1) + g(j) * w;
+                end
+            end
+            s.mua_data = mua;
+            s.mua_channels = 3:5;
+            s.mua_fs = fsR;
+            s.t_mua = tR;
+            s.stim_data = stim;
+            s.stim_fs = fsL;
+            s.t_stim = tL;
+            s.filterParams = struct('filterType', 'Standard (300-3000 Hz)', ...
+                'lowCutoff', 300, 'highCutoff', 3000, 'order', 4, ...
+                'savedSignal', 'synthetic: spikes + noise (already bandpassed), one fault per channel');
+            nominalUV = [90 50 110];                       % size of each shape (its negative peak)
+            s.truth = struct('duration', T, 'onsets', onsets, ...
+                'units', struct('channel', {U.channel}, 'amplitudeUV', num2cell(nominalUV([U.shape]) .* [U.gain]), ...
+                    'baseRateHz', {U.baseRateHz}, 'evokedRateHz', {U.evokedRateHz}, ...
+                    'refractoryMs', {U.refractoryMs}, 'spikeTimes', spikeTimes), ...
+                'noiseUV', noiseUV, ...
+                'faults', struct('channel', {3, 4, 5}, ...
+                    'fault', {'noise 40 uV: low signal-to-noise', 'a unit without a refractory period', ...
+                    'the 110 uV unit shrinks to half its size'}, ...
+                    'check', {'Signal-to-noise', 'Refractory period', 'Amplitude drift'}), ...
+                'doubletFraction', dblFrac, 'doubletGapMs', dblGapMs, 'doubletAmplitude', dblAmp, ...
+                'driftTo', driftTo);
         end
 
         %% imagingStack - 96x96x150 frames at 10 Hz
@@ -436,7 +612,12 @@ classdef DemoData
         end
 
         %% ephysComponents - LFP (at FsStimTDT), MUA (at FsRaw), stimulus, truth
-        function [lfp, mua, stim, info] = ephysComponents()
+        % opt (optional struct): sinkContact (default 4), the contact the
+        % evoked potential's depth profile is centred on. It changes no
+        % random draw: the noise is the same for every opt.
+        function [lfp, mua, stim, info] = ephysComponents(opt)
+            if nargin < 1 || ~isstruct(opt), opt = struct(); end
+            if ~isfield(opt, 'sinkContact'), opt.sinkContact = 4; end
             rs = DemoData.stream(2);
             T = 30; nCh = 8; spacing = 100;
             fsL = DemoData.FsStimTDT; fsR = DemoData.FsRaw;
@@ -450,7 +631,7 @@ classdef DemoData
 
             % --- LFP: evoked potential with a Gaussian depth profile ---
             depth = (0:nCh-1) * spacing;
-            z0 = 3 * spacing; sz = 150;
+            z0 = (opt.sinkContact - 1) * spacing; sz = 150;
             profile = exp(-(depth - z0).^2 / (2 * sz^2));
             erp = @(x) -120e-6 * exp(-(x - 0.015).^2 / (2 * 0.005^2)) ...
                        + 60e-6 * exp(-(x - 0.040).^2 / (2 * 0.012^2));
@@ -503,7 +684,7 @@ classdef DemoData
             end
 
             info = struct('duration', T, 'onsets', onsets, 'channelSpacingUm', spacing, ...
-                'sinkChannel', 4, 'n1LatencyS', 0.015, 'p2LatencyS', 0.040, ...
+                'sinkChannel', opt.sinkContact, 'n1LatencyS', 0.015, 'p2LatencyS', 0.040, ...
                 'units', struct('homeChannel', num2cell(homeCh), 'baseRateHz', num2cell(baseRate), ...
                     'evokedRateHz', num2cell(evokedRate), 'spikeTimes', spikeTimes));
         end

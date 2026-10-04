@@ -22,7 +22,10 @@
 %   map, a file without positions); then the time-frequency of step 7
 %   (ERSP of the alpha decrease after Target at Oz, ITPC at the N1 over
 %   Cz, alpha band power, a session, the raw demo cut into longer
-%   trials). Checks the results
+%   trials); then the Checks tab (the clean demo without warnings, a peak
+%   measure with unequal trial counts, the faults demo: too few Target
+%   trials, a rejection that hits Target, 8 bad channels, Pz
+%   interpolated). Checks the results
 %   against the demo's known answers (core/demo/demoEEG.m) and saves a
 %   frame after every step to
 %   test-artifacts/screens/walkthrough/EEGAnalysisApp_<NN>_<step>.png.
@@ -964,6 +967,75 @@ function testTimeFrequency(tests)
     shot(tests, app, 'EEGAnalysisApp_t04_raw_alpha_band_power');
     app.setView('grand', 'Time', 'Target', 'Standard');
     shot(tests, app, 'EEGAnalysisApp_t05_raw_ersp');
+end
+
+%% testChecks - The Checks tab: the clean demo (no warnings), then the faults demo (each check fires)
+function testChecks(tests)
+    DemoData.ensureDemoPath();
+    f = demoEEG();
+    tr = f.truth.faults;                   % the cached manifest keeps the faults (not the data)
+    app = EEGAnalysisApp(); c = onCleanup(@() delete(app.UIFig));
+    tests.verifyNotEmpty(findobj(app.UIFig, 'Type', 'uitab', 'Title', 'Checks'), 'a Checks tab');
+
+    % 1. Clean demo: no checks before the trials are used; after Show ERPs and Measure, no warnings
+    tests.verifyTrue(logical(app.loadDemo()));
+    tests.verifyEmpty(app.ChecksTable.Data, 'no checks before the trials are used');
+    tests.verifyTrue(logical(app.showERPs()));
+    tests.verifyNotEmpty(app.ChecksTable.Data, 'Show ERPs fills the checks');
+    tests.verifyTrue(logical(app.measure()));
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyFalse(any(strcmp(chk(:, 1), 'Warning')), txt);
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Trials per condition', 'below 20 in 8 of 8 participants'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Note', 'Rejection balance', 'rejected before loading in 8 participants'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Condition balance', 'fine for the mean amplitude'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Bad channels', 'No channel marked bad'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Interpolated channels', ...
+        'T7 was interpolated (in EEGLAB) in 8 participants; not among the measured channels (Pz).'), txt);
+    tests.verifyFalse(contains(app.StatusLabel.Text, 'Checks tab'), app.StatusLabel.Text);
+    st = app.sessionState();
+    tests.verifyEqual({st.checks.topic}, {app.CheckRows.topic}, 'the checks go into sessions');
+    % The N1 peak at Cz: Standard has about 3 times the trials of Target / Novel, so a Check
+    app.setMeasure('peak', 'negative', [0.05 0.15], {'Cz'});
+    tests.verifyTrue(logical(app.measure()));
+    chk = app.ChecksTable.Data;
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Condition balance', 'the peak amplitude is measured'), strjoin(chk(:, 3), ' | '));
+    tests.verifyFalse(any(strcmp(chk(:, 1), 'Warning')));
+    app.setMeasure('mean', 'positive', [0.3 0.4], {'Pz'});
+    tests.verifyTrue(logical(app.measure()));
+    shot(tests, app, 'EEGAnalysisApp_21_checks', 'Checks');
+
+    % 2. Faults demo: 8 channels suggested as bad, the 100 uV rejection filled in, nothing applied
+    tests.verifyTrue(logical(app.loadFaultsDemo()));
+    tests.verifyEmpty(app.ChecksTable.Data, 'new files clear the checks');
+    tests.verifyEqual(app.BadChannels{1}, tr.badChannels);
+    tests.verifyTrue(logical(app.RejectCb.Value));
+    tests.verifyTrue(contains(app.StatusLabel.Text, '8 channels suggested as bad'), app.StatusLabel.Text);
+    tests.verifyTrue(logical(app.cutIntoTrials()));              % Apply rejection
+    tests.verifyEqual(double(app.Rejections.rejected), double(tr.blinkTrials), 'exactly the blink trials');
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Trials per condition', 'Target 6'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Rejection balance', '60% of Target trials but 5% of Standard'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Condition balance', 'Standard has 6.3 times as many trials as Target'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Bad channels', '8 of 32 channels marked bad (25%)'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Interpolated channels', 'Pz, the measured channel, was interpolated (in EEGLAB)'), txt);
+    tests.verifyTrue(contains(app.StatusLabel.Text, '4 warnings in the Checks tab'), app.StatusLabel.Text);
+    tests.verifyTrue(contains(app.StatusLabel.Text, 'Rejection applied; 12 of 70 trials rejected.'), app.StatusLabel.Text);
+    tests.verifyTrue(logical(app.showERPs()));
+    tests.verifyTrue(logical(app.measure()));
+    tests.verifyEqual(QualityChecks.count(app.CheckRows, 'warning'), 4);
+    tests.verifyTrue(contains(app.StatusLabel.Text, '4 warnings in the Checks tab'), app.StatusLabel.Text);
+    chk = app.ChecksTable.Data;
+    k = find(strcmp(chk(:, 2), 'Rejection balance'), 1);
+    UIKit.checkSelected(app.ChecksTable, struct('Indices', [k 3]), app.ChecksText);
+    tests.verifyTrue(contains(strjoin(app.ChecksText.Value, ' '), 'What to try:'));
+    shot(tests, app, 'EEGAnalysisApp_22_checks_faults', 'Checks');
+end
+
+%% hasCheck - A row of a Checks table with this result, topic and finding text
+function tf = hasCheck(chk, result, topic, finding)
+    tf = any(strcmp(chk(:, 1), result) & strcmp(chk(:, 2), topic) & contains(chk(:, 3), finding));
 end
 
 %% w2 - 400-600 ms of a time-frequency result

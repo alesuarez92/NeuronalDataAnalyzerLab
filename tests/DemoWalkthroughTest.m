@@ -126,10 +126,44 @@ function testLFPAnalysis(tests)
     app.loadDemo();
     shot(tests, app, 'LFPAnalysisApp_01_demo_loaded', 'Stimulus');
     app.runERP(struct('preTime', 0.05, 'postTime', 0.2, 'threshold', 0.5, 'minISI', 0.5));
+    % Checks after the ERP: epochs and the stimulus artefact (no CSD rows yet)
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Epochs', '15 of 15 stimuli averaged'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Stimulus artefact', 'No stimulus artefact'), txt);
+    tests.verifyFalse(any(strcmp(chk(:, 2), 'CSD sink')), txt);
     shot(tests, app, 'LFPAnalysisApp_02_erp_overlay', 'ERP overlay');
     shot(tests, app, 'LFPAnalysisApp_03_erp_per_channel', 'ERP per channel');
     app.computeCSD(100, 1:8);
     shot(tests, app, 'LFPAnalysisApp_04_csd', 'CSD');
+    % Checks tab after the CSD: the clean demo gives no warnings and nothing to check
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyFalse(any(strcmp(chk(:, 1), 'Warning')), txt);
+    tests.verifyFalse(any(strcmp(chk(:, 1), 'Check')), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Electrode spacing', 'from the file'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'CSD sink', 'contact 4 of 8 (channel 4), inside the probe'), txt);
+    st = app.sessionState();
+    tests.verifyEqual({st.checks.topic}, {app.CheckRows.topic}, 'the checks go into sessions');
+    shot(tests, app, 'LFPAnalysisApp_05_checks', 'Checks');
+
+    % The faults demo: a stimulus artefact on every contact, the sink at the
+    % deepest contact, no electrode spacing in the file
+    tests.verifyTrue(logical(app.openFile(DemoData.file('lfpFaults'))));
+    tests.verifyEmpty(app.ChecksTable.Data, 'a new file clears the checks');
+    app.setChannels(1:8);
+    app.runERP(struct('preTime', 0.05, 'postTime', 0.2, 'threshold', 0.5, 'minISI', 0.5));
+    tests.verifyTrue(contains(app.StatusLabel.Text, '1 warning in the Checks tab'), app.StatusLabel.Text);
+    tests.verifyTrue(logical(app.computeCSD()));    % as the Compute CSD button: the Spacing box as it is
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Stimulus artefact', 'the same on all 8 channels'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Electrode spacing', 'the default 100'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'CSD sink', 'at the edge of the probe'), txt);
+    tests.verifyTrue(contains(app.StatusLabel.Text, '2 warnings in the Checks tab'), app.StatusLabel.Text);
+    k = find(strcmp(chk(:, 2), 'Stimulus artefact'), 1);
+    UIKit.checkSelected(app.ChecksTable, struct('Indices', [k 3]), app.ChecksText);
+    shot(tests, app, 'LFPAnalysisApp_06_checks_faults', 'Checks');
 end
 
 function testMUAAnalysis(tests)
@@ -142,6 +176,39 @@ function testMUAAnalysis(tests)
     shot(tests, app, 'MUAAnalysisApp_04_clusters', 'Clusters (feature space)');
     shot(tests, app, 'MUAAnalysisApp_05_spike_rate', 'Spike rate');
     shot(tests, app, 'MUAAnalysisApp_06_quality', 'Quality');
+    % Checks tab: the clean demo (channel 4) gives no warnings
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyFalse(any(strcmp(chk(:, 1), 'Warning')), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Refractory period', 'check above 1%'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Amplitude drift', 'check above 20%'), txt);
+    tests.verifyTrue(any(strcmp(chk(:, 2), 'Signal-to-noise')), txt);
+    st = app.sessionState();
+    tests.verifyEqual({st.checks.topic}, {app.CheckRows.topic}, 'the checks go into sessions');
+    shot(tests, app, 'MUAAnalysisApp_07_checks', 'Checks');
+
+    % The faults demo: low SNR on ch 3, a unit without a refractory period on ch 4, a shrinking unit on ch 5
+    tests.verifyTrue(logical(app.openFile(DemoData.file('muaFaults'), false)));
+    tests.verifyEmpty(app.ChecksTable.Data, 'a new file clears the checks');
+    for ch = 3:5
+        app.ChannelMenu.Value = find(app.MUAData.channels == ch, 1);
+        tests.verifyTrue(logical(app.runSorting([])));          % the demo settings (MAD, k = 4, negative)
+        chk = app.ChecksTable.Data;
+        txt = sprintf('ch %d: %s', ch, strjoin(chk(:, 3), ' | '));
+        switch ch
+            case 3
+                tests.verifyTrue(hasCheck(chk, 'Warning', 'Signal-to-noise', 'No unit reaches SNR 3.5'), txt);
+            case 4
+                tests.verifyTrue(hasCheck(chk, 'Check', 'Refractory period', 'shorter than the refractory period') || ...
+                    hasCheck(chk, 'Warning', 'Refractory period', 'shorter than the refractory period'), txt);
+            case 5
+                tests.verifyTrue(hasCheck(chk, 'Warning', 'Amplitude drift', 'from the first to the last spike'), txt);
+                tests.verifyTrue(contains(app.StatusLabel.Text, 'in the Checks tab'), app.StatusLabel.Text);
+        end
+    end
+    k = find(strcmp(chk(:, 2), 'Amplitude drift'), 1);
+    if ~isempty(k), UIKit.checkSelected(app.ChecksTable, struct('Indices', [k 3]), app.ChecksText); end
+    shot(tests, app, 'MUAAnalysisApp_08_checks_faults', 'Checks');
 end
 
 function testROIAnalysis(tests)

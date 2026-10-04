@@ -41,14 +41,21 @@
 % condition and A minus B, ITPC per condition, band power; one
 % participant or the grand average) above the tabs
 % Overview (what each file holds and what was done to it) |
-% Measures | Statistics. The computations are in core/EEGAnalysis.m.
+% Measures | Statistics | Checks. The computations are in core/EEGAnalysis.m.
+% Checks tab (UIKit.checksTab): after Cut into trials / Apply rejection
+% (step 3), Show ERPs (step 4) and Measure (step 5), EEGAnalysis.checks
+% looks at the trials analysed (trials per condition, the share of each
+% condition rejected, trial counts against the measure, bad channels,
+% channels interpolated before loading against the measured channels);
+% CheckRows holds the rows, sessions store them, new results clear them.
 % Step 2 always starts again from the files as read and step 3 from the
 % result of step 2 (or the files when step 2 was not applied), in the
 % order bad channels -> filters -> reference -> trials -> rejection, so a
 % session replays them exactly.
 %
 % Scriptable (CI walkthroughs, no dialogs): openFiles(paths, maps),
-% loadDemo(), loadRawDemo(), setLayout('Source', s, 'PositionsFile', f,
+% loadDemo(), loadRawDemo(), loadFaultsDemo() (DemoData 'eegFaults': one
+% participant with the faults of the checks), setLayout('Source', s, 'PositionsFile', f,
 % 'Edits', E, 'Confirm', tf), openLayout() (the layout dialog, not modal;
 % returns its figure), setBadChannels(participant, names),
 % suggestBadChannels(participant), setFilters(highPass, lowPass, notch),
@@ -144,6 +151,11 @@ classdef EEGAnalysisApp < handle
         MeasuresTable
         StatsText
         StatsTable
+        ChecksUI            % UIKit.checksTab struct (Tab, Table, Text)
+        ChecksTab           % = ChecksUI.Tab
+        ChecksTable         % = ChecksUI.Table (Result | Topic | Finding)
+        ChecksText          % = ChecksUI.Text (the clicked row in full)
+        CheckRows           % QualityChecks rows of the trials analysed (EEGAnalysis.checks)
         % Data
         Files = {}          % loaded file paths
         Maps = {}           % plain .mat: the map used for each file ([] otherwise)
@@ -476,6 +488,12 @@ classdef EEGAnalysisApp < handle
                 'Editable', 'off', 'FontSize', T.fontBody, 'FontColor', T.sectionTitleColor);
             app.StatsTable = uitable(g3, 'RowName', {}, 'FontSize', T.fontSmall + 1, 'ColumnName', ...
                 {'Comparison', ['Difference (' char(181) 'V)'], '95% CI', 'p (Holm)', 'Test'});
+            app.ChecksUI = UIKit.checksTab(app.Tabs, ['Quality checks of the trials appear here after Cut into ' ...
+                'trials / Apply rejection (step 3), Show ERPs (step 4) or Measure (step 5).']);
+            app.ChecksTab = app.ChecksUI.Tab;
+            app.ChecksTable = app.ChecksUI.Table;
+            app.ChecksText = app.ChecksUI.Text;
+            app.CheckRows = QualityChecks.none();
 
             UIKit.setStatus(app.StatusLabel, ['Step 1: load one EEG file per participant (or Try demo data).'], 'info');
         end
@@ -592,6 +610,34 @@ classdef EEGAnalysisApp < handle
             UIKit.setStatus(app.StatusLabel, sprintf(['Raw demo loaded: %d continuous recordings; %s suggested as ' ...
                 'bad. Next: check the settings and Apply (step 2), then Cut into trials (step 3).'], ...
                 numel(app.Loaded), badText), 'success');
+        end
+
+        %% loadFaultsDemo - One participant with the faults of the quality checks (DemoData 'eegFaults')
+        % An EEGLAB dataset cut into trials (core/demo/demoEEG faults):
+        % blinks in most Target trials, 8 noisy or flat channels, Pz
+        % interpolated. Fills in the suggested bad channels, the 100 uV
+        % rejection and the P300 measure at Pz without applying them.
+        function ok = loadFaultsDemo(app)
+            DemoData.ensureDemoPath();
+            dlg = UIKit.busy(app.UIFig, 'Making the demo EEG (the first time takes a few seconds)…');
+            try
+                p = DemoData.file('eegFaults');
+            catch ME
+                UIKit.done(dlg);
+                UIKit.setStatus(app.StatusLabel, sprintf('Demo not made: %s', ME.message), 'error');
+                ok = false;
+                return;
+            end
+            UIKit.done(dlg);
+            ok = app.openFiles({p});
+            if ~ok, return; end
+            bad = app.suggestBadChannels(1);
+            app.setRejection(true, 100, 0);
+            app.setChannels({'Pz'});
+            app.setMeasure('mean', 'positive', [0.3 0.4], {'Pz'});
+            UIKit.setStatus(app.StatusLabel, sprintf(['Faults demo loaded: one participant with blinks in most ' ...
+                'Target trials; %d channels suggested as bad. Next: Apply rejection (step 3), then read the ' ...
+                'Checks tab.'], numel(bad)), 'success');
         end
 
         %% setLayout - Electrode layout of the recordings (made from participant 1)
@@ -994,13 +1040,15 @@ classdef EEGAnalysisApp < handle
             app.fillConditionDrops();
             app.plotERP();
             app.updateControls();
+            app.updateChecks();
             if isempty(rej)
                 what = ifelse(continuous, 'Cut into trials.', 'Every trial kept.');
             else
                 what = sprintf('%s; %d of %d trials rejected.', ifelse(continuous, 'Cut into trials', ...
                     'Rejection applied'), sum([rej.total]) - sum([rej.kept]), sum([rej.total]));
             end
-            UIKit.setStatus(app.StatusLabel, [what ' Next: Show ERPs (step 4).'], 'success');
+            [extra, level] = app.checksStatus('success');
+            UIKit.setStatus(app.StatusLabel, [what ' Next: Show ERPs (step 4).' extra], level);
             ok = true;
         end
 
@@ -1064,12 +1112,14 @@ classdef EEGAnalysisApp < handle
                 app.ErpInfo.FontColor = UITheme.warning;
             end
             if isempty(app.MeasureChannelsEdit.Value), app.MeasureChannelsEdit.Value = channelText(chans); end
+            app.updateChecks();
             plotted = app.plotERP();
             app.updateControls();
             ok = true;
             if ~plotted, return; end    % the status says why the plot is empty
+            [extra, level] = app.checksStatus('success');
             UIKit.setStatus(app.StatusLabel, ['ERPs ready. Look at the grand average to choose the time window, ' ...
-                'then Measure (step 5).'], 'success');
+                'then Measure (step 5).' extra], level);
         end
 
         %% setView - participant: name, index or 'grand'; view: text of the Show list
@@ -1157,6 +1207,7 @@ classdef EEGAnalysisApp < handle
                 app.MeasureInfo.Text = EEGAnalysis.describeMeasure(o);
                 app.MeasureInfo.FontColor = UITheme.sectionTitleColor;
             end
+            app.updateChecks();
             app.selectTab('Measures');
             app.plotERP();
             app.updateControls();
@@ -1165,8 +1216,8 @@ classdef EEGAnalysisApp < handle
             else
                 next = 'Statistics need two or more participants; export the values (step 8).';
             end
-            UIKit.setStatus(app.StatusLabel, sprintf('Measured %d participant(s). %s', numel(r), next), ...
-                ifelse(nEdge > 0, 'warning', 'success'));
+            [extra, level] = app.checksStatus(ifelse(nEdge > 0, 'warning', 'success'));
+            UIKit.setStatus(app.StatusLabel, [sprintf('Measured %d participant(s). %s', numel(r), next) extra], level);
             ok = true;
         end
 
@@ -1347,11 +1398,13 @@ classdef EEGAnalysisApp < handle
         end
 
         %% sessionState - Files, settings (cleaning, trials, baseline, measure, test) and results
+        % checks: the Checks tab rows (none before trials).
         function st = sessionState(app)
             st.inputs = [];
             st.settings = struct();
             st.results = struct();
             st.summary = {};
+            st.checks = QualityChecks.ensure(app.CheckRows);
             if isempty(app.Loaded), return; end
             if strcmp(app.Generator, 'demoEEG')
                 st.inputs = Session.fileInfo('', 'EEG demo (demoEEG), 8 participants');
@@ -1711,6 +1764,7 @@ classdef EEGAnalysisApp < handle
             app.Measures = {}; app.MeasureSettings = []; app.StatsResult = [];
             app.ScalpMaps = []; app.MapSettings = [];
             app.TFs = {}; app.GrandTF = []; app.TFSettings = [];
+            app.CheckRows = QualityChecks.none();      % checks belong to the trials analysed
             if ~isempty(app.MeasuresTable) && isvalid(app.MeasuresTable)
                 app.fillMeasures();
                 app.fillStats();
@@ -1718,6 +1772,38 @@ classdef EEGAnalysisApp < handle
                 app.MeasureInfo.Text = '';
                 app.TFInfo.Text = '';
             end
+            if ~isempty(app.ChecksUI), UIKit.showChecks(app.ChecksUI, app.CheckRows); end
+        end
+
+        %% updateChecks - Quality checks of the trials analysed (EEGAnalysis.checks) into the Checks tab
+        % Measure kind and channels: those measured (step 5), else those in
+        % the window; ERP channels: those shown (step 4), else those typed.
+        function updateChecks(app)
+            app.CheckRows = QualityChecks.none();
+            if ~isempty(app.EEGs)
+                if isempty(app.Measures) || isempty(app.MeasureSettings)
+                    m = app.currentMeasure();
+                else
+                    m = app.MeasureSettings;
+                end
+                if isempty(app.ERPSettings)
+                    erpChans = channelList(app.ChannelsEdit.Value);
+                else
+                    erpChans = app.ERPSettings.channels;
+                end
+                app.CheckRows = EEGAnalysis.checks(app.EEGs, app.Names, struct('rejections', app.Rejections, ...
+                    'measure', m.Measure, 'channels', {m.Channels}, 'erpChannels', {erpChans}));
+            end
+            if ~isempty(app.ChecksUI), UIKit.showChecks(app.ChecksUI, app.CheckRows); end
+        end
+
+        %% checksStatus - ' 2 warnings in the Checks tab: ...' and level 'warning' when the checks warn
+        function [extra, level] = checksStatus(app, level)
+            extra = '';
+            n = QualityChecks.count(app.CheckRows, 'warning');
+            if n == 0, return; end
+            extra = sprintf(' %s in the Checks tab: read them before using the results.', QualityChecks.plural(n, 'warning'));
+            level = 'warning';
         end
 
         %% resetLayout - New files: the layout of participant 1 from its positions (others by name), not confirmed

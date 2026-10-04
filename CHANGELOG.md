@@ -55,6 +55,54 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
     shift, speckles smaller than a pixel, illumination drift, 25 ms
     exposure, a ROI through the skull) and `demo_perfusion_faults.mat`
     (perfusion images clipped at 3000 PU, one per second).
+- **Quality checks for electrophysiology** (quality checks step 3): LFP,
+  MUA and EEG Analysis get a **Checks** tab (kept in sessions), and Batch
+  processing a **Checks** column for LFP, MUA and EEG files (one cell per
+  row, the same at the end of each file's log line; the checks never
+  change a file's Status).
+  - **LFP Analysis** (`ERPAnalysis.checks`), after Run ERP and Compute
+    CSD: **Epochs** (stimuli left out, fewer than 10 averaged), **Stimulus
+    artefact** (a deflection in the first 1.5 ms above 10 times the
+    baseline noise; Warning when it lasts into the N1 window, 5–50 ms;
+    says whether it is the same on every contact), **Electrode spacing**
+    (Check when the file does not give it and the default 100 µm was used,
+    or when it differs from the file's) and **CSD sink** (Warning at an
+    edge contact: the first or last two for the standard CSD, which copies
+    the end contacts; the first or last for iCSD and kCSD). LFP files may
+    carry `lfp_spacing_um`, which fills the Spacing box; in Batch a
+    spacing of 0 uses each file's, and a file with none gets its ERP rows
+    without a CSD instead of failing.
+  - **MUA Analysis** (`MUAPipeline.checks`), after sorting and after each
+    cluster edit (merge, split, Undo): **Refractory period** (the share
+    of inter-spike intervals shorter than the refractory period, 1 ms;
+    Check above 1% or when a unit was rejected for it, Warning when a
+    kept unit is above 2%), **Signal-to-noise** (Check when a kept unit
+    is below 3, Warning when no unit reaches 3.5: the spikes are buried in
+    the noise) and **Amplitude drift** (a line through the median spike
+    amplitude of five groups of spikes in time; Check above 20%, Warning
+    above 40%; units of the same shape that fire one after the other are
+    measured together, so a drifting unit split in two is still caught).
+  - **EEG Analysis** (`EEGAnalysis.checks`), after Cut into trials / Apply
+    rejection, Show ERPs and Measure: **Trials per condition** (Check
+    below 20, Warning below 10), **Rejection balance** (the share of each
+    condition rejected; Check when two differ by more than 20 percentage
+    points, Warning above 40), **Condition balance** (more than twice the
+    trials: Check with a peak measure, OK with the mean amplitude),
+    **Bad channels** (Check above 10%, Warning above 20%) and
+    **Interpolated channels** (read from the EEGLAB / FieldTrip history;
+    Warning when every measured channel was interpolated).
+    `EEGAnalysis.interpolatedChannels` reads them; `loadFaultsDemo()` opens
+    the faults participant with the suggested bad channels, a 100 µV
+    rejection and the P300 at Pz filled in.
+  - **Demo data with each fault**: `demo_lfp_faults.mat` (a stimulus
+    artefact on every contact into the N1 window, the sink at the deepest
+    contact, no spacing in the file), `demo_mua_faults.mat`
+    (channel 3: noise raised to 40 µV; channel 4: a unit that fires
+    doublets 0.8–0.95 ms apart; channel 5: a unit shrinking to half its
+    size over the 30 s) and `demo_eeg_faults.mat` / `eeg/faults`
+    (blinks in most Target trials, 8 of 32 channels noisy or flat, Pz
+    interpolated in EEGLAB). `demo_lfp.mat` and the LFP batch demo files
+    now carry `lfp_spacing_um` (100 µm).
 
 ## [0.9.0] - 2026-10-03
 

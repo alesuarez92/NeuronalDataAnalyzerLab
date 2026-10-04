@@ -18,9 +18,13 @@
 %   5 Export             - save spike times, cluster IDs and QC to .mat
 % Right side: tabs 'Signal & spikes', 'Waveforms', 'Clusters',
 % 'Spike rate', 'Raster & PSTH' (per unit, locked to stimulus onsets),
-% 'Correlograms' (auto / cross, up to 4 units) and 'Quality' (QC table,
-% ISI histograms, alignment check). Raster and correlogram tabs are
-% redrawn when shown (refreshLazyTabs).
+% 'Correlograms' (auto / cross, up to 4 units), 'Quality' (QC table,
+% ISI histograms, alignment check) and 'Checks'. Raster and correlogram
+% tabs are redrawn when shown (refreshLazyTabs).
+% Checks tab (UIKit.checksTab): after Run and after every merge, split
+% or Undo, MUAPipeline.checks looks at the sorted channel (refractory
+% period, signal-to-noise, amplitude drift); CheckRows holds the rows,
+% sessions store them, the status bar says when there are warnings.
 % One updateControls() enables controls from the data state and marks the
 % next recommended action as primary. Help button opens HelpApp on the
 % "MUA Analysis" tab. Analysis: runSpikeSorting (wrapper with busy dialog)
@@ -100,6 +104,11 @@ classdef MUAAnalysisApp < handle
         AxISI               % ISI histograms of the selected clusters
         AxAlignBefore       % Waveforms before peak alignment
         AxAlignAfter        % Waveforms after peak alignment
+        ChecksUI            % UIKit.checksTab struct (Tab, Table, Text)
+        ChecksTab           % = ChecksUI.Tab
+        ChecksTable         % = ChecksUI.Table (Result | Topic | Finding)
+        ChecksText          % = ChecksUI.Text (the clicked row in full)
+        CheckRows           % QualityChecks rows of the sorted channel (MUAPipeline.checks)
         % Data
         FilePath            % Full path of the loaded file
         MUAData             % Struct: data (ch x samples), fs, time, channels
@@ -335,6 +344,13 @@ classdef MUAAnalysisApp < handle
             app.AxISI = uiaxes(bottom);
             app.AxAlignBefore = uiaxes(bottom);
             app.AxAlignAfter = uiaxes(bottom);
+
+            app.ChecksUI = UIKit.checksTab(app.TabGroup, ['Quality checks of the sorted channel (refractory ' ...
+                'period, signal-to-noise, amplitude drift) appear here after Run (step 3).']);
+            app.ChecksTab = app.ChecksUI.Tab;
+            app.ChecksTable = app.ChecksUI.Table;
+            app.ChecksText = app.ChecksUI.Text;
+            app.CheckRows = QualityChecks.none();
 
             app.plotSignal();
             app.refreshResultPlots();
@@ -1025,10 +1041,17 @@ classdef MUAAnalysisApp < handle
                 if ~isempty(app.ClusterEdits)
                     mergeNote = sprintf('  ·  %s (Undo in step 4 keeps them apart)', app.ClusterEdits{end});
                 end
-                UIKit.setStatus(app.StatusLabel, sprintf(['Sorted %d spikes into %d unit%s (%d rejected) on %s ' ...
+                msg = sprintf(['Sorted %d spikes into %d unit%s (%d rejected) on %s ' ...
                     'in %.1f s%s - review the tabs, then Save results (step 5)'], ...
                     numel(app.SpikeResults.spikeTimes), nUnits, plural(nUnits), nRej, ...
-                    app.SortContext.label, toc(tStart), mergeNote), 'success');
+                    app.SortContext.label, toc(tStart), mergeNote);
+                nWarn = QualityChecks.count(app.CheckRows, 'warning');
+                if nWarn > 0
+                    UIKit.setStatus(app.StatusLabel, sprintf('%s  ·  %s in the Checks tab: read them before using the units', ...
+                        msg, QualityChecks.plural(nWarn, 'warning')), 'warning');
+                else
+                    UIKit.setStatus(app.StatusLabel, msg, 'success');
+                end
             end
         end
 
@@ -1067,6 +1090,20 @@ classdef MUAAnalysisApp < handle
             app.ClusterSelectMenu.Items = {};
             app.ClusterSelectMenu.ItemsData = [];
             app.QualityLabel.Text = 'Run spike sorting to see clusters';
+            app.CheckRows = QualityChecks.none();      % checks belong to the sorted channel
+            UIKit.showChecks(app.ChecksUI, app.CheckRows);
+        end
+
+        %% updateChecks - Quality checks of the sorted channel (MUAPipeline.checks) into the Checks tab
+        % After sorting and after every cluster edit (merge, split, Undo):
+        % the current clusters, their QC and the aligned waveforms.
+        function updateChecks(app)
+            app.CheckRows = QualityChecks.none();
+            if app.hasResults()
+                app.CheckRows = MUAPipeline.checks(app.SpikeResults, ...
+                    struct('qc', app.ClusterQC, 'waves', app.SpikeWaves), app.SpikeSortParams);
+            end
+            UIKit.showChecks(app.ChecksUI, app.CheckRows);
         end
 
         %% doSpikeSorting - Detection, alignment, features, clustering, QC
@@ -1131,6 +1168,7 @@ classdef MUAAnalysisApp < handle
                 app.ClusterEdits = {desc};
             end
             app.refreshClusterList([info.qc.id]);  % Select all by default
+            app.updateChecks();
             ok = true;
         end
 
@@ -1357,6 +1395,7 @@ classdef MUAAnalysisApp < handle
                 app.SpikeLocs, app.SpikeResults.segmentedTime, app.MUAData.fs, app.SpikeSortParams);
             app.SpikeResults = res;
             app.ClusterQC = qc;
+            app.updateChecks();
             ids = [qc.id];
             app.refreshClusterList([oldSel(ismember(oldSel, ids)), reshape(focusIds, 1, [])]);
             app.computeDisplayPCs();
@@ -2008,12 +2047,14 @@ classdef MUAAnalysisApp < handle
         % settings: channel, segmentation (parameters, windows, segment),
         % sorting parameters, raster / correlogram / rate fields, selected
         % clusters and tab. results: SpikeResults with the display state,
-        % cluster QC, edit history (Undo) and the list of edits.
+        % cluster QC, edit history (Undo) and the list of edits; checks:
+        % the Checks tab rows.
         function st = sessionState(app)
             st.inputs = [];
             st.settings = struct();
             st.results = struct();
             st.summary = {};
+            st.checks = QualityChecks.none();
             if isempty(app.MUAData), return; end
             st.inputs = Session.fileInfo(app.FilePath, 'MUA file');
             chIdx = app.ChannelMenu.Value;
@@ -2042,6 +2083,7 @@ classdef MUAAnalysisApp < handle
             r.editHistory = app.EditHistory;
             r.clusterEdits = app.ClusterEdits;
             st.results = r;
+            st.checks = app.CheckRows;
             qc = app.ClusterQC;
             st.summary{end+1} = sprintf('Sorted %d spikes on %s: %d unit(s), %d rejected', ...
                 numel(app.SpikeResults.spikeTimes), app.SortContext.label, sum([qc.id] > 0), sum([qc.rejected]));
@@ -2115,6 +2157,13 @@ classdef MUAAnalysisApp < handle
                 end
                 app.refreshClusterList(cfg.selectedClusters);
                 app.refreshResultPlots();
+                % Checks as saved; recomputed from the restored clusters for older sessions
+                if isfield(s, 'checks') && ~isempty(s.checks)
+                    app.CheckRows = QualityChecks.ensure(s.checks);
+                    UIKit.showChecks(app.ChecksUI, app.CheckRows);
+                else
+                    app.updateChecks();
+                end
             end
             app.plotSignal();
             if isfield(cfg, 'tab')

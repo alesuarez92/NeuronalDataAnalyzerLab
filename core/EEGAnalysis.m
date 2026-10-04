@@ -5,7 +5,8 @@
 % The computations behind EEGAnalysisApp, without any UI, so scripts get
 % exactly the same numbers as the window. Works on the EEG struct of
 % core/io/EEGSource.m (channels x samples x trials, microvolts).
-% Toolbox-free (base MATLAB).
+% Toolbox-free (base MATLAB). The quality checks (checks, interpolatedChannels)
+% also run in GNU Octave.
 %
 % Every step adds a plain sentence to eeg.history. Bad channels (eeg.bad)
 % are left out of the average reference, the trial rejection, the ERPs
@@ -140,6 +141,40 @@
 %       fs/2 - 1 Hz and below the low-pass (when on); at least notch itself.
 %   idx = EEGAnalysis.channelIndex(labels, names)
 %       Positions of channel names (any case); error listing the unknown ones.
+%   Q   = EEGAnalysis.checks(eegs, names, o)
+%       Quality checks of the trials analysed (QualityChecks rows; one row
+%       per check over every participant: the worst sets the level and the
+%       text names the participants, worst first, up to 3). eegs: a cell of
+%       EEG structs cut into trials (one per participant), names: their
+%       names. o (struct, every field optional): rejections (the
+%       rejectTrials info of each participant, a struct array or a cell
+%       with [] where none ran; [] = no rejection here), measure ('mean' |
+%       'peak' | '' not chosen; 'Mean amplitude' / 'Peak amplitude' too),
+%       channels (measured; {} = the ERP channels), erpChannels ({} = all).
+%       Limits in EEGAnalysis.CheckLimits. Never changes a result and never
+%       throws: a check that cannot run gives no row.
+%         Trials per condition  the fewest trials left in a condition:
+%                         Check below 20, Warning below 10
+%         Rejection balance     share of each condition rejected here:
+%                         Check when two conditions differ by more than 20
+%                         percentage points (and the larger lost at least 3
+%                         trials), Warning above 40; a note when the trials
+%                         were rejected before loading (history)
+%         Condition balance     the most / the fewest trials of a condition:
+%                         more than 2 times is a Check with the peak
+%                         amplitude, OK with the mean amplitude
+%         Bad channels          eeg.bad: Check above 10% of the channels,
+%                         Warning above 20%
+%         Interpolated channels interpolated before loading (the history):
+%                         Warning when every measured channel was
+%                         interpolated, Check when some were (or the history
+%                         does not say which), else OK
+%   [names, info] = EEGAnalysis.interpolatedChannels(eeg)
+%       Channels interpolated before loading, from the history lines of
+%       EEGSource (EEGLAB pop_interp, FieldTrip ft_channelrepair) or of
+%       this toolbox. info.unknown: a line says channels were interpolated
+%       but not which; info.where: 'in EEGLAB' (the file's source), 'here'
+%       or 'before loading'; info.lines: the history lines.
 %
 % Errors: NeuroAnalyzer:eeg:notEpoched, NeuroAnalyzer:eeg:unknownChannel,
 % NeuroAnalyzer:eeg:unknownCondition, NeuroAnalyzer:eeg:badWindow,
@@ -148,6 +183,13 @@
 % =========================================================================
 
 classdef EEGAnalysis
+    properties(Constant)
+        % Limits of the quality checks (EEGAnalysis.checks): trials; percentage
+        % points of a condition rejected; times as many trials; % of the channels
+        CheckLimits = struct('trialsCheck', 20, 'trialsWarning', 10, 'rejectionCheck', 20, ...
+            'rejectionWarning', 40, 'rejectionMinTrials', 3, 'countRatio', 2, 'badCheck', 10, 'badWarning', 20)
+    end
+
     methods(Static)
 
         %% epoch - Continuous recording -> trials around its events
@@ -1087,9 +1129,502 @@ classdef EEGAnalysis
                 idx(k) = i;
             end
         end
+
+        %% checks - Quality checks of the trials analysed, one row per check over every participant
+        function Q = checks(eegs, names, o)
+            Q = QualityChecks.none();
+            if nargin < 2, names = {}; end
+            if nargin < 3, o = []; end
+            try
+                if isstruct(eegs), eegs = num2cell(eegs); end
+                if ~iscell(eegs) || isempty(eegs), return; end
+                eegs = eegs(:)';
+                P = numel(eegs);
+                if ischar(names), names = {names}; end
+                if ~iscell(names), names = {}; end
+                names = names(:)';
+                for p = 1:P
+                    if p > numel(names) || ~ischar(names{p}) || isempty(names{p})
+                        names{p} = sprintf('participant %d', p);
+                    end
+                end
+                names = names(1:P);
+                o = EEGAnalysis.checkOptions(o, P);
+                C = cell(1, P);
+                for p = 1:P
+                    C{p} = EEGAnalysis.conditionCounts(eegs{p}, o.rejections{p});
+                end
+            catch
+                return;                                  % odd input: no rows
+            end
+            for k = 1:5
+                try
+                    switch k
+                        case 1, Q = EEGAnalysis.trialsCheck(Q, C, names);
+                        case 2, Q = EEGAnalysis.rejectionCheck(Q, eegs, C, names);
+                        case 3, Q = EEGAnalysis.balanceCheck(Q, C, names, o.measure);
+                        case 4, Q = EEGAnalysis.badChannelsCheck(Q, eegs, names);
+                        case 5, Q = EEGAnalysis.interpolationCheck(Q, eegs, names, o);
+                    end
+                catch
+                    % a check that cannot run on this input gives no row
+                end
+            end
+        end
+
+        %% interpolatedChannels - Channels interpolated before, from the history lines
+        function [names, info] = interpolatedChannels(eeg)
+            names = {};
+            info = struct('unknown', false, 'where', '', 'lines', {{}});
+            if ~isstruct(eeg) || ~isfield(eeg, 'history'), return; end
+            h = eeg.history;
+            if ischar(h), h = {h}; end
+            if ~iscell(h), return; end
+            here = false;
+            for k = 1:numel(h)
+                if ~ischar(h{k}), continue; end
+                s = strtrim(h{k});
+                if ~strncmp(s, 'Interpolated ', 13), continue; end
+                info.lines{end + 1} = s;
+                here = here || ~isempty(regexp(s, '\(Neuronal Data Analyzer Lab\)\.?$', 'once'));
+                t = regexprep(s, '\.$', '');
+                t = regexprep(t, '\s*\([^()]*\)$', '');             % (pop_interp), (ft_channelrepair)
+                t = regexprep(t, '\s+using\s.*$', '');              % using spherical splines / the spline method
+                tok = regexp(t, '^Interpolated\s+(?:\d+\s+)?channels?\s+(.+)$', 'tokens', 'once');
+                if isempty(tok)                                     % 'Interpolated bad channels': not named
+                    info.unknown = true;
+                    continue;
+                end
+                parts = strtrim(strsplit(regexprep(tok{1}, '\s+and\s+', ', '), ','));
+                names = [names, parts(~cellfun(@isempty, parts))]; %#ok<AGROW>
+            end
+            if ~isempty(names), names = EEGSource.stableUnique(names); end
+            if isempty(info.lines), return; end
+            if here
+                info.where = 'here';
+            elseif isfield(eeg, 'source') && ischar(eeg.source) && ~isempty(eeg.source)
+                info.where = ['in ' eeg.source];
+            else
+                info.where = 'before loading';
+            end
+        end
     end
 
     methods(Static, Hidden)
+
+        %% checkOptions - Settings of checks with every field (rejections: one cell per participant)
+        function d = checkOptions(o, P)
+            d = struct('rejections', {{}}, 'measure', '', 'channels', {{}}, 'erpChannels', {{}});
+            if isstruct(o) && isscalar(o)
+                f = fieldnames(o);
+                for k = 1:numel(f)
+                    switch lower(f{k})
+                        case {'rejections', 'rejection'}, d.rejections = o.(f{k});
+                        case 'measure', d.measure = o.(f{k});
+                        case {'channels', 'measurechannels'}, d.channels = o.(f{k});
+                        case 'erpchannels', d.erpChannels = o.(f{k});
+                    end
+                end
+            end
+            r = d.rejections;
+            if isstruct(r), r = num2cell(r); end
+            if ~iscell(r), r = {}; end
+            r = r(:)';
+            r(end + 1:P) = {[]};
+            d.rejections = r(1:P);
+            m = '';
+            if ischar(d.measure), m = lower(strtrim(d.measure)); end
+            if strncmp(m, 'peak', 4)
+                d.measure = 'peak';
+            elseif strncmp(m, 'mean', 4)
+                d.measure = 'mean';
+            else
+                d.measure = '';
+            end
+            d.channels = EEGAnalysis.nameCells(d.channels);
+            d.erpChannels = EEGAnalysis.nameCells(d.erpChannels);
+        end
+
+        %% nameCells - 'Pz, Cz' or a cell -> {'Pz', 'Cz'} ({} when none)
+        function c = nameCells(x)
+            c = {};
+            if isempty(x), return; end
+            if ischar(x), x = strsplit(x, {',', ';'}); end
+            if ~iscell(x), return; end
+            x = x(cellfun(@ischar, x));
+            c = strtrim(x(:)');
+            c = c(~cellfun(@isempty, c));
+        end
+
+        %% conditionCounts - Conditions with their trials before and after the rejection
+        % From the rejection info when given (known = true), else the trials of eeg.
+        function c = conditionCounts(eeg, info)
+            c = struct('conditions', {{}}, 'before', [], 'after', [], 'known', false);
+            if isstruct(info) && isscalar(info) && all(isfield(info, {'conditions', 'before', 'after'})) ...
+                    && numel(info.conditions) == numel(info.after) && numel(info.before) == numel(info.after)
+                c.conditions = EEGSource.cellRow(info.conditions);
+                c.before = double(info.before(:)');
+                c.after = double(info.after(:)');
+                c.known = true;
+                return;
+            end
+            if ~isfield(eeg, 'trials') || ~isfield(eeg.trials, 'condition'), return; end
+            tc = eeg.trials.condition;
+            conds = {};
+            if isfield(eeg, 'conditions'), conds = EEGSource.cellRow(eeg.conditions); end
+            if isempty(conds), conds = EEGSource.stableUnique(tc); end
+            if isempty(conds), return; end
+            n = cellfun(@(x) sum(strcmp(tc, x)), conds);
+            c.conditions = conds;
+            c.before = n;
+            c.after = n;
+        end
+
+        %% trialsCheck - The fewest trials left in a condition
+        function Q = trialsCheck(Q, C, names)
+            L = EEGAnalysis.CheckLimits;
+            P = numel(C);
+            nMin = inf(1, P);
+            cMin = repmat({''}, 1, P);
+            for p = 1:P
+                if isempty(C{p}.after), continue; end
+                [nMin(p), i] = min(C{p}.after);
+                cMin{p} = C{p}.conditions{i};
+            end
+            if ~any(isfinite(nMin)), return; end
+            topic = 'Trials per condition';
+            rule = sprintf('check below %d, warning below %d', L.trialsCheck, L.trialsWarning);
+            [worst, kw] = min(nMin);
+            if worst >= L.trialsCheck
+                Q = QualityChecks.add(Q, 'ok', topic, sprintf('Fewest trials in a condition: %s; %s.', ...
+                    EEGAnalysis.countText(cMin{kw}, worst, names{kw}, P), rule));
+                return;
+            end
+            low = find(nMin < L.trialsCheck);
+            [~, order] = sort(nMin(low));
+            low = low(order);
+            parts = cell(1, min(3, numel(low)));
+            for j = 1:numel(parts)
+                parts{j} = EEGAnalysis.countText(cMin{low(j)}, nMin(low(j)), names{low(j)}, P);
+            end
+            if worst < L.trialsWarning
+                level = 'warning';
+                thr = L.trialsWarning;
+                why = ['An ERP is the mean of its trials: from fewer than 10 trials it is mostly noise, so its ' ...
+                    'peaks and mean amplitudes change a lot with every trial added or left out.'];
+                action = ['Look at why trials were lost (the channels the rejection names): mark noisy channels ' ...
+                    'bad, correct blinks (ICA in EEGLAB) instead of rejecting the trials, or leave the participant ' ...
+                    'out; record more trials of rare conditions next time.'];
+            else
+                level = 'check';
+                thr = L.trialsCheck;
+                why = ['About 20 trials are enough for a large component such as the P300; smaller ones (N1, P1, ' ...
+                    'N400 differences) need more (30 to 60) to stand out from the noise.'];
+                action = 'Fine for a large component; for a small one, record more trials of that condition.';
+            end
+            found = ['Fewest trials in a condition: ' strjoin(parts, ', ')];
+            if numel(low) > 3, found = [found ', ...']; end
+            if P > 1
+                found = sprintf('%s (below %d in %d of %d participants)', found, thr, sum(nMin < thr), P);
+            end
+            Q = QualityChecks.add(Q, level, topic, [found '.'], why, action);
+        end
+
+        %% rejectionCheck - Share of each condition the rejection left out
+        function Q = rejectionCheck(Q, eegs, C, names)
+            L = EEGAnalysis.CheckLimits;
+            P = numel(C);
+            topic = 'Rejection balance';
+            known = cellfun(@(c) c.known, C);
+            if ~any(known)
+                prior = false(1, P);
+                for p = 1:P
+                    if isfield(eegs{p}, 'history') && iscell(eegs{p}.history)
+                        prior(p) = any(strncmp(eegs{p}.history, 'Rejected', 8));
+                    end
+                end
+                if any(prior)
+                    Q = QualityChecks.add(Q, 'note', topic, sprintf(['Trials were rejected before loading%s (the ' ...
+                        'history says so), not here: how many of each condition were left out is not known.'], ...
+                        EEGAnalysis.whoText(find(prior), names, P)));
+                end
+                return;
+            end
+            d = -inf(1, P);
+            hiS = zeros(1, P); loS = zeros(1, P); hi = ones(1, P); lo = ones(1, P); sev = zeros(1, P);
+            share = cell(1, P);
+            nRej = 0;
+            for p = find(known)
+                b = C{p}.before;
+                a = C{p}.after;
+                use = b > 0;
+                nRej = nRej + sum(b(use) - a(use));
+                if nnz(use) < 2, continue; end
+                s = nan(size(b));
+                s(use) = 100 * (b(use) - a(use)) ./ b(use);
+                share{p} = s;
+                [hiS(p), hi(p)] = max(s);
+                [loS(p), lo(p)] = min(s);
+                d(p) = hiS(p) - loS(p);
+                if b(hi(p)) - a(hi(p)) >= L.rejectionMinTrials
+                    if d(p) > L.rejectionWarning
+                        sev(p) = 2;
+                    elseif d(p) > L.rejectionCheck
+                        sev(p) = 1;
+                    end
+                end
+            end
+            if nRej == 0
+                Q = QualityChecks.add(Q, 'ok', topic, 'The rejection left out no trial.');
+                return;
+            end
+            if ~any(isfinite(d)), return; end
+            if ~any(sev)
+                [dw, kw] = max(d);
+                c = C{kw}.conditions;
+                txt = cell(1, numel(c));
+                for j = 1:numel(c)
+                    txt{j} = sprintf('%s %.0f%%', c{j}, share{kw}(j));
+                end
+                who = '';
+                if P > 1, who = [names{kw} ': ']; end
+                few = '';
+                if dw > L.rejectionCheck
+                    nk = C{kw}.before(hi(kw)) - C{kw}.after(hi(kw));
+                    few = sprintf(', but only %d %s %s', nk, C{kw}.conditions{hi(kw)}, EEGSource.plural(nk, 'trial'));
+                end
+                Q = QualityChecks.add(Q, 'ok', topic, sprintf(['Share of each condition rejected: %s%s (%.0f points ' ...
+                    'apart%s); check above %d points (and %d trials).'], who, EEGSource.listText(txt(isfinite(share{kw}))), ...
+                    dw, few, L.rejectionCheck, L.rejectionMinTrials));
+                return;
+            end
+            flag = find(sev > 0);
+            [~, order] = sortrows([-sev(flag)', -d(flag)']);
+            flag = flag(order);
+            parts = cell(1, min(3, numel(flag)));
+            for j = 1:numel(parts)
+                p = flag(j);
+                parts{j} = sprintf('%.0f%% of %s trials but %.0f%% of %s', hiS(p), C{p}.conditions{hi(p)}, ...
+                    loS(p), C{p}.conditions{lo(p)});
+                if P > 1, parts{j} = sprintf('%s (%s)', parts{j}, names{p}); end
+            end
+            found = ['Rejection removed ' strjoin(parts, '; ')];
+            if numel(flag) > 3, found = [found '; ...']; end
+            level = 'check';
+            if any(sev == 2), level = 'warning'; end
+            Q = QualityChecks.add(Q, level, topic, [found '.'], ['When artefacts come with one condition (e.g. ' ...
+                'blinks after targets), the trials kept differ between the conditions in more than the condition ' ...
+                'itself, so they are no longer comparable.'], ['Look at what was rejected (the channels the ' ...
+                'rejection names); prefer correcting blinks (ICA in EEGLAB) to rejecting the trials; check that the ' ...
+                'effect stays the same with a stricter and a looser threshold.']);
+        end
+
+        %% balanceCheck - Trial counts across conditions against the measure
+        function Q = balanceCheck(Q, C, names, measure)
+            L = EEGAnalysis.CheckLimits;
+            P = numel(C);
+            r = nan(1, P);
+            big = repmat({''}, 1, P); small = big;
+            nBig = zeros(1, P); nSmall = zeros(1, P);
+            for p = 1:P
+                n = C{p}.after;
+                use = n > 0;
+                if nnz(use) < 2, continue; end
+                cs = C{p}.conditions(use);
+                n = n(use);
+                [nBig(p), i] = max(n);
+                [nSmall(p), j] = min(n);
+                big{p} = cs{i};
+                small{p} = cs{j};
+                r(p) = nBig(p) / nSmall(p);
+            end
+            if all(isnan(r)), return; end
+            topic = 'Condition balance';
+            [worst, kw] = max(r);
+            who = '';
+            if P > 1, who = [', ' names{kw}]; end
+            if worst <= L.countRatio
+                if P > 1, who = sprintf(' (%s)', names{kw}); end
+                Q = QualityChecks.add(Q, 'ok', topic, sprintf(['Similar trial counts in every condition: at most ' ...
+                    '%.1f times as many in one as in another%s; check above %g times with the peak amplitude.'], ...
+                    worst, who, L.countRatio));
+                return;
+            end
+            if P > 1
+                who = sprintf('%s; more than %g times in %d of %d participants', who, L.countRatio, ...
+                    sum(r > L.countRatio), P);
+            end
+            ex = sprintf('%s has %.1f times as many trials as %s (%d vs %d%s)', big{kw}, worst, small{kw}, ...
+                nBig(kw), nSmall(kw), who);
+            switch measure
+                case 'peak'
+                    Q = QualityChecks.add(Q, 'check', topic, [ex ', and the peak amplitude is measured.'], ...
+                        ['The average of fewer trials keeps more noise, and the largest value of a noisier wave lies ' ...
+                        'further out: peaks of the conditions with fewer trials come out larger even when the brain ' ...
+                        'response is the same.'], ['Use the mean amplitude, or measure the peaks on the same number ' ...
+                        'of trials in each condition (a random subset of the larger one).']);
+                case 'mean'
+                    Q = QualityChecks.add(Q, 'ok', topic, sprintf(['%s: fine for the mean amplitude, which the ' ...
+                        'number of trials does not bias (rare conditions are part of an oddball design); with the ' ...
+                        'peak amplitude: check above %g times.'], ex, L.countRatio));
+                otherwise
+                    Q = QualityChecks.add(Q, 'note', topic, [ex ': fine for the mean amplitude; peak amplitudes ' ...
+                        'would come out larger in the conditions with fewer trials.']);
+            end
+        end
+
+        %% badChannelsCheck - Channels marked bad, per participant
+        function Q = badChannelsCheck(Q, eegs, names)
+            L = EEGAnalysis.CheckLimits;
+            P = numel(eegs);
+            nb = zeros(1, P); nc = zeros(1, P);
+            lists = cell(1, P);
+            for p = 1:P
+                bad = EEGAnalysis.badChannels(eegs{p});
+                nb(p) = nnz(bad);
+                nc(p) = numel(bad);
+                lists{p} = eegs{p}.labels(bad);
+            end
+            if ~any(nc > 0), return; end
+            topic = 'Bad channels';
+            pct = 100 * nb ./ max(nc, 1);
+            rule = sprintf('check above %d%% of the channels, warning above %d%%', L.badCheck, L.badWarning);
+            [worst, kw] = max(pct);
+            if worst <= L.badCheck
+                if worst == 0
+                    found = sprintf('No channel marked bad (%s).', rule);
+                else
+                    who = '';
+                    if P > 1, who = [', ' names{kw}]; end
+                    found = sprintf('At most %d of %d channels marked bad (%.0f%%%s: %s); %s.', nb(kw), nc(kw), ...
+                        worst, who, EEGAnalysis.shortList(lists{kw}, 8), rule);
+                end
+                Q = QualityChecks.add(Q, 'ok', topic, found);
+                return;
+            end
+            flag = find(pct > L.badCheck);
+            [~, order] = sort(pct(flag), 'descend');
+            flag = flag(order);
+            if P == 1
+                found = sprintf('%d of %d channels marked bad (%.0f%%): %s.', nb, nc, pct, ...
+                    EEGAnalysis.shortList(lists{1}, 8));
+            else
+                parts = cell(1, min(3, numel(flag)));
+                for j = 1:numel(parts)
+                    p = flag(j);
+                    parts{j} = sprintf('%s: %d of %d (%.0f%%: %s)', names{p}, nb(p), nc(p), pct(p), ...
+                        EEGAnalysis.shortList(lists{p}, 4));
+                end
+                found = ['Channels marked bad: ' strjoin(parts, '; ')];
+                if numel(flag) > 3, found = [found '; ...']; end
+                found = [found '.'];
+            end
+            level = 'check';
+            if worst > L.badWarning, level = 'warning'; end
+            Q = QualityChecks.add(Q, level, topic, found, ['Bad channels are left out of the ERPs, the measures and ' ...
+                'the average reference: the reference and the scalp maps rest on fewer channels, and so many bad ' ...
+                'channels often mean a poor recording (cap fit, gel, impedances).'], ['Check the cap, the gel and ' ...
+                'the impedances for the next recordings; interpolate a few channels at most (in EEGLAB or ' ...
+                'FieldTrip), or consider leaving the participant out.']);
+        end
+
+        %% interpolationCheck - Channels interpolated before loading against the measured channels
+        function Q = interpolationCheck(Q, eegs, names, o)
+            P = numel(eegs);
+            if ~all(cellfun(@(e) isstruct(e) && isfield(e, 'labels'), eegs)), return; end
+            interp = cell(1, P);
+            unknown = false(1, P);
+            where = repmat({''}, 1, P);
+            for p = 1:P
+                [interp{p}, info] = EEGAnalysis.interpolatedChannels(eegs{p});
+                unknown(p) = info.unknown;
+                where{p} = info.where;
+            end
+            topic = 'Interpolated channels';
+            has = ~cellfun(@isempty, interp);
+            if ~any(has) && ~any(unknown)
+                Q = QualityChecks.add(Q, 'ok', topic, 'No interpolated channel (none in the history of the data).');
+                return;
+            end
+            measured = o.channels;
+            if isempty(measured), measured = o.erpChannels; end
+            if isempty(measured), mText = 'all channels'; else, mText = EEGSource.listText(measured); end
+            wh = EEGSource.stableUnique(where(has | unknown));
+            whText = 'before loading';
+            if numel(wh) == 1 && ~isempty(wh{1}), whText = wh{1}; end
+            every = false(1, P);
+            some = cell(1, P);
+            for p = find(has)
+                m = measured;
+                if isempty(m), m = eegs{p}.labels(~EEGAnalysis.badChannels(eegs{p})); end
+                hit = ismember(lower(m), lower(interp{p}));
+                some{p} = m(hit);
+                every(p) = ~isempty(m) && all(hit);
+            end
+            hitAny = ~cellfun(@isempty, some);
+            why = ['An interpolated channel is an estimate made from its neighbours, not a recording: its peaks ' ...
+                'are smoothed, and averaged with its neighbours it counts their signals twice.'];
+            if any(every)
+                ch = EEGSource.stableUnique([some{every}]);
+                Q = QualityChecks.add(Q, 'warning', topic, sprintf('%s, the measured %s, %s interpolated (%s)%s.', ...
+                    EEGSource.listText(ch), EEGSource.plural(numel(ch), 'channel'), EEGAnalysis.wasWere(numel(ch)), ...
+                    whText, EEGAnalysis.whoText(find(every), names, P)), why, ['Measure at channels that were ' ...
+                    'recorded (e.g. the neighbours of the interpolated one), or leave out the participants whose ' ...
+                    'measured channels were interpolated.']);
+            elseif any(hitAny) || any(unknown)
+                parts = {};
+                if any(hitAny)
+                    ch = EEGSource.stableUnique([some{hitAny}]);
+                    parts{end + 1} = sprintf('%s, among the measured channels (%s), %s interpolated (%s)%s.', ...
+                        EEGSource.listText(ch), mText, EEGAnalysis.wasWere(numel(ch)), whText, ...
+                        EEGAnalysis.whoText(find(hitAny), names, P));
+                end
+                if any(unknown)
+                    parts{end + 1} = sprintf(['The history says bad channels were interpolated but not which%s: ' ...
+                        'the measured channels (%s) may be estimates.'], EEGAnalysis.whoText(find(unknown), names, P), mText);
+                end
+                Q = QualityChecks.add(Q, 'check', topic, strjoin(parts, ' '), why, ['Check that the result stays ' ...
+                    'the same without the interpolated channels, or measure at recorded channels only.']);
+            else
+                ch = EEGSource.stableUnique([interp{has}]);
+                Q = QualityChecks.add(Q, 'ok', topic, sprintf('%s %s interpolated (%s)%s; not among the measured channels (%s).', ...
+                    EEGSource.listText(ch), EEGAnalysis.wasWere(numel(ch)), whText, ...
+                    EEGAnalysis.whoText(find(has), names, P), mText));
+            end
+        end
+
+        %% countText - 'Target 6' or 'Target 6 (sub-01)' with several participants
+        function s = countText(cond, n, name, P)
+            s = sprintf('%s %d', cond, n);
+            if P > 1, s = sprintf('%s (%s)', s, name); end
+        end
+
+        %% whoText - '' (one participant), ' in sub-01 and sub-02', ' in 8 participants', ' in 5 of 8 participants'
+        function s = whoText(idx, names, P)
+            s = '';
+            if P <= 1 || isempty(idx), return; end
+            if numel(idx) <= 3
+                s = [' in ' EEGSource.listText(names(idx))];
+            elseif numel(idx) == P
+                s = sprintf(' in %d participants', P);
+            else
+                s = sprintf(' in %d of %d participants', numel(idx), P);
+            end
+        end
+
+        %% wasWere - 'was' (one) or 'were'
+        function s = wasWere(n)
+            if n == 1, s = 'was'; else, s = 'were'; end
+        end
+
+        %% shortList - 'A, B and C' with at most n names, then ', ...'
+        function s = shortList(c, n)
+            if numel(c) <= n
+                s = EEGSource.listText(c);
+            else
+                s = [strjoin(c(1:n), ', ') ', ...'];
+            end
+        end
 
         %% firwinDesign - Windowed-sinc FIR from band edges and gains (as MNE-Python _firwin_design)
         % f: band edges in Hz from 0 to fs/2, g: gain 0 or 1 at each edge. Each change of gain adds

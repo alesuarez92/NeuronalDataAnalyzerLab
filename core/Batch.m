@@ -64,12 +64,19 @@
 %               Ephys) -> ERPAnalysis (onsets: threshold on the mean-
 %               subtracted stimulus, minISI; epochs preTime..postTime) and,
 %               with computeCSD and >= 3 channels, ERPAnalysis.csd in the
-%               given channel order (spacingUm). Row per channel: N1 =
+%               given channel order (spacingUm; empty, 0 or NaN = the
+%               file's lfp_spacing_um; neither: no CSD, the ERP rows are
+%               still written). Row per channel: N1 =
 %               minimum of the ERP in n1WindowMs, P2 = maximum in
 %               p2WindowMs (latency in ms, amplitude relative to the
 %               pre-onset mean, times amplitudeScale, unit amplitudeUnit),
-%               CSD minimum in n1WindowMs (AmpUnit / mm^2) and the sink
-%               channel of the file (most negative CSD).
+%               CSD minimum in n1WindowMs (AmpUnit / mm^2), the sink
+%               channel of the file (most negative CSD) and Checks (the
+%               quality checks of LFP Analysis, ERPAnalysis.checks, in one
+%               cell, the same on every row of the file: epochs, stimulus
+%               artefact into the N1 window, electrode spacing, CSD sink at
+%               the edge of the probe; the log line says the same). The
+%               checks do not change the file's Status.
 %   'mua'       MUA .mat (mua_data, mua_fs; t_mua, mua_channels, stim_*
 %               optional, from Extract Ephys) -> MUAPipeline.sort per
 %               channel with the global random stream seeded (rng(seed,
@@ -78,7 +85,12 @@
 %               SNR < 2 or > 2% ISIs < refractory), rates, mean SNR, max
 %               ISI violations and, with a stimulus, the rate in
 %               responseWindowMs vs baselineWindowMs around each onset
-%               (SpikeTrains.stimulusOnsets: stimThreshold, stimMinISI).
+%               (SpikeTrains.stimulusOnsets: stimThreshold, stimMinISI),
+%               Checks (the quality checks of MUA Analysis,
+%               MUAPipeline.checks: refractory period, signal-to-noise,
+%               amplitude drift, in one cell: 'OK', '1 to check: Topic:
+%               ...' or '1 warning: Topic: ...'; the log line gives them
+%               per channel). The checks do not change a row's Status.
 %   'eeg'       one EEG file per participant, raw or cleaned (BrainVision
 %               .vhdr, EDF / BDF, EEGLAB .set, FieldTrip .mat, XDF, read by
 %               EEGSource.open) -> the steps of EEG Analysis in its order:
@@ -91,7 +103,13 @@
 %               at the chosen channels (EEGAnalysis.measure). Row per
 %               condition: trials kept and rejected, value (uV), latency
 %               (ms; peak only), peak on the window edge, the channels used,
-%               bad channels, reference, sampling rate.
+%               bad channels, reference, sampling rate and Checks (the
+%               quality checks of EEG Analysis, EEGAnalysis.checks, in one
+%               cell, the same on every row of the file: trials per
+%               condition, the share of each condition rejected, trial
+%               counts against the measure, bad channels, channels
+%               interpolated before; the log line says the same). The
+%               checks do not change the file's Status.
 %   'roi'       imaging .mat (stack or frames, timeVec or t, roiMask or
 %               roiMasks) or multi-frame TIFF -> grayscale stack (optional
 %               rigid motion correction) -> per ROI: mean brightness
@@ -141,19 +159,19 @@ classdef Batch
                 case 'erp'
                     d = struct('label', 'LFP: ERP (+ CSD) per channel', ...
                         'input', 'LFP .mat files (lfp_data, stim_data, lfp_fs, stim_fs) from Extract Ephys', ...
-                        'output', 'One row per channel: N1 / P2 latency and amplitude, CSD minimum, sink channel', ...
+                        'output', 'One row per channel: N1 / P2 latency and amplitude, CSD minimum, sink channel, the quality checks', ...
                         'extensions', {{'.mat'}});
                 case 'mua'
                     d = struct('label', 'MUA: spike sorting per channel', ...
                         'input', 'MUA .mat files (mua_data, mua_fs; stim_data optional) from Extract Ephys', ...
-                        'output', 'One row per channel: spikes, units, rates, SNR, ISI violations, evoked vs baseline rate', ...
+                        'output', 'One row per channel: spikes, units, rates, SNR, ISI violations, evoked vs baseline rate, the quality checks', ...
                         'extensions', {{'.mat'}});
                 case 'eeg'
                     d = struct('label', 'EEG: ERPs and a measure per condition', ...
                         'input', ['One EEG file per participant, raw or cleaned: BrainVision .vhdr, EDF / BDF, ' ...
                         'EEGLAB .set, FieldTrip .mat, XDF (as EEG Analysis)'], ...
                         'output', ['One row per file and condition: trials kept and rejected, mean or peak ' ...
-                        'amplitude (and latency) at the chosen channels'], ...
+                        'amplitude (and latency) at the chosen channels, the quality checks'], ...
                         'extensions', {{'.vhdr', '.edf', '.bdf', '.set', '.mat', '.xdf'}});
                 case 'roi'
                     d = struct('label', 'Imaging: ROI dF/F and vessel diameter', ...
@@ -233,7 +251,7 @@ classdef Batch
                         'n1WindowMs', 'N1 window (ms)', 'vector', {}, [], 'Search window for the N1 trough and the CSD sink, ms after onset, e.g. 5 50'
                         'p2WindowMs', 'P2 window (ms)', 'vector', {}, [], 'Search window for the P2 peak, ms after onset, e.g. 20 150'
                         'computeCSD', 'Compute CSD', 'checkbox', {}, [], 'Current source density across the channels (needs >= 3 channels)'
-                        'spacingUm', 'Spacing (µm)', 'numeric', {}, [0 Inf], 'Distance between neighbouring electrodes in micrometres'
+                        'spacingUm', 'Spacing (µm)', 'numeric', {}, [0 Inf], 'Distance between neighbouring electrodes in micrometres; 0 = the spacing saved in each file (lfp_spacing_um)'
                         'amplitudeScale', 'Amplitude scale', 'numeric', {}, [0 Inf], 'Amplitudes are multiplied by this (1e6: volts to microvolts)'
                         'amplitudeUnit', 'Amplitude unit', 'text', {}, [], 'Unit label written to the AmpUnit column (after scaling)'};
                 case 'mua'
@@ -508,17 +526,18 @@ classdef Batch
                     cols = {'Channel', 'double'; 'nOnsets', 'double'; 'nEpochs', 'double'; ...
                         'N1Latency_ms', 'double'; 'N1Amp', 'double'; 'P2Latency_ms', 'double'; ...
                         'P2Amp', 'double'; 'PeakToPeak', 'double'; 'AmpUnit', 'char'; ...
-                        'CSDMin', 'double'; 'CSDMinLatency_ms', 'double'; 'SinkChannel', 'double'};
+                        'CSDMin', 'double'; 'CSDMinLatency_ms', 'double'; 'SinkChannel', 'double'; ...
+                        'Checks', 'char'};
                 case 'mua'
                     cols = {'Channel', 'double'; 'Duration_s', 'double'; 'nDetected', 'double'; ...
                         'nSpikes', 'double'; 'nUnits', 'double'; 'nGoodUnits', 'double'; ...
                         'nRejected', 'double'; 'MeanRate_Hz', 'double'; 'UnitRates_Hz', 'char'; ...
                         'MeanSNR', 'double'; 'MaxISIViol_pct', 'double'; 'nOnsets', 'double'; ...
-                        'BaselineRate_Hz', 'double'; 'EvokedRate_Hz', 'double'};
+                        'BaselineRate_Hz', 'double'; 'EvokedRate_Hz', 'double'; 'Checks', 'char'};
                 case 'eeg'
                     cols = {'Condition', 'char'; 'Trials', 'double'; 'Rejected', 'double'; 'Value_uV', 'double'; ...
                         'Latency_ms', 'double'; 'PeakAtEdge', 'double'; 'Channels', 'char'; ...
-                        'BadChannels', 'char'; 'Reference', 'char'; 'Fs_Hz', 'double'};
+                        'BadChannels', 'char'; 'Reference', 'char'; 'Fs_Hz', 'double'; 'Checks', 'char'};
                 case 'roi'
                     cols = {'ROI', 'char'; 'nFrames', 'double'; 'FrameRate_Hz', 'double'; ...
                         'MeanBrightness', 'double'; 'PeakDFF', 'double'; 'PeakDFFTime_s', 'double'; ...
@@ -623,10 +642,30 @@ classdef Batch
             end
             n1w = Batch.window2(p.n1WindowMs, 'N1 window') / 1000;
             p2w = Batch.window2(p.p2WindowMs, 'P2 window') / 1000;
-            csd = [];
-            if p.computeCSD && numel(idx) >= 3
-                csd = ERPAnalysis.csd(erpAvg, p.spacingUm);
+            % Electrode spacing: the setting, else the file's lfp_spacing_um;
+            % neither: no CSD (the checks say so), the ERP rows are kept
+            isPos = @(v) (isnumeric(v) || islogical(v)) && isscalar(v) && isfinite(v) && v > 0;
+            fileSpacing = Batch.fieldOr(s, 'lfp_spacing_um', NaN);
+            if isPos(fileSpacing), fileSpacing = double(fileSpacing); else, fileSpacing = NaN; end
+            spacing = p.spacingUm; source = 'setting';
+            if isPos(spacing)
+                spacing = double(spacing);
+            else
+                spacing = fileSpacing; source = 'file';
             end
+            wantCSD = p.computeCSD && numel(idx) >= 3;
+            csd = [];
+            if wantCSD && isfinite(spacing)
+                csd = ERPAnalysis.csd(erpAvg, spacing);
+            end
+            % Quality checks of LFP Analysis (the same text on every row of the file)
+            o = ERPAnalysis.checkOptions();
+            o.channels = ids; o.nOnsets = numel(onsetTimes); o.nEpochs = nValid;
+            o.preSec = p.preTime; o.postSec = p.postTime; o.n1WindowMs = 1000 * n1w;
+            o.computeCSD = wantCSD; o.csd = csd; o.csdOrder = ids; o.csdMethod = 'standard';
+            o.spacingUm = spacing; o.spacingFile = fileSpacing; o.spacingSource = source;
+            o.amplitudeScale = p.amplitudeScale; o.amplitudeUnit = p.amplitudeUnit;
+            checks = QualityChecks.brief(ERPAnalysis.checks(erpAvg, t, o));
             scale = p.amplitudeScale;
             inN1 = t >= n1w(1) & t <= n1w(2);
             inP2 = t >= p2w(1) & t <= p2w(2);
@@ -647,7 +686,7 @@ classdef Batch
                     'N1Latency_ms', 1000 * tN1(i1), 'N1Amp', scale * (v1 - base), ...
                     'P2Latency_ms', 1000 * tP2(i2), 'P2Amp', scale * (v2 - base), ...
                     'PeakToPeak', scale * (v2 - v1), 'AmpUnit', p.amplitudeUnit, ...
-                    'CSDMin', NaN, 'CSDMinLatency_ms', NaN, 'SinkChannel', NaN);
+                    'CSDMin', NaN, 'CSDMinLatency_ms', NaN, 'SinkChannel', NaN, 'Checks', checks);
                 if ~isempty(csd)
                     [cm, ic] = min(csd(c, inN1));
                     csdMin(c) = cm;
@@ -667,6 +706,7 @@ classdef Batch
             info = sprintf('%d channels, %d epochs, largest N1 on ch %g at %.1f ms', numel(idx), nValid, ...
                 rows(iBig).Channel, rows(iBig).N1Latency_ms);
             if isfinite(sink), info = sprintf('%s, CSD sink ch %g', info, sink); end
+            info = sprintf('%s; checks: %s', info, checks);
         end
 
         %% fileMUA - MUA -> spike sorting per channel (seeded) -> units, rates, QC
@@ -696,7 +736,7 @@ classdef Batch
                 row = struct('Status', 'ok', 'Message', '', 'Channel', ids(c), 'Duration_s', dur, ...
                     'nDetected', NaN, 'nSpikes', NaN, 'nUnits', NaN, 'nRejected', NaN, 'nGoodUnits', NaN, ...
                     'MeanRate_Hz', NaN, 'UnitRates_Hz', '', 'MeanSNR', NaN, 'MaxISIViol_pct', NaN, ...
-                    'nOnsets', numel(onsets), 'BaselineRate_Hz', NaN, 'EvokedRate_Hz', NaN);
+                    'nOnsets', numel(onsets), 'BaselineRate_Hz', NaN, 'EvokedRate_Hz', NaN, 'Checks', '');
                 try
                     x = double(s.mua_data(idx(c), :));
                     [res, qcInfo] = Batch.seededSort(x, tm, fs, sp, p.seed);
@@ -721,6 +761,7 @@ classdef Batch
                     row.nOnsets = numel(onsets);
                     [row.BaselineRate_Hz, row.EvokedRate_Hz] = Batch.windowRates(unitSpikes, onsets, ...
                         bw, rw, tm([1 end]));
+                    row.Checks = QualityChecks.brief(MUAPipeline.checks(res, qcInfo, sp));
                     nUnitsAll = nUnitsAll + row.nUnits;
                 catch ME
                     row.Status = 'error';
@@ -732,6 +773,22 @@ classdef Batch
             nFail = sum(strcmp({rows.Status}, 'error'));
             info = sprintf('%d channel(s) sorted, %d unit(s) in total', numel(idx) - nFail, nUnitsAll);
             if nFail > 0, info = sprintf('%s, %d channel(s) failed', info, nFail); end
+            info = sprintf('%s; checks: %s', info, Batch.channelChecks(rows));
+        end
+
+        %% channelChecks - The Checks of each channel for the log: 'OK' or 'ch 3: 1 warning: ...; ch 4: OK'
+        function s = channelChecks(rows)
+            ok = ~cellfun(@isempty, {rows.Checks});
+            if ~any(ok)
+                s = 'none';
+            elseif all(strcmp({rows(ok).Checks}, 'OK'))
+                s = 'OK';
+            elseif nnz(ok) == 1
+                s = rows(ok).Checks;
+            else
+                s = strjoin(arrayfun(@(r) sprintf('ch %g: %s', r.Channel, regexprep(r.Checks, '\.$', '')), rows(ok), ...
+                    'UniformOutput', false), '; ');
+            end
         end
 
         %% seededSort - MUAPipeline.sort with rng(seed) set and restored, console quiet
@@ -809,8 +866,9 @@ classdef Batch
             end
             conds = eeg.conditions;
             before = cellfun(@(c) sum(strcmp(eeg.trials.condition, c)), conds);
+            rejection = [];                                  % kept for the checks (share of each condition)
             if p.peakToPeak > 0 || p.absolute > 0
-                eeg = EEGAnalysis.rejectTrials(eeg, 'PeakToPeak', Batch.positiveOrEmpty(p.peakToPeak), ...
+                [eeg, rejection] = EEGAnalysis.rejectTrials(eeg, 'PeakToPeak', Batch.positiveOrEmpty(p.peakToPeak), ...
                     'Absolute', Batch.positiveOrEmpty(p.absolute));
             end
             % ERPs and the measure
@@ -829,9 +887,13 @@ classdef Batch
                 used = strjoin(eeg.labels(idx(~isBad(idx))), ', ');
             end
             badText = strjoin(eeg.labels(isBad), ', ');
+            % Quality checks of EEG Analysis (the same text on every row of the file)
+            [~, name] = fileparts(file);
+            checks = QualityChecks.brief(EEGAnalysis.checks({eeg}, {name}, struct('rejections', {{rejection}}, ...
+                'measure', kind, 'channels', {chans})));
             rows = struct('Status', 'ok', 'Message', '', 'Condition', {r.condition}, 'Trials', {r.n}, ...
                 'Rejected', NaN, 'Value_uV', {r.value}, 'Latency_ms', NaN, 'PeakAtEdge', NaN, 'Channels', used, ...
-                'BadChannels', badText, 'Reference', eeg.reference, 'Fs_Hz', eeg.fs);
+                'BadChannels', badText, 'Reference', eeg.reference, 'Fs_Hz', eeg.fs, 'Checks', checks);
             % Rows in the order of the conditions typed in Events and names (others after)
             [~, ren] = EEGAnalysis.parseEvents(p.events);
             [~, pos] = ismember({rows.Condition}, ren(:, 2)');
@@ -851,8 +913,8 @@ classdef Batch
             vals = strjoin(arrayfun(@(x) sprintf('%s %.3g', x.Condition, x.Value_uV), rows, 'UniformOutput', false), ', ');
             desc = EEGAnalysis.describeMeasure(struct('Measure', kind, 'Polarity', char(p.polarity), ...
                 'Window', Batch.window2(p.windowMs, 'Window') / 1000, 'Channels', {chans}));
-            info = sprintf('%d trials (%d rejected); %s: %s %sV', sum([rows.Trials]), sum([rows.Rejected]), ...
-                regexprep(desc, '\.$', ''), vals, char(181));
+            info = sprintf('%d trials (%d rejected); %s: %s %sV; checks: %s', sum([rows.Trials]), sum([rows.Rejected]), ...
+                regexprep(desc, '\.$', ''), vals, char(181), checks);
         end
 
         %% fileROI - Stack -> per-ROI brightness / dF/F, vessel diameter on a line
