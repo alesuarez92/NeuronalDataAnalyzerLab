@@ -22,7 +22,7 @@ all of these hold:
 | ✅ | Every window has its checks | A Checks tab in every analysis window and a Checks column in Batch (quality checks steps 1–4, released in 0.10.0). |
 | ✅ | Formats and script functions frozen | The session file, the .csv / .mat exports and the main script functions (`GroupStats`, `EEGAnalysis`, `Batch`, the readers) keep their names and fields: listed in [docs/FORMATS.md](docs/FORMATS.md), made consistent across windows and locked by tests (in Unreleased). |
 | 📅 | Used on the lab's real recordings | Every window run on real data from the lab, not only the demo data; the readers for other imagers only from real sample files. |
-| 📅 | Help and website checked | One full pass over the Help and the website against fresh frames of every window. |
+| ✅ | Help and website checked | One full pass over the Help and the website against fresh frames of every window (after 0.10.0), and frames that show each window's session buttons. |
 
 Live parameter previews, Import and compare and the other planned items
 below can come after 1.0.
