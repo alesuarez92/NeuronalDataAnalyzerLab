@@ -1324,7 +1324,7 @@ classdef HelpApp < handle
                 '"The paired design needs the same number of subjects in both groups"', 'Every animal needs one file in each group. Add the missing file or remove the extra one; the **#** column shows the pairing.'
                 'Wrong animals paired', 'The Results report lists every pair (`1: fileA ↔ fileB`). Files are added in alphabetical order; fix the order with **▲ Move up** / **▼ Move down**.'
                 '**Run test** is disabled', 'Add files to at least two groups. For a two-group design, choose two different groups in **Compare**.'
-                '"… left out: the feature could not be computed"', 'The feature was NaN for those files (peak not found or never crossing 50%). Check **Onset t0**, **Baseline** and **Direction**, or choose another feature.'
+                '"… excluded because the feature could not be computed" / "… left out: the feature could not be computed"', 'The feature was NaN for those files (peak not found or never crossing 50%). Check **Onset t0**, **Baseline** and **Direction**, or choose another feature.'
                 'Checks: every series counted as a subject', 'Set **Value per** to **File (mean trace)**: one value per animal. Trials of one animal are not independent, so counting them as subjects makes p far too small.'
                 'Checks: not normal', 'Look at the Plot tab for the animal named in the row. Report the rank-based result (Method: Nonparametric) or both; do not remove an animal only because it is extreme.'
                 'Checks: the rank-based test cannot reach p < 0.05', 'With 5 pairs or fewer (3 vs 3 unpaired) the exact rank test cannot be significant whatever the data. Add animals, or report the parametric result with its normality check.'
