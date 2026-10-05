@@ -19,6 +19,11 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   status bar says when the website was opened; if no browser can be opened,
   the address is shown so you can copy it. The Help (Welcome topic) says
   where the Course is. The **Virtual lab** is still *Coming soon*.
+- **Statistics tests use the project's own numbers.** The checks of the
+  t-tests, rank tests, ANOVA, Tukey HSD and Kruskal-Wallis no longer use
+  published data sets; they use made-up numbers whose expected results
+  were computed independently with SciPy (`tests/StatsFeaturesTest.m`).
+  The statistics themselves are unchanged.
 
 ### Removed
 
