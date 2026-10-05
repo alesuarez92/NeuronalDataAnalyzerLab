@@ -1,6 +1,6 @@
 # Neuronal Data Analyzer Lab
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](CHANGELOG.md)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE.txt)
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2021a+-orange.svg)](https://www.mathworks.com/products/matlab.html)
 
@@ -8,7 +8,7 @@
 > not the green *Code → Download ZIP* button at the top of this page.
 > The green button gives you the `main` branch without a version tag; the
 > Releases page gives you a tagged, tested version (currently
-> [v1.0.0](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.0)).
+> [v1.0.1](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.1)).
 > Full walk-through below in [Install](#install).
 
 ![The launcher: Learn (Course and Virtual lab, coming soon) and one tile per analysis, grouped as blood flow, electrophysiology, EEG, imaging and across techniques](docs/main-launcher.png)
@@ -19,7 +19,7 @@ speckle flowmetry** (blood-flow maps, flow per ROI over time, responses),
 sorting with cluster merge/split, raster/PSTH, correlograms; TDT, Intan,
 Open Ephys, NWB, SpikeGLX, Blackrock, Neuralynx and Multi Channel
 Systems recordings), **EEG** (raw or cleaned scalp and
-rodent EEG from BrainVision, EDF / BDF, EGI .mff, XDF, EEG-BIDS, EEGLAB and
+rodent EEG from BrainVision, EDF / BDF, XDF, EEG-BIDS, EEGLAB and
 FieldTrip: electrode layouts, bad channels, filters, re-reference, trials
 and rejection, ERPs, measures and statistics, scalp maps, time–frequency
 per condition), **ROI / coregistered image analysis**
@@ -42,7 +42,7 @@ any window with synthetic data whose answers are known; the
 (plan, record and analyse a simulated experiment) are coming soon, also free; in the
 launcher their tiles show a greyed-out *Coming soon* button.
 
-> **Status: 1.0 (v1.0.0).** Every window works end-to-end and has its
+> **Status: 1.0 (v1.0.1).** Every window works end-to-end and has its
 > quality checks. The session files, exported files and script functions
 > listed in [docs/FORMATS.md](docs/FORMATS.md) keep their names until 2.0;
 > see [CHANGELOG.md](CHANGELOG.md) for what's in this release and
@@ -51,8 +51,7 @@ launcher their tiles show a greyed-out *Coming soon* button.
 ## Licence and use
 
 Neuronal Data Analyzer Lab is free for **noncommercial use** under the
-**PolyForm Noncommercial License 1.0.0** with a **citation condition**
-([LICENSE.txt](LICENSE.txt)). In plain words:
+**PolyForm Noncommercial License 1.0.0** ([LICENSE.txt](LICENSE.txt)). In plain words:
 
 - **Free** for research and teaching at universities, public research
   institutes, hospitals, charities and government bodies, and for personal
@@ -61,8 +60,10 @@ Neuronal Data Analyzer Lab is free for **noncommercial use** under the
 - **Not for commercial use** (selling it, building it into a product,
   offering it as a paid service) without a separate licence from the
   author: open an issue to ask.
-- **Cite it** when you publish or present work that used it: see
-  [How to cite](#how-to-cite) and [CITATION.cff](CITATION.cff).
+- **Please cite it** when you publish or present work that used it (a
+  request, not a licence condition): see [How to cite](#how-to-cite) and
+  [CITATION.cff](CITATION.cff).
+- Third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 It is research software, not a medical device, and comes with no warranty:
 check your results with the demo data first.
@@ -114,7 +115,7 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | `core/` | `Main.m` launcher (tiles from `Techniques.m`, the table of every analysis and learning window), `UITheme`, project-path manager, data loader, validation, processing, signal-feature library. |
 | `core/imaging/` | ROI / line-based image analysis: ΔF/F, kymograph, vessel diameter, intensity, movement, motion correction, cell detection. |
 | `core/Histology.m` | Still images of sections and cultures: loading with pixel size, channel and image alignment, cell counting, marker co-localisation, counts per region. |
-| `core/io/` | Readers and writers for electrophysiology (Intan RHD / RHS, Open Ephys binary and legacy, NWB, SpikeGLX, Blackrock, Neuralynx, Multi Channel Systems HDF5), blood-flow recordings (LabChart, AcqKnowledge, Spike2 exports, EDF / BDF, tables), imaging files (TIFF metadata, Inscopix, ThorImage, Prairie View, Miniscope, ImageJ / QuPath regions), NumPy .npy, EEG files (BrainVision, EEGLAB, FieldTrip, EDF / BDF, EGI .mff, XDF, EEG-BIDS, plain matrices) and electrode position files (EEGLAB, BESA, ASA / FieldTrip / MNE .elc, EGI .sfp, BrainVision .bvef, EasyCap / BioSemi lists, tables, BIDS electrodes.tsv). |
+| `core/io/` | Readers and writers for electrophysiology (Intan RHD / RHS, Open Ephys binary and legacy, NWB, SpikeGLX, Blackrock, Neuralynx, Multi Channel Systems HDF5), blood-flow recordings (LabChart, AcqKnowledge and Spike2 exports, EDF / BDF, tables), imaging files (TIFF metadata, Inscopix, ThorImage, Prairie View, Miniscope, ImageJ / QuPath regions), NumPy .npy, EEG files (BrainVision, EEGLAB, FieldTrip, EDF / BDF, XDF, EEG-BIDS, plain matrices) and electrode position files (EEGLAB, BESA, ASA / FieldTrip / MNE .elc, EGI .sfp, BrainVision .bvef, EasyCap / BioSemi lists, tables, BIDS electrodes.tsv). |
 | `core/demo/`, `core/DemoData.m` | Synthetic demo recordings with ground truth. |
 | `core/Batch.m`, `core/Session.m`, `core/Report.m`, `core/MethodsWriter.m` | Batch processing, session files, PDF reports, methods text. |
 | `apps/` | Sub-app windows: Extract / Process / Average LDF, Laser Speckle Flowmetry, Extract Ephys, LFP & MUA processing and analysis, EEG Analysis, ROI Analysis, Histology / culture, Signal Characterization, Batch Processing, Help. |
@@ -197,7 +198,7 @@ The website has the same on its Community page (About → Community).
 If you use Neuronal Data Analyzer Lab, or results produced with it, in work
 that you publish or present, cite it (this is a condition of the licence):
 
-> Suarez, A. (2026). *Neuronal Data Analyzer Lab* (version 1.0.0) [Computer
+> Suarez, A. (2026). *Neuronal Data Analyzer Lab* (version 1.0.1) [Computer
 > software]. https://github.com/alesuarez92/NeuronalDataAnalyzerLab
 
 GitHub's **Cite this repository** button (right-hand column) gives the same
@@ -206,7 +207,7 @@ section, also name the version you used and the settings you chose.
 
 ## Author
 
-© 2026 Alejandro Suarez, Ph.D. · [ORCID](https://orcid.org/0000-0002-0931-8512) · [GitHub](https://github.com/alesuarez92) · licensed under the [PolyForm Noncommercial License 1.0.0 with a citation condition](LICENSE.txt)
+© 2026 Alejandro Suarez, Ph.D. · [ORCID](https://orcid.org/0000-0002-0931-8512) · [GitHub](https://github.com/alesuarez92) · licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.txt)
 
 Neuronal Data Analyzer Lab was developed with the assistance of **Claude** (Anthropic),
 an AI model, used through Claude Code. The author designs and directs the

@@ -10,6 +10,50 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-05
+
+**A legal-compliance release.** It removes file readers whose layouts did
+not come from a specification the vendor publishes, rewrites code that
+followed another package, replaces AI-made figures and simplifies the
+licence. *If you used one of the removed formats, export the recording
+from the vendor's software to a format that is read (for example NWB,
+EDF, a MATLAB file or a text table), or keep using 1.0.0 for it.*
+
+### Removed
+
+- **Perimed PeriCam PSI `.dat`** (Laser speckle): `readPerimedDat`,
+  `writePerimedDat`, `perimedPerfusion`. Export perfusion images as TIFF,
+  video or MATLAB instead; they open as before.
+- **Plexon `.plx`** and **Axon ABF 2 `.abf`** (Extract Ephys):
+  `readPlexon`, `writePlexon`, `readABF`, `writeABF`, and their demo files.
+- **BIOPAC AcqKnowledge `.acq`** (Extract LDF) and **EGI `.mff`** (EEG):
+  `readBiopacACQ`, `writeBiopacACQ`, `readMFF`, `writeMFF`, and their demo
+  files.
+- These removals break the promise in `docs/FORMATS.md` that the `read*`
+  functions keep their names until 2.0. They are made for legal reasons
+  and only the readers named here are affected.
+
+### Changed
+
+- **EEG filters and scalp maps rewritten from the papers.** The FIR
+  filters (Hamming-windowed sinc, zero phase, edges padded with an odd
+  mirror image) follow Widmann, Schröger & Maess (2015); the spherical
+  splines follow Perrin et al. (1989, 1990). Results agree with 1.0.0 to
+  within a fraction of a microvolt; the 50 Hz notch is now narrower
+  (stop band 49.5-50.5 Hz) and its filter shorter. The Methods text cites
+  the papers.
+- **Figures in the Help**: every explanatory figure is now drawn by a
+  script (`docs/art/make_figures.py`) from synthetic signals; the
+  AI-made images are gone.
+- **Licence**: the unmodified PolyForm Noncommercial License 1.0.0. Citing
+  the toolbox is now a request, not a licence condition (`LICENSE.txt`,
+  README, `CITATION.cff`, the window footers).
+
+### Added
+
+- `THIRD_PARTY_NOTICES.md`: the open-source projects whose published
+  descriptions were followed or used for checks, with their licences.
+
 ## [1.0.0] - 2026-10-05
 
 **1.0: a stable release.** From 1.0 on, the session files, exported
@@ -572,7 +616,7 @@ against every window.
   opens it is now `NeuroAnalyzerLab` (was `NeuroAnalyzer`); sessions saved
   before open as before.
 - **Licence: PolyForm Noncommercial 1.0.0 with a citation condition** (was
-  "All rights reserved"). Free for noncommercial use (universities, public
+  GPL-3.0; copies published under it keep those terms). Free for noncommercial use (universities, public
   research, hospitals, charities, personal study): use it, change it and
   share it for these purposes. Commercial use needs a separate licence from
   the author. If you publish or present work that used it, cite it
