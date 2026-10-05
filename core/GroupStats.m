@@ -125,6 +125,10 @@
 % =========================================================================
 
 classdef GroupStats
+    properties(Constant)
+        SmallN = 8          % checks: fewer subjects per group than this is a Check
+    end
+
     methods(Static)
 
         %% describe - Descriptive statistics of one sample (non-finite values ignored)
@@ -613,6 +617,60 @@ classdef GroupStats
             end
         end
 
+        %% shapiroWilk - Shapiro-Wilk test of normality (Royston 1992/1995, AS R94)
+        % x: values (non-finite ignored), 3 to 5000 of them. Coefficients
+        % from Royston's approximation of the expected normal order
+        % statistics; p from his normalising transformations (exact for
+        % n = 3). r: W, p, n (p NaN and W NaN when n < 3 or all values are
+        % equal).
+        function r = shapiroWilk(x)
+            x = double(x(:));
+            x = sort(x(isfinite(x)));
+            n = numel(x);
+            r = struct('W', NaN, 'p', NaN, 'n', n);
+            if n < 3 || n > 5000 || x(end) - x(1) <= 1e-12 * max(1, abs(x(end))), return; end
+            if n == 3
+                a = [-sqrt(0.5); 0; sqrt(0.5)];
+            else
+                m = GroupStats.norminv(((1:n)' - 0.375) / (n + 0.25));
+                mm = sum(m.^2);
+                u = 1 / sqrt(n);
+                c = m / sqrt(mm);
+                an = c(n) + polyval([-2.706056 4.434685 -2.071190 -0.147981 0.221157 0], u);
+                a = zeros(n, 1);
+                if n > 5
+                    an1 = c(n - 1) + polyval([-3.582633 5.682633 -1.752461 -0.293762 0.042981 0], u);
+                    phi = (mm - 2 * m(n)^2 - 2 * m(n - 1)^2) / (1 - 2 * an^2 - 2 * an1^2);
+                    a(3:n - 2) = m(3:n - 2) / sqrt(phi);
+                    a([1 2 n - 1 n]) = [-an; -an1; an1; an];
+                else
+                    phi = (mm - 2 * m(n)^2) / (1 - 2 * an^2);
+                    a(2:n - 1) = m(2:n - 1) / sqrt(phi);
+                    a([1 n]) = [-an; an];
+                end
+            end
+            ss = sum((x - mean(x)).^2);
+            W = min(1, (a' * x)^2 / ss);
+            r.W = W;
+            if n == 3
+                p = 6 / pi * (asin(sqrt(W)) - asin(sqrt(0.75)));
+            elseif n <= 11
+                g = -2.273 + 0.459 * n;
+                mu = 0.5440 - 0.39978 * n + 0.025054 * n^2 - 0.0006714 * n^3;
+                sg = exp(1.3822 - 0.77857 * n + 0.062767 * n^2 - 0.0020322 * n^3);
+                z = (-log(g - log(1 - W)) - mu) / sg;
+                p = 1 - GroupStats.normcdf(z);
+            else
+                L = log(n);
+                mu = -1.5861 - 0.31082 * L - 0.083751 * L^2 + 0.0038915 * L^3;
+                sg = exp(-0.4803 - 0.082676 * L + 0.0030302 * L^2);
+                z = (log(1 - W) - mu) / sg;
+                p = 1 - GroupStats.normcdf(z);
+            end
+            if W >= 1, p = 1; end
+            r.p = min(1, max(0, p));
+        end
+
         %% cohensD - Standardized mean difference with the pooled SD
         function d = cohensD(a, b)
             a = double(a(isfinite(a(:)))); b = double(b(isfinite(b(:))));
@@ -773,6 +831,84 @@ classdef GroupStats
             end
             res.assumptions = GroupStats.assumptionNote(design, isNonPar, res);
             res.summary = GroupStats.summaryLine(res);
+        end
+
+        %% checkOptions - Settings of GroupStats.checks
+        % subjectMode  'meantrace' | 'meanvalues' (one value per file) |
+        %              'series' (every series counted as a subject)
+        % nFiles       files behind each group (1 x k; [] = not known)
+        % labels       {} | one cellstr of subject names per group (as in
+        %              res.labels: the subjects analysed)
+        function o = checkOptions()
+            o = struct('subjectMode', 'meantrace', 'nFiles', [], 'labels', {{}});
+        end
+
+        %% checks - Quality checks of a comparison (QualityChecks rows)
+        % res: GroupStats.compare output. Rows:
+        %   Sample size   Warning: every series counted as a subject
+        %                 (series of one animal are not independent), fewer
+        %                 than 3 subjects in a group, or a rank-based test
+        %                 that cannot reach p < 0.05 with these n (exact
+        %                 Wilcoxon: 2 / 2^n; Mann-Whitney: 2 / C(m+n, m));
+        %                 Check: fewer than SmallN (8) in a group.
+        %   Normality     Shapiro-Wilk on what the parametric test assumes
+        %                 normal: the paired differences, each group, or the
+        %                 residuals of subjects x conditions (repeated
+        %                 measures). Check at p < 0.05 with a parametric
+        %                 result, Warning when the rank-based test also
+        %                 disagrees; OK for a rank-based result. Names the
+        %                 most extreme subject (> 3.5 robust SDs).
+        %   Sphericity    repeated measures, parametric, 3+ conditions:
+        %                 Check when Mauchly's test rejects it (the
+        %                 Greenhouse-Geisser p is reported) or cannot be
+        %                 computed; Warning when the uncorrected p is reported but the
+        %                 corrected one changes the verdict at 5%.
+        %   Equal spread  ANOVA, parametric: Check when the largest SD is
+        %                 more than twice the smallest, Warning when the
+        %                 group sizes also differ by more than 1.5 times.
+        %   Robustness check  Check when the parametric and the rank-based
+        %                 tests disagree at 5%.
+        %   Missing values    Check when subjects were left out (NaN).
+        function Q = checks(res, o)
+            if nargin < 2 || isempty(o), o = GroupStats.checkOptions(); end
+            d = GroupStats.checkOptions();
+            f = fieldnames(d);
+            for i = 1:numel(f)
+                if ~isfield(o, f{i}), o.(f{i}) = d.(f{i}); end
+            end
+            if isempty(o.labels) && isfield(res, 'labels'), o.labels = res.labels; end
+            Q = QualityChecks.none();
+            if ~isstruct(res) || ~isfield(res, 'main') || isempty(res.main), return; end
+            Q = GroupStats.checkN(Q, res, o);
+            Q = GroupStats.checkNormality(Q, res, o);
+            Q = GroupStats.checkSphericity(Q, res);
+            Q = GroupStats.checkSpread(Q, res);
+            isNonPar = strncmp(res.method, 'non', 3);
+            if res.checkAgrees
+                Q = QualityChecks.add(Q, 'ok', 'Robustness check', sprintf(['The %s and the %s agree ' ...
+                    '(%s and %s).'], GroupStats.familyName(~isNonPar), GroupStats.familyName(isNonPar), ...
+                    GroupStats.formatP(res.main.p), GroupStats.formatP(res.check.p)));
+            else
+                Q = QualityChecks.add(Q, 'check', 'Robustness check', sprintf(['%s gives %s but %s gives ' ...
+                    '%s: the verdict depends on the test.'], res.main.test, GroupStats.formatP(res.main.p), ...
+                    res.check.test, GroupStats.formatP(res.check.p)), ...
+                    ['A result that only one family of tests supports usually rests on one or two ' ...
+                    'subjects or on the shape of the values.'], ...
+                    'Look at the Plot tab for an outlying animal; report both tests, or the rank-based one.');
+            end
+            nExc = max(res.nExcluded);
+            if any(res.nExcluded > 0)
+                if any(strcmp(res.design, {'paired', 'rm'}))
+                    txt = sprintf('%s left out: the feature could not be computed in at least one condition.', ...
+                        GroupStats.plural(nExc, 'subject'));
+                else
+                    txt = sprintf('%s left out: the feature could not be computed (NaN).', ...
+                        GroupStats.plural(sum(res.nExcluded), 'value'));
+                end
+                Q = QualityChecks.add(Q, 'check', 'Missing values', txt, ...
+                    'Subjects left out lower n; when the feature fails for a reason (no response), leaving them out biases the result.', ...
+                    'Open those files in the Single file tab and look at why the feature is missing.');
+            end
         end
 
         %% ----- Distributions ---------------------------------------------
@@ -1375,6 +1511,257 @@ classdef GroupStats
                 s = sprintf('%s; n = %d subjects x %d conditions.', s, res.desc(1).n, numel(res.desc));
             else
                 s = sprintf('%s; n = %s.', s, nTxt);
+            end
+        end
+
+        %% checkN - Sample size: what a subject is, how many, what the tests can reach
+        function Q = checkN(Q, res, o)
+            n = arrayfun(@(x) x.n, res.desc);
+            nTxt = strjoin(arrayfun(@(i) sprintf('%s %d', res.groupNames{i}, n(i)), 1:numel(n), ...
+                'UniformOutput', false), ', ');
+            if any(strcmp(res.design, {'paired', 'rm'}))
+                nTxt = sprintf('%d subjects with a value in every condition', n(1));
+            end
+            if strcmp(o.subjectMode, 'series')
+                files = '';
+                if ~isempty(o.nFiles)
+                    files = sprintf(' from %s', GroupStats.plural(sum(o.nFiles), 'file'));
+                end
+                Q = QualityChecks.add(Q, 'warning', 'Sample size', sprintf(['Every series is counted as a ' ...
+                    'subject: n = %s%s.'], nTxt, files), ...
+                    ['Trials or channels of one animal are not independent: counting them as subjects ' ...
+                    'makes n far too large and p far too small (pseudoreplication). n is the number of ' ...
+                    'animals.'], 'Set Subject to File (mean trace): one value per animal.');
+                return;
+            end
+            nMin = min(n);
+            pMin = GroupStats.smallestRankP(res, n);
+            isNonPar = strncmp(res.method, 'non', 3);
+            if nMin < 3
+                Q = QualityChecks.add(Q, 'warning', 'Sample size', sprintf('n = %s.', nTxt), ...
+                    'With fewer than 3 subjects in a group no test can tell an effect from chance.', ...
+                    'Add animals before testing.');
+            elseif isfinite(pMin) && pMin >= 0.05
+                lvl = 'check';
+                if isNonPar, lvl = 'warning'; end
+                Q = QualityChecks.add(Q, lvl, 'Sample size', sprintf(['n = %s: the %s cannot give ' ...
+                    'p below %.3g with these n, whatever the data.'], nTxt, res.(GroupStats.ifElse(isNonPar, ...
+                    'main', 'check')).test, pMin), ...
+                    'A rank-based test has a smallest possible p that depends only on n.', ...
+                    'Add animals, or report the parametric result with its normality check.');
+            elseif nMin < GroupStats.SmallN
+                Q = QualityChecks.add(Q, 'check', 'Sample size', sprintf('n = %s (fewer than %d).', ...
+                    nTxt, GroupStats.SmallN), ...
+                    ['With few subjects one animal can change the verdict, and normality cannot be judged ' ...
+                    'reliably.'], 'Look at every animal in the Plot tab; report n and the individual values.');
+            else
+                Q = QualityChecks.add(Q, 'ok', 'Sample size', sprintf('n = %s (one value per file).', nTxt));
+            end
+        end
+
+        %% smallestRankP - Smallest two-sided p the exact rank test can give (NaN: not exact)
+        function p = smallestRankP(res, n)
+            p = NaN;
+            switch res.design
+                case 'paired'
+                    if n(1) < 50, p = 2 / 2^n(1); end
+                case 'unpaired'
+                    if sum(n) < 50, p = 2 / nchoosek(sum(n), n(1)); end
+            end
+        end
+
+        %% checkNormality - Shapiro-Wilk on what the parametric test assumes normal
+        function Q = checkNormality(Q, res, o)
+            isNonPar = strncmp(res.method, 'non', 3);
+            names = res.groupNames;
+            labels = o.labels;
+            lab = @(j, i) GroupStats.subjectLabel(labels, j, i);
+            switch res.design
+                case 'paired'
+                    sets = {res.values{2} - res.values{1}};
+                    setNames = {sprintf('the differences %s − %s', names{2}, names{1})};
+                    setLabels = {arrayfun(@(i) lab(2, i), 1:numel(sets{1}), 'UniformOutput', false)};
+                    what = 'the paired differences';
+                case 'rm'
+                    Y = [res.values{:}];
+                    E = Y - repmat(mean(Y, 2), 1, size(Y, 2)) - repmat(mean(Y, 1), size(Y, 1), 1) + mean(Y(:));
+                    sets = {E(:)};
+                    setNames = {'the residuals (each value minus its animal''s and its condition''s mean)'};
+                    L = cell(size(E));
+                    for j = 1:size(E, 2)
+                        for i = 1:size(E, 1)
+                            L{i, j} = sprintf('%s in %s', lab(j, i), names{j});
+                        end
+                    end
+                    setLabels = {L(:)'};
+                    what = 'the residuals';
+                otherwise
+                    sets = res.values;
+                    setNames = names;
+                    setLabels = arrayfun(@(j) arrayfun(@(i) lab(j, i), 1:numel(res.values{j}), ...
+                        'UniformOutput', false), 1:numel(names), 'UniformOutput', false);
+                    what = 'the values of each group';
+            end
+            worstP = Inf; parts = {}; tested = 0;
+            out = '';
+            for s = 1:numel(sets)
+                r = GroupStats.shapiroWilk(sets{s});
+                if ~isfinite(r.p), continue; end
+                tested = tested + 1;
+                if r.p < worstP
+                    worstP = r.p;
+                    out = GroupStats.outlierText(sets{s}, setLabels{s});
+                end
+                if r.p < 0.05
+                    parts{end + 1} = sprintf('%s (W = %.3f, %s)', setNames{s}, r.W, GroupStats.formatP(r.p)); %#ok<AGROW>
+                end
+            end
+            if tested == 0
+                Q = QualityChecks.add(Q, 'note', 'Normality', sprintf(['Too few values to test %s for ' ...
+                    'normality (Shapiro-Wilk needs 3).'], what));
+                return;
+            end
+            nSmall = min(cellfun(@numel, sets)) < GroupStats.SmallN;
+            if isempty(parts)
+                txt = sprintf('Shapiro-Wilk does not reject normality of %s (%s%s)%s.', what, ...
+                    GroupStats.ifElse(tested > 1, 'smallest ', ''), GroupStats.formatP(worstP), out);
+                if nSmall
+                    txt = [txt ' With few values it can miss a departure: look at the Plot tab.'];
+                end
+                if isNonPar
+                    txt = [txt ' The rank-based test does not need it.'];
+                end
+                Q = QualityChecks.add(Q, 'ok', 'Normality', txt);
+                return;
+            end
+            found = sprintf('Not normal: %s%s.', strjoin(parts, '; '), out);
+            why = sprintf(['The %s assumes %s are roughly normal; one outlying animal or skewed values ' ...
+                'can make its p too small or too large.'], GroupStats.familyName(true), what);
+            if isNonPar
+                Q = QualityChecks.add(Q, 'ok', 'Normality', [found ' The rank-based test reported does not ' ...
+                    'need normality.']);
+            elseif ~res.checkAgrees
+                Q = QualityChecks.add(Q, 'warning', 'Normality', found, [why ' Here the rank-based ' ...
+                    'test gives a different verdict.'], sprintf(['Report the rank-based result (%s, %s): ' ...
+                    'set Method to Nonparametric.'], res.check.test, GroupStats.formatP(res.check.p)));
+            else
+                Q = QualityChecks.add(Q, 'check', 'Normality', found, why, sprintf(['The rank-based test ' ...
+                    'agrees (%s, %s); report it alongside, or set Method to Nonparametric.'], ...
+                    res.check.test, GroupStats.formatP(res.check.p)));
+            end
+        end
+
+        %% outlierText - ' Most extreme: animal 6 (5.2 robust SDs from the median)' or ''
+        function s = outlierText(x, labels)
+            s = '';
+            x = x(:);
+            if numel(x) < 4, return; end
+            med = median(x);
+            mad = 1.4826 * median(abs(x - med));
+            if ~(mad > 0), return; end
+            [z, i] = max(abs(x - med) / mad);
+            if z > 3.5
+                nm = sprintf('value %d', i);
+                if i <= numel(labels) && ~isempty(labels{i}), nm = labels{i}; end
+                if z > 10
+                    s = sprintf('; most extreme: %s, more than 10 robust SDs from the median', nm);
+                else
+                    s = sprintf('; most extreme: %s, %.1f robust SDs from the median', nm, z);
+                end
+            end
+        end
+
+        %% subjectLabel - Name of subject i of group j ('animal 3' when there are no labels)
+        function s = subjectLabel(labels, j, i)
+            s = sprintf('subject %d', i);
+            if j <= numel(labels) && i <= numel(labels{j}) && ~isempty(labels{j}{i})
+                s = char(labels{j}{i});
+            end
+        end
+
+        %% checkSphericity - Repeated measures: Mauchly's test and the corrections
+        function Q = checkSphericity(Q, res)
+            if ~strcmp(res.design, 'rm'), return; end
+            k = numel(res.groupNames);
+            isNonPar = strncmp(res.method, 'non', 3);
+            if k < 3
+                Q = QualityChecks.add(Q, 'ok', 'Sphericity', 'Two conditions: sphericity holds by definition.');
+                return;
+            end
+            if isNonPar
+                Q = QualityChecks.add(Q, 'ok', 'Sphericity', sprintf(['The %s does not assume sphericity ' ...
+                    '(it ranks within each animal).'], res.main.test));
+                return;
+            end
+            s = res.main.sphericity;
+            why = ['Repeated-measures ANOVA assumes that every pair of conditions differs by about ' ...
+                'equally variable amounts across animals (sphericity); when not, its uncorrected p is ' ...
+                'too small.'];
+            corrTxt = sprintf('Greenhouse-Geisser ε = %.2f: corrected %s, uncorrected %s', s.epsGG, ...
+                GroupStats.formatP(s.pGG), GroupStats.formatP(s.pUncorrected));
+            sigU = s.pUncorrected < 0.05; sigGG = s.pGG < 0.05;
+            if ~s.testable
+                Q = QualityChecks.add(Q, 'check', 'Sphericity', sprintf(['Mauchly''s test cannot be computed ' ...
+                    '(%d animals for %d conditions); the corrected p is reported (%s).'], res.desc(1).n, k, corrTxt), ...
+                    why, 'Add animals: Mauchly''s test needs at least as many animals as conditions.');
+            elseif s.p < 0.05
+                Q = QualityChecks.add(Q, 'check', 'Sphericity', sprintf(['Violated (Mauchly''s W = %.3f, %s); ' ...
+                    'the Greenhouse-Geisser corrected p is reported (%s).'], s.W, GroupStats.formatP(s.p), corrTxt), ...
+                    why, ['Report the corrected p and ε; look at the Plot tab for a condition in which animals ' ...
+                    'respond very differently (responders and non-responders).']);
+            elseif sigU ~= sigGG
+                Q = QualityChecks.add(Q, 'warning', 'Sphericity', sprintf(['Not rejected (Mauchly''s W = %.3f, ' ...
+                    '%s), so the uncorrected p is reported, but the correction changes the verdict (%s).'], ...
+                    s.W, GroupStats.formatP(s.p), corrTxt), [why ' With few animals Mauchly''s test ' ...
+                    'rarely rejects.'], 'Report the corrected p.');
+            else
+                Q = QualityChecks.add(Q, 'ok', 'Sphericity', sprintf('Not rejected (Mauchly''s W = %.3f, %s; %s).', ...
+                    s.W, GroupStats.formatP(s.p), corrTxt));
+            end
+        end
+
+        %% checkSpread - ANOVA: similar SDs in every group
+        function Q = checkSpread(Q, res)
+            if strncmp(res.method, 'non', 3), return; end
+            sds = arrayfun(@(x) x.sd, res.desc);
+            n = arrayfun(@(x) x.n, res.desc);
+            ratio = max(sds) / min(sds);
+            if strcmp(res.design, 'unpaired')
+                Q = QualityChecks.add(Q, 'ok', 'Equal spread', sprintf(['SD ratio %.2g: the Welch t-test ' ...
+                    'does not assume equal SDs.'], ratio));
+                return;
+            end
+            if ~strcmp(res.design, 'anova') || ~isfinite(ratio), return; end
+            [~, iMax] = max(sds); [~, iMin] = min(sds);
+            txt = sprintf('Largest / smallest SD = %.2g (%s %.3g, %s %.3g).', ratio, res.groupNames{iMax}, ...
+                sds(iMax), res.groupNames{iMin}, sds(iMin));
+            if ratio > 2
+                lvl = 'check';
+                if max(n) > 1.5 * min(n), lvl = 'warning'; txt = [txt ' The group sizes differ too.']; end
+                Q = QualityChecks.add(Q, lvl, 'Equal spread', txt, ['One-way ANOVA and Tukey''s comparisons ' ...
+                    'assume similar SDs; with unequal SDs (worse with unequal group sizes) their p-values ' ...
+                    'are wrong.'], sprintf('Use the rank-based result (%s, %s), or compare pairs with Welch t-tests.', ...
+                    res.check.test, GroupStats.formatP(res.check.p)));
+            else
+                Q = QualityChecks.add(Q, 'ok', 'Equal spread', txt);
+            end
+        end
+
+        %% familyName - 'parametric test' | 'rank-based test'
+        function s = familyName(isParametric)
+            if isParametric
+                s = 'parametric test';
+            else
+                s = 'rank-based test';
+            end
+        end
+
+        %% plural - '1 subject', '3 subjects'
+        function s = plural(n, word)
+            if n == 1
+                s = sprintf('1 %s', word);
+            else
+                s = sprintf('%d %ss', n, word);
             end
         end
     end

@@ -13,7 +13,12 @@
 %   1 Load stack  2 Preprocess  3 ROIs and line  4 Analysis + Run  5 Export
 % and on the right the image (first frame, mean or correlation image) with
 % the ROI / line overlay next to the ROI list, above the result tabs
-% (Result | Motion correction). One updateControls() sets every enable state.
+% (Result | Motion correction | Checks). One updateControls() sets every
+% enable state. Checks tab (UIKit.checksTab): after every Run,
+% ImagingChecks looks at the movement of the frames against the size of
+% the smallest ROI, bleaching (ROI baseline at the end against the start),
+% pixels at the top value of the stack (saturation) and preprocessing that
+% undoes a brightness measure; the status bar says when there are warnings.
 % Scriptable (CI walkthroughs, no dialogs): openFile(path), loadDemo(),
 % loadAdvancedDemo(), setROIMask(mask), addROI(mask, name), removeROI(idx),
 % renameROI(idx, name), setLine([x1 y1], [x2 y2]), setMotionCorrection(tf),
@@ -97,6 +102,11 @@ classdef ROIAnalysisApp < handle
         LastMethod = ''      % Method of the current results ('' = none)
         FilePath = ''        % Full path of the loaded stack ('' = generated demo; session provenance)
         SessionBtns          % Step 5: Save session / Open session / Report (UIKit.sessionButtons)
+        ChecksUI             % UIKit.checksTab struct (Tab, Table, Text)
+        ChecksTab            % = ChecksUI.Tab
+        ChecksTable          % = ChecksUI.Table (Result | Topic | Finding)
+        ChecksText           % = ChecksUI.Text (the clicked row in full)
+        CheckRows            % QualityChecks rows of the last Run (ImagingChecks)
     end
 
     properties(Access = private)
@@ -291,6 +301,12 @@ classdef ROIAnalysisApp < handle
             tg = uigridlayout(app.MotionTab, [1 1], 'Padding', [6 4 6 4], 'BackgroundColor', T.cardBg);
             app.AxesMotion = uiaxes(tg);
             UIKit.emptyAxes(app.AxesMotion, 'Tick Motion correction (step 2) to estimate the frame shifts');
+            app.ChecksUI = UIKit.checksTab(app.ResultTabs, ['Quality checks of the last Run (movement against ' ...
+                'the cell size, bleaching, saturation) appear here.']);
+            app.ChecksTab = app.ChecksUI.Tab;
+            app.ChecksTable = app.ChecksUI.Table;
+            app.ChecksText = app.ChecksUI.Text;
+            app.CheckRows = QualityChecks.none();
 
             UIKit.setStatus(app.W.Status, 'Load an image stack (or Try demo data) to begin (step 1).', 'info');
         end
@@ -996,6 +1012,8 @@ classdef ROIAnalysisApp < handle
             app.DiameterPlain = []; app.DiameterRaw = []; app.DiameterOutliers = [];
             app.ResultROINames = {}; app.ResultROIMasks = [];
             app.LastMethod = '';
+            app.CheckRows = QualityChecks.none();      % checks belong to the results
+            if ~isempty(app.ChecksUI), UIKit.showChecks(app.ChecksUI, app.CheckRows); end
             if ~isempty(app.AxesPlot) && isvalid(app.AxesPlot)
                 colorbar(app.AxesPlot, 'off');
                 cla(app.AxesPlot, 'reset');
@@ -1097,8 +1115,9 @@ classdef ROIAnalysisApp < handle
                 UIKit.alert(app.UIFig, sprintf('%s failed: %s', method, ME.message), 'Run');
                 return;
             end
-            UIKit.done(dlg);
             app.LastMethod = method;
+            app.updateChecks(masks);
+            UIKit.done(dlg);
             app.plotResults(method);
             app.ResultTabs.SelectedTab = app.ResultTab;
             app.updateControls();
@@ -1108,8 +1127,48 @@ classdef ROIAnalysisApp < handle
             elseif strcmp(method, 'Vessel diameter') && app.RobustCb.Value
                 extra = sprintf(' (robust: %d frame(s) replaced)', nReplaced);
             end
-            UIKit.setStatus(app.W.Status, sprintf('%s computed%s over %d frames. Next: Export (step 5).', ...
-                method, extra, numel(app.T)), 'success');
+            msg = sprintf('%s computed%s over %d frames', method, extra, numel(app.T));
+            nWarn = QualityChecks.count(app.CheckRows, 'warning');
+            if nWarn > 0
+                UIKit.setStatus(app.W.Status, sprintf('%s  ·  %s in the Checks tab: read them before using the traces', ...
+                    msg, QualityChecks.plural(nWarn, 'warning')), 'warning');
+            else
+                UIKit.setStatus(app.W.Status, [msg '. Next: Export (step 5).'], 'success');
+            end
+        end
+
+        %% updateChecks - Quality checks of the last Run (ImagingChecks) into the Checks tab
+        % masks: H x W x K ROI masks of the run ([] for the line methods).
+        % Motion: the shifts motion correction applied and what is left
+        % after it, or the movement estimated on the raw frames when it is
+        % off; bleaching on each ROI's mean brightness before B&W,
+        % smoothing and normalisation; saturation on the frames as loaded.
+        function updateChecks(app, masks)
+            app.CheckRows = QualityChecks.none();
+            try
+                o = ImagingChecks.options();
+                o.names = app.ResultROINames;
+                o.method = app.LastMethod;
+                o.motionCorrected = logical(app.MotionCb.Value) && ~isempty(app.RegStack);
+                o.normalize = logical(app.NormalizeCb.Value);
+                o.baselineFrames = app.BaselineFramesEdit.Value;
+                if o.motionCorrected
+                    o.shifts = app.Shifts;
+                    o.residual = ImagingChecks.estimateShifts(app.RegStack);
+                else
+                    o.shifts = ImagingChecks.estimateShifts(app.Stack);
+                end
+                F = [];
+                if ~isempty(masks) && any(strcmp(app.LastMethod, ImagingChecks.BrightnessMethods))
+                    base = app.baseStack();
+                    F = perROI(@(m) roiIntensityOverTime(base, m, []), masks, app.nFrames());
+                end
+                app.CheckRows = ImagingChecks.run(app.Stack, masks, F, app.T, o);
+            catch ME
+                app.CheckRows = QualityChecks.add(QualityChecks.none(), 'note', 'Checks', ...
+                    sprintf('The quality checks could not run: %s', ME.message));
+            end
+            UIKit.showChecks(app.ChecksUI, app.CheckRows);
         end
 
         %% plotResults - Plot the computed series (one per ROI) or kymograph image
@@ -1377,6 +1436,7 @@ classdef ROIAnalysisApp < handle
             st.settings = struct();
             st.results = struct();
             st.summary = {};
+            st.checks = QualityChecks.none();
             if isempty(app.Stack), return; end
             if isempty(app.FilePath)
                 st.inputs = Session.fileInfo('', 'Advanced demo stack (demoImagingAdvanced)');
@@ -1409,6 +1469,7 @@ classdef ROIAnalysisApp < handle
                     ifelseStr(app.MotionCb.Value, 'on', 'off'), max(abs(app.Shifts(:))));
             end
             if isempty(app.LastMethod), return; end
+            st.checks = app.CheckRows;
             st.results.method = app.LastMethod;
             st.results.t = app.T;
             st.results.roiNames = app.ResultROINames;

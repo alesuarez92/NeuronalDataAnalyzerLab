@@ -95,6 +95,13 @@ function testGroupsAndStatistics(tests)
     tests.verifyGreaterThan(r.main.effect, 1);
     tests.verifyTrue(r.checkAgrees);
     tests.verifyNotEmpty(app.StatsTable.Data);
+    % Checks tab: 8 animals, normal differences, no warnings
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyFalse(any(strcmp(chk(:, 1), 'Warning')), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Sample size', '8 subjects'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Normality', 'Shapiro-Wilk'), txt);
+    tests.verifyEqual({r.checkRows.topic}, {app.CheckRows.topic});
     shot(tests, app, 'SignalCharacterizationApp_x03_paired_plot', {G, 'Plot'});
     shot(tests, app, 'SignalCharacterizationApp_x04_paired_results', {G, 'Results'});
 
@@ -197,6 +204,36 @@ function testRepeatedMeasures(tests)
     tests.verifyFalse(logical(app.runGroupStats('Peak amplitude', 'rm')));
     tests.verifyTrue(contains(app.W.Status.Text, 'group sizes differ'));
     shot(tests, app, 'SignalCharacterizationApp_r06_rm_unequal_sizes', {G, 'Files'});
+
+    % 6 Every trial counted as a subject: the Sample size warning
+    tests.verifyTrue(logical(app.loadGroupDemo()));
+    app.SubjectMenu.Value = app.SubjectModes{3};
+    tests.verifyTrue(logical(app.runGroupStats('Peak amplitude', 'paired', 'parametric', {'Control', 'Stimulated'})));
+    chk = app.ChecksTable.Data;
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Sample size', 'Every series is counted'), strjoin(chk(:, 3), ' | '));
+    tests.verifyTrue(contains(app.W.Status.Text, 'in the Checks tab'), app.W.Status.Text);
+
+    % 7 The faults study: 6 animals, animal 6 responds 3x, the same Drug rise in every animal
+    tests.verifyTrue(logical(app.loadGroupDemo(true)));
+    tests.verifyNumElements(app.GroupFiles, 18);
+    tests.verifyEqual(app.DesignMenu.Value, 'Repeated measures (same animals, 3+ conditions)');
+    tests.verifyTrue(logical(app.runGroupStats('Peak amplitude', 'rm', 'parametric')));
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Sample size', 'fewer than 8'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Normality', 'Not normal') || ...
+        hasCheck(chk, 'Warning', 'Normality', 'Not normal'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Check', 'Sphericity', 'Violated'), txt);
+    k = find(strcmp(chk(:, 2), 'Sphericity'), 1);
+    UIKit.checkSelected(app.ChecksTable, struct('Indices', [k 3]), app.ChecksText);
+    shot(tests, app, 'SignalCharacterizationApp_r07_checks_faults', {G, 'Checks'});
+    st = app.sessionState();
+    tests.verifyEqual({st.checks.topic}, {app.CheckRows.topic}, 'the checks go into sessions');
+end
+
+%% hasCheck - A Checks table row with this result and topic whose finding has the text
+function tf = hasCheck(chk, result, topic, finding)
+    tf = any(strcmp(chk(:, 1), result) & strcmp(chk(:, 2), topic) & contains(chk(:, 3), finding));
 end
 
 function testSingleFileFigureExport(tests)

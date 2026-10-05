@@ -217,10 +217,44 @@ function testROIAnalysis(tests)
     shot(tests, app, 'ROIAnalysisApp_01_demo_loaded');
     tests.verifyTrue(logical(app.runAnalysis('dff')));
     shot(tests, app, 'ROIAnalysisApp_02_dff');
+    % Checks tab: the clean demo moves < 1 px, does not bleach or clip
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyFalse(any(strcmp(chk(:, 1), 'Warning')), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Motion', 'motion correction off'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Bleaching', 'check above 10%'), txt);
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Saturation', 'No ROI pixel is clipped'), txt);
+    st = app.sessionState();
+    tests.verifyEqual({st.checks.topic}, {app.CheckRows.topic}, 'the checks go into sessions');
     tests.verifyTrue(logical(app.runAnalysis('Vessel')));
     shot(tests, app, 'ROIAnalysisApp_03_vessel_diameter');
+    tests.verifyTrue(any(strcmp(app.ChecksTable.Data(:, 2), 'Motion')), 'line methods check motion too');
     tests.verifyTrue(logical(app.runAnalysis('Kymo')));
     shot(tests, app, 'ROIAnalysisApp_04_kymograph');
+    shot(tests, app, 'ROIAnalysisApp_05_checks', 'Checks');
+
+    % The faults demo: the field slides 14 px, the dye fades, Cell 2 clips at 4095
+    tests.verifyTrue(logical(app.openFile(DemoData.file('imagingFaults'))));
+    tests.verifyEmpty(app.ChecksTable.Data, 'a new stack clears the checks');
+    tests.verifyEqual(numel(app.ROIs), 3, 'the three cell ROIs come from the file');
+    tests.verifyTrue(logical(app.runAnalysis('dff')));
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Motion', 'motion correction is off'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Bleaching', 'darker at the end'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Saturation', 'Cell 2'), txt);
+    tests.verifyTrue(contains(app.W.Status.Text, 'in the Checks tab'), app.W.Status.Text);
+    k = find(strcmp(chk(:, 2), 'Motion'), 1);
+    UIKit.checkSelected(app.ChecksTable, struct('Indices', [k 3]), app.ChecksText);
+    shot(tests, app, 'ROIAnalysisApp_06_checks_faults', 'Checks');
+    % Motion correction on: Motion is OK, bleaching and clipping stay
+    tests.verifyTrue(logical(app.runMotionCorrection()));
+    tests.verifyTrue(logical(app.runAnalysis('dff')));
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Motion', 'Motion corrected'), txt);
+    tests.verifyTrue(hasCheck(chk, 'Warning', 'Bleaching', 'darker at the end'), txt);
+    shot(tests, app, 'ROIAnalysisApp_07_checks_motion_corrected', 'Checks');
 end
 
 function testSignalCharacterization(tests)

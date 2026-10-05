@@ -28,6 +28,10 @@
 %                                 refractory period, ch 5 a unit shrinking
 %                                 to half its size (amplitude drift)
 %   s  = DemoData.imagingStack()  stack, timeVec, roiMask (ROI analysis)
+%   s  = DemoData.imagingFaults() a 12-bit calcium imaging stack with the
+%                                 faults of the imaging checks: the field
+%                                 slides 14 px, the dye fades to ~65%,
+%                                 Cell 2 clipped at 4095 (roiMasks, roiNames)
 %
 %   p  = DemoData.file(kind)      cached demo file path (generated on first use),
 %                                 used by the windows' "Try demo data" buttons
@@ -49,6 +53,9 @@
 %                      blinks in 9 of 15 Target trials, 8 of 32 channels
 %                      noisy or flat, Pz interpolated (in the history)
 %   'groups'           demoGroups: folder of 3 conditions x 8 animals (LDF trials)
+%   'groupsFaults'     demoGroups faults: 3 conditions x 6 animals for the
+%                      statistics checks (an outlying animal, sphericity
+%                      violated, small n)
 %   'intan' | 'openephys' | 'nwb'   demoFormats: the demo tank in that format
 % core/demo/demoLDFFormats writes the LDF demo as a LabChart text export,
 % an AcqKnowledge .acq, a PeriSoft-style table, a Spike2 export and a table
@@ -72,8 +79,8 @@ classdef DemoData
 
         %% file - Path to one demo file, generated on first use and cached
         % kind: 'ldfExport' | 'ldfCropped' | 'ldfTrials' | 'ldfFaults' | 'tdtTank' |
-        %       'lfp' | 'lfpFaults' | 'mua' | 'muaFaults' | 'imaging' | 'lfpOscillations' | 'imagingAdvanced' |
-        %       'histology' | 'lsci' | 'lsciFaults' | 'perfusionFaults' | 'eegFaults' | 'groups' |
+        %       'lfp' | 'lfpFaults' | 'mua' | 'muaFaults' | 'imaging' | 'imagingFaults' | 'lfpOscillations' | 'imagingAdvanced' |
+        %       'histology' | 'lsci' | 'lsciFaults' | 'perfusionFaults' | 'eegFaults' | 'groups' | 'groupsFaults' |
         %       'intan' | 'openephys' | 'nwb'. Files live in
         % DemoData.folder(). For 'tdtTank' the returned path is the tank
         % folder (demo_tank/); for 'groups' the folder of group files; for
@@ -81,7 +88,7 @@ classdef DemoData
         function p = file(kind)
             folder = DemoData.folder();
             if ~exist(folder, 'dir'), mkdir(folder); end
-            if any(strcmp(kind, {'groups', 'intan', 'openephys', 'nwb'}))
+            if any(strcmp(kind, {'groups', 'groupsFaults', 'intan', 'openephys', 'nwb'}))
                 p = DemoData.extraFile(kind);
                 return;
             end
@@ -92,7 +99,7 @@ classdef DemoData
                 'histology', 'demo_histology.mat', 'lsci', 'demo_lsci.mat', 'eegFaults', 'demo_eeg_faults.mat', ...
                 'ldfFaults', 'demo_ldf_faults.mat', 'lsciFaults', 'demo_lsci_faults.mat', ...
                 'perfusionFaults', 'demo_perfusion_faults.mat', 'lfpFaults', 'demo_lfp_faults.mat', ...
-                'muaFaults', 'demo_mua_faults.mat');
+                'muaFaults', 'demo_mua_faults.mat', 'imagingFaults', 'demo_imaging_faults.mat');
             if ~isfield(names, kind)
                 error('NeuroAnalyzer:DemoData:unknownKind', 'Unknown demo data kind ''%s''.', kind);
             end
@@ -111,6 +118,7 @@ classdef DemoData
                     case 'mua',        s = DemoData.muaFile();
                     case 'muaFaults',  s = DemoData.muaFaults();
                     case 'imaging',    s = DemoData.imagingStack();
+                    case 'imagingFaults', s = DemoData.imagingFaults();
                     case 'lfpOscillations', DemoData.ensureDemoPath(); s = demoLFPOscillations();
                     case 'imagingAdvanced', DemoData.ensureDemoPath(); s = demoImagingAdvanced();
                     case 'histology',  DemoData.ensureDemoPath(); s = demoHistology();
@@ -139,6 +147,11 @@ classdef DemoData
                 p = fullfile(DemoData.folder(), 'groups');
                 if numel(dir(fullfile(p, '*.mat'))) < 24   % 3 conditions x 8 animals
                     demoGroups(p);
+                end
+            elseif strcmp(kind, 'groupsFaults')
+                p = fullfile(DemoData.folder(), 'groups_faults');
+                if numel(dir(fullfile(p, '*.mat'))) < 18   % 3 conditions x 6 animals
+                    demoGroups(p, struct('Faults', true));
                 end
             else
                 f = demoFormats([], 'Formats', {kind});
@@ -221,6 +234,10 @@ classdef DemoData
             files.imaging = fullfile(folder, 'demo_imaging.mat');
             save(files.imaging, '-struct', 's');
 
+            s = DemoData.imagingFaults();
+            files.imagingFaults = fullfile(folder, 'demo_imaging_faults.mat');
+            save(files.imagingFaults, '-struct', 's');
+
             DemoData.ensureDemoPath();
             s = demoLFPOscillations();
             files.lfpOscillations = fullfile(folder, 'demo_lfp_oscillations.mat');
@@ -248,6 +265,8 @@ classdef DemoData
 
             g = demoGroups(fullfile(folder, 'groups'));
             files.groups = g.folder;                     % folder of 24 trial files
+            g = demoGroups(fullfile(folder, 'groups_faults'), struct('Faults', true));
+            files.groupsFaults = g.folder;               % folder of 18 trial files (statistics checks)
             f = demoFormats(fullfile(folder, 'formats'));
             files.intan = f.intan;
             files.openephys = f.openephys;               % session folder
@@ -587,6 +606,63 @@ classdef DemoData
             s.truth = struct('fps', fps, 'vesselCenterX', cx, 'diameter', diam, ...
                 'rbcSpeedPxPerFrame', 2, 'cellCenter', [cellX cellY], 'cellRadius', cellR, ...
                 'dff', dff, 'calciumEvents', events);
+        end
+
+        %% imagingFaults - A calcium imaging stack with the faults of the imaging checks
+        % 96 x 96 x 150 frames at 10 Hz as a 12-bit camera saves them
+        % (uint16, 0-4095), three cells 10 px across with their ROIs in the
+        % file (roiMasks, roiNames, placed at the cells' mean position):
+        %   motion      the field slides 14 px sideways over the recording
+        %               (-7 to +7 px, more than a cell is wide);
+        %   bleaching   everything fades to about 65% (exponential, 6 s);
+        %   saturation  Cell 2 is bright and its transients go
+        %               above 4095 (clipped).
+        % Transients (ΔF/F 0.8): Cell 1 at 3 and 9 s, Cell 2 at 4 and 10 s,
+        % Cell 3 at 6 and 12 s. truth: fps, shiftX (1 x N, px), bleach
+        % (1 x N factor), cells (centres [x y]), cellRadius, events, ceiling.
+        function s = imagingFaults()
+            rs = DemoData.stream(41);
+            H = 96; W = 96; N = 150; fps = 10; ceiling = 4095;
+            t = (0:N-1) / fps;
+            [X, Y] = meshgrid(1:W, 1:H);
+            centres = [26 28; 66 30; 38 70];
+            base = [500 3400 700];                       % cell brightness above the background (counts)
+            events = {[3 9], [4 10], [6 12]};
+            r = 5;
+            shiftX = linspace(-7, 7, N);
+            bleach = 0.65 + 0.35 * exp(-t / 6);
+            pad = 12;
+            tex = 600 + 120 * DemoData.smooth2(randn(rs, H + 2 * pad, W + 2 * pad), 3);
+            [XT, YT] = meshgrid(1:W + 2 * pad, 1:H + 2 * pad);
+            dffs = zeros(3, N);
+            for c = 1:3
+                for e = events{c}
+                    on = t >= e;
+                    dffs(c, on) = dffs(c, on) + 0.8 * exp(-(t(on) - e) / 0.8) .* (1 - exp(-(t(on) - e) / 0.1));
+                end
+            end
+            stack = zeros(H, W, N, 'uint16');
+            for k = 1:N
+                sx = shiftX(k);
+                frame = interp2(XT, YT, tex, X - sx + pad, Y + pad, 'linear', 600);
+                for c = 1:3
+                    d2 = (X - sx - centres(c, 1)).^2 + (Y - centres(c, 2)).^2;
+                    body = 1 ./ (1 + exp((sqrt(d2) - r) / 0.6));      % soft-edged disc
+                    frame = frame + base(c) * (1 + dffs(c, k)) * body;
+                end
+                frame = frame * bleach(k) + 20 * randn(rs, H, W);
+                stack(:, :, k) = uint16(min(ceiling, max(0, round(frame))));
+            end
+            masks = false(H, W, 3);
+            for c = 1:3
+                masks(:, :, c) = (X - centres(c, 1)).^2 + (Y - centres(c, 2)).^2 <= r^2;
+            end
+            s.stack = stack;
+            s.timeVec = t;
+            s.roiMasks = masks;
+            s.roiNames = {'Cell 1', 'Cell 2', 'Cell 3'};
+            s.truth = struct('fps', fps, 'shiftX', shiftX, 'bleach', bleach, 'cells', centres, ...
+                'cellRadius', r, 'events', {events}, 'dff', dffs, 'ceiling', ceiling);
         end
     end
 

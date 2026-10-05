@@ -9,6 +9,9 @@
 %
 %   demo = demoGroups()          writes to tempdir/NeuroAnalyzerDemo/groups
 %   demo = demoGroups(folder)    writes to folder (created if needed)
+%   demo = demoGroups(folder, struct('Faults', true))
+%                                the faults study for the statistics checks
+%                                (default folder .../groups_faults), below
 %
 % Design (deterministic, RandStream mt19937ar, seed 20260925):
 %   Conditions  Control, Stimulated, Drug; the SAME 8 animals in each, so
@@ -27,6 +30,16 @@
 %               0.60; the paired test and the ANOVA are significant with
 %               near certainty for 8 animals.
 %
+% Faults study (opt.Faults = true; seed 20260926, trialSD 1 PU): the same
+% three conditions in 6 animals with set amplitudes (PU):
+%   Control     18 16 19 17 20 18
+%   Stimulated  Control + [12 11 13 12 12 40]   animal 6 responds 3x
+%   Drug        Control + [ 6  7  5  6  7  6]   the same rise in every animal
+% so with repeated measures n is small (6), the residuals are not normal
+% (animal 6) and sphericity is violated (Drug - Control hardly varies
+% while Stimulated - Control does); the paired Stimulated vs Control
+% differences are not normal either. truth.faults says so.
+%
 % Output struct demo:
 %   folder, conditions (1x3 cellstr), paths (1x3 cell, each 8x1 cellstr
 %   of file paths in animal order), files (struct array: path, condition,
@@ -41,17 +54,28 @@
 %     anovaEta2 (population eta^2 of the three conditions).
 % =========================================================================
 
-function demo = demoGroups(folder)
+function demo = demoGroups(folder, opt)
+    if nargin < 2 || isempty(opt), opt = struct(); end
+    faults = isfield(opt, 'Faults') && opt.Faults;
     if nargin < 1 || isempty(folder)
         folder = fullfile(tempdir, 'NeuroAnalyzerDemo', 'groups');
+        if faults, folder = [folder '_faults']; end
     end
     if ~exist(folder, 'dir'), mkdir(folder); end
 
-    rs = RandStream('mt19937ar', 'Seed', 20260925);
     conditions = {'Control', 'Stimulated', 'Drug'};
     trueMeans = [18 30 24];
     nAnimals = 8; nTrials = 8;
     animalSD = 3; withinSD = 2.5; trialSD = 2;
+    if faults
+        rs = RandStream('mt19937ar', 'Seed', 20260926);
+        control = [18 16 19 17 20 18]';
+        setAmp = [control, control + [12 11 13 12 12 40]', control + [6 7 5 6 7 6]'];
+        nAnimals = 6; trialSD = 1;
+        trueMeans = mean(setAmp, 1);
+    else
+        rs = RandStream('mt19937ar', 'Seed', 20260925);
+    end
     Fs = 10; t = -5:1/Fs:20;
     tp = 4; a = 3;                       % gamma shape: peak at tp seconds
     x = t / tp;
@@ -63,6 +87,7 @@ function demo = demoGroups(folder)
     baseline = 110 + 20 * rand(rs, nAnimals, 1);
     amp = repmat(trueMeans, nAnimals, 1) + repmat(animalEffect, 1, 3) + ...
         withinSD * randn(rs, nAnimals, 3);
+    if faults, amp = setAmp; end
 
     nC = numel(conditions);
     paths = cell(1, nC);
@@ -108,6 +133,11 @@ function demo = demoGroups(folder)
         'amplitude', realized, 'effect', effect, ...
         'anovaEta2', varBetween / (varBetween + animalSD^2 + varFile));
     truth.conditions = conditions;
+    truth.faults = faults;
+    if faults
+        truth.faults = struct('outlierAnimal', 6, 'note', ['Animal 6 responds 3x to Stimulated; ' ...
+            'Drug - Control is the same in every animal (sphericity violated); 6 animals.']);
+    end
 
     demo = struct('folder', folder, 'conditions', {conditions}, 'paths', {paths}, ...
         'files', files, 'truth', truth);

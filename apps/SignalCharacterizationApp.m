@@ -23,6 +23,11 @@
 %     each animal's line across conditions, mean ± SEM or box,
 %     significance brackets)
 %   4 Export (publication figure via FigureExport; values + report)
+%  and a Checks tab (UIKit.checksTab): after every test, GroupStats.checks
+%  looks at n (and whether every series was counted as a subject),
+%  normality (Shapiro-Wilk), sphericity (repeated measures), equal spread
+%  (ANOVA), whether the parametric and rank-based tests agree and missing
+%  values; the status bar says when there are warnings.
 % One updateControls() sets every enable state from the current data.
 % Scriptable (CI walkthroughs, no dialogs): openFile(path), loadDemo(),
 % extract() (= extractFeatures()), addGroupFiles(paths, groupName),
@@ -109,6 +114,10 @@ classdef SignalCharacterizationApp < handle
         PlotStyleMenu      % Mean ± SEM | Box plot
         StatsAxes
         StatsSummaryLabel
+        GroupChecksUI      % UIKit.checksTab struct (Tab, Table, Text) of the group test
+        ChecksTable        % = GroupChecksUI.Table (Result | Topic | Finding)
+        ChecksText         % = GroupChecksUI.Text (the clicked row in full)
+        CheckRows          % QualityChecks rows of the last group test (GroupStats.checks)
         % --- Groups & statistics: data ---
         GroupFiles = struct('path', {}, 'name', {}, 'group', {}, 'dataType', {}, ...
             'T', {}, 'Y', {}, 'nSeries', {}, 'value', {})   % one entry per file (column)
@@ -476,6 +485,12 @@ classdef SignalCharacterizationApp < handle
             app.StatsSummaryLabel = uilabel(pt, 'Text', '', 'FontSize', T.fontSmall, ...
                 'FontColor', T.sectionTitleColor, 'WordWrap', 'on', 'Interpreter', 'none');
             app.StatsSummaryLabel.Layout.Row = 3; app.StatsSummaryLabel.Layout.Column = [1 3];
+
+            app.GroupChecksUI = UIKit.checksTab(app.GroupTabs, ['Quality checks of the last test (n, ' ...
+                'normality, sphericity, equal spread) appear here after Run test.']);
+            app.ChecksTable = app.GroupChecksUI.Table;
+            app.ChecksText = app.GroupChecksUI.Text;
+            app.CheckRows = QualityChecks.none();
 
             app.refreshGroups();
         end
@@ -931,6 +946,7 @@ classdef SignalCharacterizationApp < handle
             st.inputs = [];
             st.results = struct();
             st.summary = {};
+            st.checks = QualityChecks.none();
             sg = struct('input', 0, 'dataType', app.DataTypeMenu.Value, 't0', app.T0Edit.Value, ...
                 'baseline', [app.BaselineStartEdit.Value, app.BaselineEndEdit.Value], ...
                 'direction', app.DirectionMenu.Value, 'features', {cellstr(app.FeatureList.Value)}, ...
@@ -976,6 +992,7 @@ classdef SignalCharacterizationApp < handle
                     names{i}, counts(i)), 1:numel(names), 'UniformOutput', false), ', '));
             end
             if ~isempty(app.GroupResult)
+                st.checks = app.CheckRows;
                 st.results.groupTest = app.GroupResult;
                 st.results.groupFileValues = [app.GroupFiles.value];
                 if isfield(app.GroupResult, 'summary')
@@ -1202,6 +1219,8 @@ classdef SignalCharacterizationApp < handle
             app.GroupSelectedRow = [];
             app.GroupBaselineAuto = true;
             app.GroupDemo = [];
+            app.CheckRows = QualityChecks.none();
+            UIKit.showChecks(app.GroupChecksUI, app.CheckRows);
             app.refreshGroups();
             app.showGroupResults();
             app.plotGroupStats();
@@ -1212,14 +1231,22 @@ classdef SignalCharacterizationApp < handle
         % core/demo/demoGroups: the same 8 animals in Control, Stimulated and
         % Drug (true peak hyperemia 18, 30 and 24 PU). Sets feature Peak
         % amplitude (file mean trace), t0 = 0, baseline -5..0 s, design
-        % Paired, Control vs Stimulated. Returns true on success.
-        function ok = loadGroupDemo(app)
+        % Paired, Control vs Stimulated. loadGroupDemo(true): the faults
+        % study for the Checks tab (6 animals, animal 6 responds 3x to
+        % Stimulated, the same Drug rise in every animal), design Repeated
+        % measures. Returns true on success.
+        function ok = loadGroupDemo(app, faults)
             ok = false;
-            dlg = UIKit.busy(app.UIFig, sprintf('Writing demo group files (3 conditions x 8 animals)%s', char(8230)));
+            if nargin < 2, faults = false; end
+            dlg = UIKit.busy(app.UIFig, sprintf('Writing demo group files%s', char(8230)));
             UIKit.setStatus(app.W.Status, 'Preparing group demo data', 'busy');
             try
                 ensureDemoPath();
-                demo = demoGroups();
+                if faults
+                    demo = demoGroups([], struct('Faults', true));
+                else
+                    demo = demoGroups();
+                end
             catch ME
                 UIKit.done(dlg);
                 UIKit.setStatus(app.W.Status, sprintf('Group demo failed: %s', ME.message), 'error');
@@ -1243,6 +1270,15 @@ classdef SignalCharacterizationApp < handle
             app.updateControls();
             app.ModeTabs.SelectedTab = app.GroupsTab;
             app.GroupTabs.SelectedTab = app.FilesTab;
+            if faults
+                app.DesignMenu.Value = app.Designs{4};
+                app.updateControls();
+                UIKit.setStatus(app.W.Status, ['Faults demo loaded: 6 animals x 3 conditions. Click Run ' ...
+                    'test (repeated measures) and open the Checks tab: small n, not normal (animal 6) and ' ...
+                    'sphericity violated.'], 'success');
+                ok = true;
+                return;
+            end
             UIKit.setStatus(app.W.Status, sprintf(['Group demo loaded: %d animals x 3 conditions, the same ' ...
                 'animals in each (true peak hyperemia Control 18, Stimulated 30, Drug 24 PU). Click Run test: ' ...
                 'paired Stimulated vs Control should give about +12 PU with p < 0.001.'], ...
@@ -1347,15 +1383,28 @@ classdef SignalCharacterizationApp < handle
             res.settings = struct('t0', app.GroupT0Edit.Value, ...
                 'baseline', [app.GroupBaseStartEdit.Value, app.GroupBaseEndEdit.Value], ...
                 'direction', app.GroupDirectionMenu.Value);
+            o = GroupStats.checkOptions();
+            o.subjectMode = app.subjectModeKey();
+            o.nFiles = cellfun(@(nm) sum(strcmp({app.GroupFiles.group}, nm)), use);
+            o.labels = labels;
+            app.CheckRows = GroupStats.checks(res, o);
+            res.checkRows = app.CheckRows;
             app.GroupResult = res;
             app.GroupStale = false;
             app.refreshGroups();
             app.showGroupResults();
             app.plotGroupStats();
+            UIKit.showChecks(app.GroupChecksUI, app.CheckRows);
             app.ModeTabs.SelectedTab = app.GroupsTab;
             app.GroupTabs.SelectedTab = app.PlotTab;
             app.updateControls();
-            UIKit.setStatus(app.W.Status, [res.summary ' Next: Export figure (step 4).'], 'success');
+            nWarn = QualityChecks.count(app.CheckRows, 'warning');
+            if nWarn > 0
+                UIKit.setStatus(app.W.Status, sprintf('%s  ·  %s in the Checks tab: read them before using the result', ...
+                    res.summary, QualityChecks.plural(nWarn, 'warning')), 'warning');
+            else
+                UIKit.setStatus(app.W.Status, [res.summary ' Next: Export figure (step 4).'], 'success');
+            end
             ok = true;
         end
 

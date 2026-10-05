@@ -103,6 +103,45 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
     (blinks in most Target trials, 8 of 32 channels noisy or flat, Pz
     interpolated in EEGLAB). `demo_lfp.mat` and the LFP batch demo files
     now carry `lfp_spacing_um` (100 µm).
+- **Quality checks for imaging and statistics** (quality checks step 4):
+  ROI Analysis and the Groups & statistics tab of Signal Characterization
+  get a **Checks** tab (kept in sessions, reports and the methods text;
+  the status bar says when there are warnings). The checks never change
+  the results.
+  - **ROI Analysis** (`core/ImagingChecks.m`), after every Run:
+    **Motion** (how far the frames move from their usual position against
+    the size of the smallest ROI, the width of a disk of the same area;
+    estimated on up to 100 frames when motion correction is off; Check
+    above 20% of it, Warning from half of it: the cell slides out of its
+    ROI; with motion correction the same rules on what is left, and a
+    Check when frames had moved by more than a whole ROI; line methods:
+    Check above 2 px), **Bleaching** (each ROI's baseline at the end
+    against the start; Check above 10%, Warning above 25% darker; a Check
+    when it brightens), **Saturation** (ROI pixels at the top value of the
+    stack; Check above 0.1%, Warning above 1% of a ROI's pixel-frames; a
+    camera ceiling such as 4095 or values piling up count, a single
+    brightest value does not) and **Preprocessing** (Normalize each frame
+    with Brightness or ΔF/F).
+  - **Groups & statistics** (`GroupStats.checks`), after every test:
+    **Sample size** (Warning when every series is counted as a subject,
+    with fewer than 3 per group, or when the exact rank-based test cannot
+    reach p < 0.05 with these n; Check below 8), **Normality**
+    (`GroupStats.shapiroWilk`, Royston's algorithm, the same W and p as R
+    and SciPy, on the paired differences, each group or the
+    repeated-measures residuals; Check at p < 0.05, Warning when the
+    rank-based test gives another verdict; the most extreme animal named),
+    **Sphericity** (repeated measures: Check when Mauchly's test rejects
+    it or cannot be computed, Warning when the correction would change
+    the verdict of the uncorrected p reported), **Equal spread** (ANOVA:
+    Check above an SD ratio of 2, Warning with unequal group sizes),
+    **Robustness check** and **Missing values**.
+  - **Demo data with each fault**: `demo_imaging_faults.mat`
+    (`DemoData.imagingFaults`: a 12-bit movie whose field slides 14 px,
+    the dye fading to ~65% and Cell 2 clipped at 4095, with three cell
+    ROIs) and `groups_faults/` (`demoGroups(folder, struct('Faults',
+    true))`: 6 animals, animal 6 responding three times as much to
+    Stimulated, the same Drug rise in every animal; `loadGroupDemo(true)`
+    opens it). The clean demos' numbers are unchanged.
 
 ## [0.9.0] - 2026-10-03
 
