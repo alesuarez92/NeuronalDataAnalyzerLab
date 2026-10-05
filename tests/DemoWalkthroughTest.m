@@ -119,6 +119,25 @@ function testExtractEphys(tests)
     shot(tests, app, 'ExtractEphysApp_02_lfp');
     app.processMUAData(struct());
     shot(tests, app, 'ExtractEphysApp_03_mua');
+    % The files LFP Analysis and MUA Analysis read: exactly these variables
+    % (frozen for 1.0); lfp_spacing_um only when the spacing is known
+    d = tempname; mkdir(d); cd0 = onCleanup(@() rmdir(d, 's'));
+    pL = fullfile(d, 'lfp.mat');
+    tests.verifyTrue(logical(app.saveLFPTo(pL)));
+    tests.verifyEqual(sort(who('-file', pL)), sort({'lfp_data'; 'lfp_channels'; 'lfp_fs'; 't_lfp'; ...
+        'stim_data'; 'stim_fs'; 't_stim'}));
+    app.setSpacing(50);
+    tests.verifyTrue(logical(app.saveLFPTo(pL)));
+    s = load(pL);
+    tests.verifyEqual(s.lfp_spacing_um, 50);
+    tests.verifyEqual(app.sessionState().settings.spacingUm, 50, 'the spacing goes into sessions');
+    pM = fullfile(d, 'mua.mat');
+    tests.verifyTrue(logical(app.saveMUATo(pM)));
+    tests.verifyEqual(sort(who('-file', pM)), sort({'mua_data'; 'mua_channels'; 'mua_fs'; 't_mua'; ...
+        'stim_data'; 'stim_fs'; 't_stim'; 'filterParams'}));
+    b = LFPAnalysisApp(); cb = onCleanup(@() delete(b.UIFig));
+    tests.verifyTrue(logical(b.openFile(pL)));
+    tests.verifyEqual(b.FileSpacingUm, 50, 'LFP Analysis reads the spacing from the file');
 end
 
 function testLFPAnalysis(tests)
