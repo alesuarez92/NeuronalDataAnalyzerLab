@@ -160,13 +160,13 @@ end
 function testExtractLDFFormats(tests)
     % Sessions with the recording format and channel names
     e = Session.new('ExtractLDFApp');
-    e.settings = struct('range', [0 60], 'view', 'Cropped segment', 'format', 'acq', ...
+    e.settings = struct('range', [0 60], 'view', 'Cropped segment', 'format', 'acqmat', ...
         'flowChannel', 2, 'flowName', 'LDF100C', 'flowUnits', 'BPU', 'stimulus', 1, ...
         'stimName', 'Trigger', 'block', 1, 'stimulusChannel', 1, 'ldfChannel', 2, 'rate', 500);
     e.results = struct('cropRange', [0 60], 'fs', 500, 'nSamples', 30001, 'ldfMean', 120, 'ldfSD', 4);
     [txt, refs] = MethodsWriter.fromSession(e);
     checkClean(tests, txt, refs);
-    verifyHas(tests, txt, 'probe] with AcqKnowledge (BIOPAC; .acq file) (LDF on');
+    verifyHas(tests, txt, 'probe] with AcqKnowledge (BIOPAC) and exported as a .mat file (LDF on');
     verifyHas(tests, txt, 'LDF on channel 2 ("LDF100C", BPU) and stimulus trigger on channel 1 ("Trigger"), both sampled at 500 Hz');
     tests.verifyFalse(contains(txt, 'LabChart'));
     % Comments as the stimulus, block 2 of a LabChart file

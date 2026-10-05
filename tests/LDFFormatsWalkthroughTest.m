@@ -3,8 +3,7 @@
 % WALKTHROUGH: EXTRACT LDF ON EVERY RECORDING FORMAT
 % =========================================================================
 % Drives ExtractLDFApp through its public methods (no dialogs) on the LDF
-% demo written as a LabChart text export, an AcqKnowledge .acq, a
-% PeriSoft-style table (semicolons, decimal commas), a Spike2 export, an
+% demo written as a LabChart text export, a PeriSoft-style table (semicolons, decimal commas), a Spike2 export, an
 % EDF+ file and a table without a time column (core/demo/demoLDFFormats.m): the flow
 % channel and stimulus guessed from the names, the plots titled with the
 % channel names, comments / markers as the stimulus, block choice on a
@@ -50,10 +49,10 @@ function testEveryFormat(tests)
     f = tests.TestData.files;
     tr = f.truth;
     app = ExtractLDFApp(); c = onCleanup(@() delete(app.UIFig));
-    kinds = {'labchartText', 'acq', 'table', 'spike2', 'edf'};
-    flows = {'LDF', 'LDF100C', 'Perfusion', 'LDF', 'LDF'};
-    stims = {'Stimulus', 'Trigger', 'Stimulus', 'Comments / markers', 'Stimulus'};
-    tol = [1e-4 1e-4 1e-4 1e-4 5e-3];                   % EDF: 16-bit samples
+    kinds = {'labchartText', 'table', 'spike2', 'edf'};
+    flows = {'LDF', 'Perfusion', 'LDF', 'LDF'};
+    stims = {'Stimulus', 'Stimulus', 'Comments / markers', 'Stimulus'};
+    tol = [1e-4 1e-4 1e-4 5e-3];                        % EDF: 16-bit samples
     for k = 1:numel(kinds)
         tests.verifyTrue(logical(app.openFile(f.(kinds{k}))), kinds{k});
         tests.verifyEqual(app.AppData.FlowName, flows{k}, kinds{k});
@@ -69,18 +68,18 @@ function testEveryFormat(tests)
         shot(tests, app, ['ExtractLDFApp_formats_' kinds{k}]);
     end
     % The same answer after crop: 20-280 s as in the demo
-    app.openFile(f.acq);
+    app.openFile(f.spike2);
     app.setRange(20, 280);
     app.processData();
-    p = fullfile(tests.TestData.tmp, 'cropped_acq.mat');
+    p = fullfile(tests.TestData.tmp, 'cropped_spike2.mat');
     tests.verifyTrue(logical(app.saveCroppedTo(p)));
     s = load(p);
     frozen(tests, s, {'stim', 'LDF', 't', 'Fs', 'flowName', 'flowUnits', 'stimName'}, ...
         'Extract LDF cropped file');
     tests.verifyEqual(s.Fs, tr.fs, 'AbsTol', 1e-9);
-    tests.verifyEqual(s.flowName, 'LDF100C');
-    tests.verifyEqual(s.flowUnits, 'BPU');
-    tests.verifyEqual(s.stimName, 'Trigger');
+    tests.verifyEqual(s.flowName, 'LDF');
+    tests.verifyEqual(s.flowUnits, 'PU');
+    tests.verifyEqual(s.stimName, 'Comments / markers');
     tests.verifyEqual(s.LDF, tr.ldf(20 * tr.fs + 1:280 * tr.fs + 1), 'AbsTol', 1e-9);
     % The cropped file opens in LDF Processing
     pr = ProcessingLDFApp(); c2 = onCleanup(@() delete(pr.UIFig));

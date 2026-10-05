@@ -12,9 +12,8 @@
 %                           com / comtext, tickrate, blocktimes; several
 %                           blocks) and text export (Interval=,
 %                           ChannelTitle=, Range= ... then time + columns)
-%   BIOPAC AcqKnowledge     native .acq (readBiopacACQ), MATLAB export .mat
-%                           (data, labels, units, isi, isi_units) and text
-%                           export
+%   BIOPAC AcqKnowledge     MATLAB export .mat (data, labels, units, isi,
+%                           isi_units) and text export
 %   CED Spike2              MATLAB export .mat (one struct per channel:
 %                           title, interval, values / times, start, codes)
 %   EDF / EDF+ / BDF        readEDF (LabChart, clinical and many other
@@ -73,11 +72,11 @@ classdef SignalSource
         %% formats - Supported files, for dialogs and Help
         function list = formats()
             list = struct( ...
-                'key', {'labchart', 'acq', 'acqmat', 'spike2', 'edf', 'text', 'ldfcropped'}, ...
-                'label', {'LabChart .mat export (ADInstruments)', 'AcqKnowledge .acq (BIOPAC)', ...
+                'key', {'labchart', 'acqmat', 'spike2', 'edf', 'text', 'ldfcropped'}, ...
+                'label', {'LabChart .mat export (ADInstruments)', ...
                     'AcqKnowledge .mat export (BIOPAC)', 'Spike2 .mat export (CED)', 'EDF / EDF+ / BDF', ...
                     'Text export (LabChart, AcqKnowledge, PeriSoft, moorVMS, CSV)', 'Cropped LDF .mat (stim, LDF, t, Fs)'}, ...
-                'ext', {'.mat', '.acq', '.mat', '.mat', '.edf;.bdf', '.txt;.csv;.tsv;.dat', '.mat'});
+                'ext', {'.mat', '.mat', '.mat', '.edf;.bdf', '.txt;.csv;.tsv;.dat', '.mat'});
         end
 
         %% label - Text of a format key
@@ -94,7 +93,6 @@ classdef SignalSource
             end
             [~, ~, ext] = fileparts(p);
             switch lower(ext)
-                case '.acq',                         fmt = 'acq';
                 case {'.edf', '.bdf', '.rec'},       fmt = 'edf';
                 case {'.txt', '.csv', '.tsv', '.dat', '.asc'}, fmt = 'text';
                 case '.mat'
@@ -102,7 +100,7 @@ classdef SignalSource
                     fmt = SignalSource.matKind(v, []);
                 otherwise
                     error('NeuroAnalyzer:io:unknownFormat', ['Cannot tell what kind of recording %s is. ' ...
-                        'Supported: LabChart .mat or text export, AcqKnowledge .acq / .mat / text, Spike2 .mat ' ...
+                        'Supported: LabChart .mat or text export, AcqKnowledge .mat / text, Spike2 .mat ' ...
                         'export, EDF / BDF, delimited text (.txt, .csv).'], p);
             end
         end
@@ -112,8 +110,6 @@ classdef SignalSource
             if nargin < 2 || isempty(fmt), fmt = SignalSource.detect(p); end
             if nargin < 3, opts = struct(); end
             switch fmt
-                case 'acq'
-                    rec = SignalSource.fromAcq(readBiopacACQ(p), p);
                 case 'edf'
                     rec = SignalSource.fromEDF(readEDF(p), p);
                 case 'text'
@@ -367,24 +363,6 @@ classdef SignalSource
                 rec.info.notes{end+1} = 'The file has no sampling rate (samplerate): 1000 Hz assumed.';
             end
             rec.info.rateAssumed = noRate;
-        end
-
-        %% fromAcq - readBiopacACQ struct
-        function rec = fromAcq(a, p)
-            ch = SignalSource.emptyChannels();
-            for k = 1:numel(a.channels)
-                c = a.channels(k);
-                ch(end+1) = struct('chan', k, 'block', 1, 'name', c.name, 'units', c.units, 'fs', c.fs, ...
-                    'data', c.data, 't0', 0); %#ok<AGROW>
-            end
-            ev = SignalSource.emptyEvents();
-            for k = 1:numel(a.events)
-                e = a.events(k);
-                ev(end+1) = struct('time', e.time, 'block', 1, 'channel', e.channel, 'type', 'marker', ...
-                    'text', e.text); %#ok<AGROW>
-            end
-            rec = SignalSource.makeRec(ch, ev, {a.channels.name}, {a.channels.units}, 'acq', p);
-            rec.info.notes = [rec.info.notes, a.info.notes];
         end
 
         %% fromAcqMat - AcqKnowledge "Save As .mat": data (samples x channels), labels, units, isi, isi_units

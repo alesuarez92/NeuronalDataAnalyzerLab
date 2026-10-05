@@ -58,7 +58,7 @@
 %                      violated, small n)
 %   'intan' | 'openephys' | 'nwb'   demoFormats: the demo tank in that format
 % core/demo/demoLDFFormats writes the LDF demo as a LabChart text export,
-% an AcqKnowledge .acq, a PeriSoft-style table, a Spike2 export and a table
+% a PeriSoft-style table, a Spike2 export, an EDF+ file and a table
 % without a time column (Extract LDF's other inputs).
 % writeAll also writes eeg/ (core/demo/demoEEG: oddball scalp EEG of 8
 % participants and a continuous rodent recording, in every EEG format) and

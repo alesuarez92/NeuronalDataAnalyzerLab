@@ -13,9 +13,6 @@
 %                       (Interval=, ChannelTitle=, Range=; time column;
 %                       channels Stimulus, Blood pressure, LDF; a comment
 %                       "#* Stim" at every onset)
-%   files.acq           demo_ldf.acq: AcqKnowledge 4.1 file (writeBiopacACQ),
-%                       Trigger at 1000 Hz and LDF100C (BPU) at 100 Hz, a
-%                       "Stimulus" event marker at every onset
 %   files.table         demo_ldf_perisoft.csv: PeriSoft-style table,
 %                       semicolons and decimal commas, "Time [s];Perfusion
 %                       [PU];Stimulus [V]"
@@ -31,11 +28,11 @@
 %                       and DemoData's ground truth (responses)
 %   files.folder
 % Deterministic (DemoData's fixed seed). Requires core/io on the path
-% (writeBiopacACQ, writeEDF). Toolboxes: none; also runs in GNU Octave.
+% (writeEDF). Toolboxes: none; also runs in GNU Octave.
 % =========================================================================
 
 function files = demoLDFFormats(folder)
-    cacheVersion = 2;
+    cacheVersion = 3;
     cached = nargin < 1 || isempty(folder);
     if cached
         folder = fullfile(DemoData.folder(), 'ldf_formats');
@@ -50,7 +47,7 @@ function files = demoLDFFormats(folder)
         end
     end
     if ~exist(folder, 'dir'), mkdir(folder); end
-    if exist('writeBiopacACQ', 'file') ~= 2
+    if exist('writeEDF', 'file') ~= 2
         addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'io'));
     end
 
@@ -77,14 +74,6 @@ function files = demoLDFFormats(folder)
         'Range=\t10.000 V\t200.00 mmHg\t1000.0 PU\n']);
     files.labchartText = fullfile(folder, 'demo_ldf_labchart.txt');
     writeText(files.labchartText, [head strjoin(rows, newline) newline]);
-
-    % AcqKnowledge .acq: trigger at 1000 Hz, LDF at 100 Hz, markers at the onsets
-    ch = struct('name', {'Trigger', 'LDF100C'}, 'units', {'V', 'BPU'}, ...
-        'data', {stim1k, ldf}, 'divider', {1, ds}, 'type', {'int16', 'double'}, ...
-        'scale', {[], []}, 'offset', {[], []});
-    mk = struct('sample', num2cell(round(onsets * 1000)), 'channel', 0, 'type', 'stim', 'text', 'Stimulus');
-    files.acq = fullfile(folder, 'demo_ldf.acq');
-    writeBiopacACQ(files.acq, ch, 1, 'Markers', mk);
 
     % PeriSoft-style table: semicolons, decimal commas
     rows = cell(1, n);
@@ -138,7 +127,7 @@ end
 
 function tf = allExist(files, folder)
     tf = true;
-    for k = {'labchartText', 'acq', 'table', 'noTime', 'spike2', 'edf'}
+    for k = {'labchartText', 'table', 'noTime', 'spike2', 'edf'}
         if ~isfield(files, k{1}) || exist(fullfile(folder, fname(files.(k{1}))), 'file') ~= 2
             tf = false; return;
         end

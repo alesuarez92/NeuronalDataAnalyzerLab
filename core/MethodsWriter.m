@@ -367,7 +367,6 @@ classdef MethodsWriter
             else
                 switch fmt
                     case 'labchart',   how = ' with LabChart (ADInstruments) and exported as a .mat file';
-                    case 'acq',        how = ' with AcqKnowledge (BIOPAC; .acq file)';
                     case 'acqmat',     how = ' with AcqKnowledge (BIOPAC) and exported as a .mat file';
                     case 'spike2',     how = ' with Spike2 (CED) and exported as a .mat file';
                     case 'edf',        how = ' [please add: acquisition system] and stored as an EDF / BDF file';

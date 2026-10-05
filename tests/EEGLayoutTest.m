@@ -8,8 +8,8 @@
 % reference suffixes, bipolar names), and the rule that the same
 % electrode from different files lands in the same place: the scalp demo
 % of core/demo/demoEEG read from EEGLAB, FieldTrip and BrainVision gives
-% the same directions, and the rodent demo from EEGLAB, FieldTrip, EGI
-% .mff and EEG-BIDS the same mm from bregma. Also: orientation guessing
+% the same directions, and the rodent demo from EEGLAB, FieldTrip and
+% EEG-BIDS the same mm from bregma. Also: orientation guessing
 % on files whose axes were swapped, the duplicate / outside / missing
 % reports, the 'Source', 'Positions' and 'Edits' options, the drawing
 % coordinates and the plot (only where figures can be drawn).
@@ -28,7 +28,7 @@ function setupOnce(tests)
     tests.TestData.tmp = fullfile(tempdir, ['NeuroAnalyzerEEGLayoutTest_' char(java.util.UUID.randomUUID)]);
     mkdir(tests.TestData.tmp);
     tests.TestData.demo = demoEEG(fullfile(tests.TestData.tmp, 'demo'), 'Participants', 1, ...
-        'Kinds', {'scalp', 'rodent'}, 'Formats', {'eeglab', 'fieldtrip', 'brainvision', 'mff', 'bids'});
+        'Kinds', {'scalp', 'rodent'}, 'Formats', {'eeglab', 'fieldtrip', 'brainvision', 'bids'});
 end
 
 function teardownOnce(tests)
@@ -171,7 +171,7 @@ function testDemoRodentSameSkullPositions(tests)
     d = tests.TestData.demo;
     tr = d.truth.rodent;
     want = [tr.ml(:), tr.ap(:), zeros(4, 1)];
-    files = {d.rodent.eeglab, d.rodent.fieldtrip, d.rodent.mff, d.rodent.bids};
+    files = {d.rodent.eeglab, d.rodent.fieldtrip, d.rodent.bids};
     for k = 1:numel(files)
         eeg = EEGSource.open(files{k});
         L = EEGLayout.fromEEG(eeg);
@@ -182,8 +182,6 @@ function testDemoRodentSameSkullPositions(tests)
         verifySubstring(tests, L.frame, 'mm from bregma');
         verifyEqual(tests, L.summary, '4 of 4 channels placed: 4 from the file.');
     end
-    L = EEGLayout.fromEEG(EEGSource.open(d.rodent.mff));
-    verifySubstring(tests, L.frame, 'in cm');
     L = EEGLayout.fromEEG(EEGSource.open(d.rodent.bids));
     verifySubstring(tests, L.frame, 'axes not stated');
     verifyTrue(tests, any(contains(L.notes, 'Orientation not stated')));

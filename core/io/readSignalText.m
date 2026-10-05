@@ -12,7 +12,7 @@ function rec = readSignalText(p, opts)
 %     'DateFormat=', 'TopValue=', 'BottomValue='; then rows of time and one
 %     column per channel; text after the numbers of a row is a comment at
 %     that time. A new header starts a new block.
-%   AcqKnowledge text export with header (BIOPAC): the .acq path, '<x>
+%   AcqKnowledge text export with header (BIOPAC): the source file path, '<x>
 %     msec/sample', '<n> channels', then a name line and a units line per
 %     channel, then the rows (the first column is time when "Horizontal
 %     scale values" was ticked; otherwise the rate comes from msec/sample).
@@ -214,7 +214,7 @@ for c = 1:size(vals, 2)
 end
 rec = SignalSource.makeRec(ch, SignalSource.emptyEvents(), names, units, 'text', p);
 rec.info.label = 'AcqKnowledge text export';
-rec.info.notes{end+1} = 'AcqKnowledge text export: event markers are not in text exports (use the .acq file).';
+rec.info.notes{end+1} = 'AcqKnowledge text export: event markers are not in text exports.';
 end
 
 %% genericText - Header rows (names, units), then numeric rows

@@ -2,13 +2,11 @@
 % =========================================================================
 % PHYSIOLOGY RECORDINGS FROM THE COMMON ACQUISITION SYSTEMS (LDF IMPORT)
 % =========================================================================
-% core/io/SignalSource.m, readSignalText.m, readBiopacACQ.m and
-% writeBiopacACQ.m: every format is built here as its software writes it
-% (LabChart .mat with several blocks, rates, an empty channel and
-% comments; LabChart and AcqKnowledge text; a PeriSoft / moorVMS-style table
-% with a decimal comma and clock times; AcqKnowledge .acq, uncompressed,
-% compressed and big-endian, with rates that differ and event markers;
-% AcqKnowledge and Spike2 .mat exports), then read back: names, units,
+% core/io/SignalSource.m and readSignalText.m: every format is built here
+% as its software writes it (LabChart .mat with several blocks, rates, an
+% empty channel and comments; LabChart and AcqKnowledge text; a PeriSoft /
+% moorVMS-style table with a decimal comma and clock times; AcqKnowledge
+% and Spike2 .mat exports), then read back: names, units,
 % rates, values, comments / markers and their times, the flow and
 % stimulus channels guessed from the names, and the stimulus put on the
 % flow channel's time base; the LDF demo written in the other formats
@@ -160,7 +158,7 @@ function testAcqKnowledgeTextAndMat(tests)
     % Text export with header (msec/sample, channels, name / unit lines)
     rows = arrayfun(@(k) sprintf('%g\t%g\t%g', (k - 1) * 25, 100 + k, double(k >= 10 && k < 15)), 1:40, ...
         'UniformOutput', false);
-    s = sprintf('C:\\Data\\rat3.acq\n25 msec/sample\n2 channels\nLDF100C\nBPU\nStim\nVolts\nmin\tCH1\tCH2\n');
+    s = sprintf('C:\\Data\\rat3\n25 msec/sample\n2 channels\nLDF100C\nBPU\nStim\nVolts\nmin\tCH1\tCH2\n');
     f = tmp(tests, 'acq_export.txt');
     writeText(f, [s strjoin(rows, newline)]);
     rec = SignalSource.open(f);
@@ -237,49 +235,6 @@ function testSpike2Export(tests)
     tests.verifyEqual(find(diff([0 L.stim]) > 0), [51 151], 'event times relative to the LDF start (2 s)');
 end
 
-function testBiopacACQ(tests)
-    t = (0:3999) / 1000;
-    ch = struct('name', {'LDF100C', 'Stimulus', 'Temp'}, 'units', {'BPU', 'Volts', 'degC'}, ...
-        'data', {200 + 50 * sin(2 * pi * 0.5 * t), 5 * double(mod(t, 1) < 0.2), 37 + 0.001 * (0:1000)}, ...
-        'divider', {1, 1, 4}, 'type', {'int16', 'double', 'int16'});
-    mk = struct('sample', {1000, 2500}, 'channel', {0, 2}, 'type', {'stm', 'usr'}, 'text', {'stim on', 'drug'});
-    variants = {{'ByteOrder', 'le'}, {'ByteOrder', 'be'}};
-    if usejava('jvm')
-        variants{end+1} = {'Compressed', true};
-        variants{end+1} = {'Compressed', true, 'ByteOrder', 'be'};
-    end
-    for v = 1:numel(variants)
-        f = tmp(tests, sprintf('biopac_%d.acq', v));
-        writeBiopacACQ(f, ch, 1, 'Markers', mk, variants{v}{:});
-        a = readBiopacACQ(f);
-        where = sprintf('variant %d', v);
-        tests.verifyEqual({a.channels.name}, {'LDF100C', 'Stimulus', 'Temp'}, where);
-        tests.verifyEqual({a.channels.units}, {'BPU', 'Volts', 'degC'}, where);
-        tests.verifyEqual([a.channels.fs], [1000 1000 250], where);
-        tests.verifyEqual(numel(a.channels(3).data), 1001, [where ': the extra sample of the slow channel']);
-        tests.verifyEqual(a.channels(1).data, ch(1).data, 'AbsTol', 100 / 65000, where);
-        tests.verifyEqual(a.channels(2).data, ch(2).data, where);      % float64: exact
-        tests.verifyEqual(a.channels(3).data, ch(3).data, 'AbsTol', 1 / 65000, where);
-        tests.verifyEqual([a.events.time], [1 2.5], 'AbsTol', 1e-12, where);
-        tests.verifyEqual({a.events.text}, {'stim on', 'drug'}, where);
-        tests.verifyEqual([a.events.channel], [0 2], where);
-        tests.verifyEqual({a.events.type}, {'stm', 'usr'}, where);
-        tests.verifyEqual(a.info.revision, 84);
-    end
-    tests.verifyEqual(a.info.version, '4.1');
-    % Through SignalSource: flow and stimulus by name, markers as events
-    rec = SignalSource.open(f);
-    tests.verifyEqual(rec.info.format, 'acq');
-    [iFlow, iStim] = SignalSource.guessChannels(rec);
-    tests.verifyEqual([iFlow iStim], [1 2]);
-    L = SignalSource.toLDF(rec, 1, 'events:stim on', 1);
-    tests.verifyEqual(L.onsets, 1);
-    % Not an .acq file
-    g = tmp(tests, 'bad.acq');
-    writeText(g, 'hello world, this is text');
-    tests.verifyError(@() readBiopacACQ(g), 'NeuroAnalyzer:io:acq');
-end
-
 function testCroppedAndErrors(tests)
     d = DemoData.ldfCropped();
     f = tmp(tests, 'cropped.mat');
@@ -294,16 +249,16 @@ function testCroppedAndErrors(tests)
     g = tmp(tests, 'other.mat');
     save(g, '-struct', 'x');
     tests.verifyError(@() SignalSource.open(g), 'NeuroAnalyzer:io:unknownFormat');
-    tests.verifyError(@() SignalSource.open(tmp(tests, 'missing.acq')), 'NeuroAnalyzer:io:fileNotFound');
+    tests.verifyError(@() SignalSource.open(tmp(tests, 'missing.mat')), 'NeuroAnalyzer:io:fileNotFound');
     tests.verifyError(@() SignalSource.detect(tmp(tests, 'x.xyz')), 'NeuroAnalyzer:io:fileNotFound');
 end
 
 function testDemoLDFFormats(tests)
     f = demoLDFFormats(tmp(tests, 'ldf_formats'));
     tr = f.truth;
-    kinds = {'labchartText', 'acq', 'table', 'spike2', 'edf'};
-    flows = {'LDF', 'LDF100C', 'Perfusion', 'LDF', 'LDF'};
-    tol = [1e-4 1e-4 1e-4 1e-4 5e-3];                   % EDF: 16-bit samples
+    kinds = {'labchartText', 'table', 'spike2', 'edf'};
+    flows = {'LDF', 'Perfusion', 'LDF', 'LDF'};
+    tol = [1e-4 1e-4 1e-4 5e-3];                        % EDF: 16-bit samples
     for k = 1:numel(kinds)
         rec = SignalSource.open(f.(kinds{k}));
         [iFlow, iStim] = SignalSource.guessChannels(rec);
@@ -319,9 +274,6 @@ function testDemoLDFFormats(tests)
     % Comments / markers are the onsets as well
     rec = SignalSource.open(f.labchartText);
     tests.verifyEqual(sort([rec.events.time]), tr.onsets, 'AbsTol', 1e-9);
-    rec = SignalSource.open(f.acq);
-    tests.verifyEqual(sort([rec.events.time]), tr.onsets, 'AbsTol', 1e-9);
-    tests.verifyEqual(rec.channels(1).fs, 1000, 'AbsTol', 1e-9, 'trigger at the base rate');
     rec = SignalSource.open(f.edf);
     tests.verifyEqual(sort([rec.events.time]), tr.onsets, 'AbsTol', 1e-9, 'EDF+ annotations');
     % No time column: the rate is given

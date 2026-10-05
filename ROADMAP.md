@@ -48,7 +48,7 @@ them exposed two limits, which are now fixed.
 | ✅ | Motion correction and many ROIs | Imaging | Rigid registration, several ROIs at once, automatic cell detection from a local correlation image. |
 | ✅ | Laser speckle flowmetry | Blood flow | Raw speckle, contrast or perfusion images: speckle contrast, flow index, flow per ROI over time, trials and a response map. |
 | ✅ | Histology and culture images | Imaging | Cell counts in still images, marker-positive cells, counts per region and per mm², channel and section / time-point alignment (shift or landmarks), with plain-language checks. |
-| ✅ | More acquisition systems | Data formats | Intan RHD2000, Open Ephys binary and NWB 2.x import; NWB export. Then SpikeGLX, Blackrock, Neuralynx, Multi Channel Systems HDF5, Intan `.rhs` and Open Ephys legacy `.continuous` in Extract Ephys; LabChart, AcqKnowledge, Spike2, EDF and tables in Extract LDF. |
+| ✅ | More acquisition systems | Data formats | Intan RHD2000, Open Ephys binary and NWB 2.x import; NWB export. Then SpikeGLX, Blackrock, Neuralynx, Multi Channel Systems HDF5, Intan `.rhs` and Open Ephys legacy `.continuous` in Extract Ephys; LabChart, AcqKnowledge exports, Spike2, EDF and tables in Extract LDF. |
 | ✅ | Batch processing | Every pipeline | Run one pipeline over a folder of animals or sessions with the same settings and get one summary table plus a per-file log. |
 | ✅ | Session files and reports | Reproducibility | Save settings, input-file provenance (with checksums) and results together; a one-page PDF report per analysis for the lab notebook. |
 | ✅ | CSD methods | LFP | Inverse CSD (delta, step, spline) and kernel CSD next to the standard CSD, tested against laminar data with a known CSD. |
@@ -79,7 +79,6 @@ their files.
 | ✅ | Plain matrix `.mat` | A form says which variable is the data, the sampling rate, the trial and channel dimensions and the conditions. No code needed. |
 | ✅ | EDF / EDF+ / BDF | BioSemi, most clinical systems, and exports from OpenBCI, Natus, Compumedics and others. Continuous recordings; EDF+ annotations and BioSemi trigger codes become events; EDF+D gaps kept. |
 | ✅ | BrainVision (`.vhdr` / `.eeg` / `.vmrk`) | Brain Products Recorder and Analyzer; also a common export from MNE and EEGLAB. Continuous recordings with their markers, Analyzer segments (condition = marker at time 0), positions, units, and the amplifier filters used when recording. |
-| ✅ | EGI `.mff` | Magstim EGI geodesic nets: continuous recordings with pauses, events, positions and channel gains (segmented files are read as one piece). |
 | ✅ | EEG-BIDS folders | Shared datasets (OpenNeuro): the readers above plus the channel, electrode and event tables. |
 | ✅ | XDF (Lab Streaming Layer) | LabRecorder files: the EEG stream and marker streams as events, clock offsets applied. |
 | 🟢 | Neuroscan / ANT `.cnt`, g.tec, Brainstorm, ERPLAB | Later, when needed: one small, separately tested reader each. |
@@ -92,7 +91,7 @@ Done in step 3 (*Electrode layout…* in the EEG window; `core/EEGLayout.m`,
 `core/io/readElectrodes.m`, `core/io/writeElectrodes.m`):
 
 - Positions stored in the file are used first (EEGLAB `chanlocs`, FieldTrip
-  `elec`, BrainVision coordinates, EGI sensor layouts, BIDS `electrodes.tsv`).
+  `elec`, BrainVision coordinates, BIDS `electrodes.tsv`).
 - Otherwise the channels are placed by name on the 10-5 system (345
   positions, which include the 10-20 and 10-10 ones), computed from the
   system's definition on an idealized sphere; old and new names such as
@@ -129,7 +128,7 @@ Done in step 3 (*Electrode layout…* in the EEG window; `core/EEGLayout.m`,
 | ✅ | 3. Electrode layouts | `core/EEGLayout.m` (the 10-5 template computed, name matching, one orientation, skull layouts in mm from bregma, the check), `core/io/readElectrodes.m` / `writeElectrodes.m` (position files), the *Electrode layout…* window in step 1, sessions and methods text; `tests/EEGLayoutTest.m`, `tests/ElectrodesFileTest.m`, walkthrough. BioSemi and EGI HydroCel templates wait for the licence check (above). |
 | ✅ | 4. Scalp maps | `core/ScalpMap.m`, *Scalp maps* in step 5 of the window (`apps/EEGAnalysisApp.m`), sessions, methods text and Help; `tests/ScalpMapTest.m`, walkthrough. The mean voltage in the window of step 5, one map per condition and A minus B, one colour scale: spherical splines on scalp layouts (Perrin et al., 1989; as MNE-Python's interpolation matrix without regularization), a thin-plate spline inside the electrodes on skull layouts. Tested against MNE-Python and scipy and on the demo's known distributions (P300 at Pz, N1 at Cz, the rodent VEP over V1). |
 | ✅ | 5. Time–frequency per condition | Step 7 of the window (`EEGAnalysis.timeFrequency`, `grandTimeFrequency`; `apps/EEGAnalysisApp.m`), sessions, methods text and Help; tests in `tests/EEGAnalysisTest.m`, walkthrough. Morlet wavelets of `core/TimeFrequency.m` on every trial: ERSP per condition and A minus B, ITPC with its chance level, band power as % change (mean ± SEM), per participant and across participants. Values only where the whole wavelet lies inside the trial (the same as from the continuous recording); the window says which frequencies the trial length allows. The demo's alpha halves after Target (O1 / Oz / O2, 350–650 ms) as a known answer. |
-| ✅ | 6. Raw recordings | BrainVision read first (the author's lab records with Brain Products); EDF / BDF, EGI `.mff` and EEG-BIDS done, each with a tested writer. Basic steps in the window (steps 2 and 3): bad channels (suggested, left out of the reference, rejection and ERPs), zero-phase FIR filters as MNE-Python (high-pass, low-pass, notch), re-reference (average, linked mastoids, chosen channels), trials cut at named events, trials rejected by peak-to-peak or absolute amplitude; a raw demo with known artefacts. ICA and advanced cleaning stay in EEGLAB / FieldTrip; Help explains how to bring their result back. |
+| ✅ | 6. Raw recordings | BrainVision read first (the author's lab records with Brain Products); EDF / BDF and EEG-BIDS done, each with a tested writer. Basic steps in the window (steps 2 and 3): bad channels (suggested, left out of the reference, rejection and ERPs), zero-phase FIR filters as MNE-Python (high-pass, low-pass, notch), re-reference (average, linked mastoids, chosen channels), trials cut at named events, trials rejected by peak-to-peak or absolute amplitude; a raw demo with known artefacts. ICA and advanced cleaning stay in EEGLAB / FieldTrip; Help explains how to bring their result back. |
 | ✅ | 7. Batch, sessions, methods text, website | Sessions, methods text, Help and the website came with each step. Batch: the pipeline *EEG: ERPs and a measure per condition* (`Batch.fileEEG`) runs the window's steps on a folder, one row per file and condition, with the same numbers as the window; demo batch on the raw recordings; `tests/BatchFeaturesTest.m`, walkthrough frames. |
 
 ## Direction: understand, check and teach
