@@ -8,8 +8,8 @@
 % window's public methods (no dialogs). A frame is saved after every step
 % to test-artifacts/screens/walkthrough/ExtractEphysApp_xNN_<step>.png.
 % The exported NWB file is reopened in the window to close the loop. The
-% demo in the other formats (SpikeGLX, Blackrock, Neuralynx, Plexon, Multi
-% Channel Systems HDF5, Intan .rhs, Open Ephys legacy, ABF) is loaded
+% demo in the other formats (SpikeGLX, Blackrock, Neuralynx, Multi Channel
+% Systems HDF5, Intan .rhs, Open Ephys legacy) is loaded
 % through the Source dropdown and its LFP processed. Skipped when no
 % display is available.
 % =========================================================================
@@ -84,7 +84,7 @@ end
 function testSourceDropdown(tests)
     app = ExtractEphysApp(); c = onCleanup(@() delete(app.UIFig));
     tests.verifyEqual(app.SourceMenu.ItemsData, {'tdt', 'intan', 'openephys', 'nwb', 'spikeglx', 'blackrock', ...
-        'neuralynx', 'plexon', 'mcs', 'intanrhs', 'openephyslegacy', 'abf'});
+        'neuralynx', 'mcs', 'intanrhs', 'openephyslegacy'});
     tests.verifyEqual(app.SourceMenu.Value, 'tdt');
     app.SourceMenu.Value = 'openephys';
     app.onSourceChanged();
@@ -123,7 +123,7 @@ end
 function testMoreFormatsDemo(tests)
     % Try demo data in each of the other formats: channels, rate, stimulus, LFP
     app = ExtractEphysApp(); c = onCleanup(@() delete(app.UIFig));
-    fmts = {'spikeglx', 'blackrock', 'neuralynx', 'plexon', 'mcs', 'intanrhs', 'openephyslegacy', 'abf'};
+    fmts = {'spikeglx', 'blackrock', 'neuralynx', 'mcs', 'intanrhs', 'openephyslegacy'};
     for k = 1:numel(fmts)
         f = fmts{k};
         app.SourceMenu.Value = f;
@@ -137,7 +137,7 @@ function testMoreFormatsDemo(tests)
         app.processLFPData(struct());
         tests.verifyNotEmpty(app.LastProcessedLFP, f);
     end
-    shot(tests, app, 'ExtractEphysApp_x14_abf_lfp');
+    shot(tests, app, 'ExtractEphysApp_x14_openephyslegacy_lfp');
 end
 
 function testOpenRecordingAutoDetect(tests)

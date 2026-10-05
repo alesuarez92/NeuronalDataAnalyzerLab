@@ -11,8 +11,8 @@
 % header, NumPy .npy header, Open Ephys structure.oebin + continuous.dat,
 % an NWB-shaped HDF5 file made with h5create/h5write), plus clear-error
 % checks (wrong magic number, missing files, truncated data). The other
-% readers (SpikeGLX, Blackrock, Neuralynx, Plexon, Multi Channel Systems,
-% Intan RHS, Open Ephys legacy, ABF) have their own tests in
+% readers (SpikeGLX, Blackrock, Neuralynx, Multi Channel Systems, Intan
+% RHS, Open Ephys legacy) have their own tests in
 % EphysFormatsTest; here the demo in each of those formats goes through
 % EphysSource (detection by extension, folder contents and first bytes).
 % =========================================================================
@@ -491,14 +491,13 @@ function testEphysSourceHelpers(tests)
     verifyEqual(tests, rec.info.channelNames, {'Ch 1', 'Ch 2'});
     list = EphysSource.formats();
     verifyEqual(tests, {list.key}, {'tdt', 'intan', 'openephys', 'nwb', 'spikeglx', 'blackrock', ...
-        'neuralynx', 'plexon', 'mcs', 'intanrhs', 'openephyslegacy', 'abf'});
-    verifyEqual(tests, EphysSource.label('plexon'), 'Plexon .plx');
+        'neuralynx', 'mcs', 'intanrhs', 'openephyslegacy'});
 end
 
 function testEphysSourceMoreFormatsDemo(tests)
     % The demo in each of the other formats, opened with format detection
     d = tests.TestData.demo;
-    fmts = {'spikeglx', 'blackrock', 'neuralynx', 'plexon', 'mcs', 'intanrhs', 'openephyslegacy', 'abf'};
+    fmts = {'spikeglx', 'blackrock', 'neuralynx', 'mcs', 'intanrhs', 'openephyslegacy'};
     for k = 1:numel(fmts)
         f = fmts{k};
         if ~isfield(d, f), continue; end                % mcs: needs the HDF5 functions
@@ -525,9 +524,9 @@ function testEphysSourceDetectByContents(tests)
     verifyEqual(tests, EphysSource.detect(fullfile(d.openephyslegacy, '100_CH1.continuous')), 'openephyslegacy');
     verifyEqual(tests, EphysSource.detect(strrep(d.spikeglx, '.bin', '.meta')), 'spikeglx');
     % Renamed files: by their first bytes
-    src = {d.plexon, d.intanrhs, d.abf, d.blackrock, fullfile(d.neuralynx, 'CSC1.ncs'), ...
+    src = {d.intanrhs, d.blackrock, fullfile(d.neuralynx, 'CSC1.ncs'), ...
         fullfile(d.openephyslegacy, '100_CH1.continuous')};
-    expect = {'plexon', 'intanrhs', 'abf', 'blackrock', 'neuralynx', 'openephyslegacy'};
+    expect = {'intanrhs', 'blackrock', 'neuralynx', 'openephyslegacy'};
     for k = 1:numel(src)
         g = fullfile(tests.TestData.tmp, sprintf('renamed%d.dat', k));
         copyfile(src{k}, g);

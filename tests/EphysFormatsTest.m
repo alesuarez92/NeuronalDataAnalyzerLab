@@ -9,11 +9,9 @@
 % sync word) and nidq (MN / XA / digital word), Blackrock NSx 2.1 / 2.3 /
 % 3.0 (scaling, analog inputs, several data blocks) with NEV digital
 % events, Neuralynx .ncs folders (ADBitVolts, inverted input, natural
-% channel order) with Events.nev TTLs, Axon ABF 2 (gap-free, episodic
-% with sweep start times, float32), Open Ephys legacy .continuous folders
-% (CH, ADC, TTL events, first timestamp), Intan RHS2000 (digital and
-% analog inputs, stimulation current, DC amplifier data saved), Plexon
-% .plx (versions 107 and 102, AI channels, events, spike times, gaps) and
+% channel order) with Events.nev TTLs, Open Ephys legacy .continuous
+% folders (CH, ADC, TTL events, first timestamp), Intan RHS2000 (digital
+% and analog inputs, stimulation current, DC amplifier data saved) and
 % Multi Channel Systems HDF5 (electrode, auxiliary and digital streams,
 % event entities, gaps; MATLAB only). Values in volts, rates, channel
 % names and the stimulus lines are checked. No display needed.
@@ -135,39 +133,6 @@ function testNeuralynx(tests)
     tests.verifyError(@() readNeuralynx(e), 'NeuroAnalyzer:io:neuralynx');
 end
 
-function testABF(tests)
-    % Gap-free int16: mV channels become volts, a pA channel is a stimulus
-    x = [ramp(2, 1000); 50 * double(mod(0:999, 250) < 25)];
-    f = tmp(tests, 'gapfree.abf');
-    writeABF(f, x, 20000, 'Names', {'Vm', 'Vm2', 'Icmd'}, 'Units', {'mV', 'mV', 'pA'});
-    rec = readABF(f);
-    tests.verifyEqual(rec.info.format, 'abf');
-    tests.verifyEqual(rec.streams.xRAW.fs, 20000, 'AbsTol', 1e-6);
-    tests.verifyEqual(rec.info.channelNames, {'Vm', 'Vm2'});
-    tests.verifyEqual(double(rec.streams.xRAW.data), x(1:2, :) * 1e-3, 'AbsTol', 1e-7);
-    tests.verifyEqual(rec.info.stimNames, {'Icmd'});
-    tests.verifyEqual(double(rec.streams.Whis.data), x(3, :), 'AbsTol', 0.01);
-    tests.verifyEqual(rec.info.nSweeps, 1);
-    % Episodic: 3 sweeps of 400 samples, started 1 s apart
-    e = reshape(ramp(1, 1200), 1, 400, 3);
-    f = tmp(tests, 'episodic.abf');
-    writeABF(f, e, 10000, 'SweepStarts', [0 1 2]);
-    rec = readABF(f);
-    tests.verifyEqual(rec.info.nSweeps, 3);
-    tests.verifyEqual(rec.info.sweepStarts, [0 1 2], 'AbsTol', 1e-6);
-    tests.verifyEqual(double(rec.streams.xRAW.data), reshape(e, 1, []) * 1e-3, 'AbsTol', 1e-7);
-    tests.verifyEqual(rec.info.stimNames, {'(no stimulus channel)'});
-    % float32 samples are used as they are
-    f = tmp(tests, 'float.abf');
-    writeABF(f, x(1, :), 20000, 'Float', true, 'Units', {'V'});
-    rec = readABF(f);
-    tests.verifyEqual(double(rec.streams.xRAW.data), x(1, :), 'AbsTol', 1e-6);
-    % ABF 1 is refused
-    f = tmp(tests, 'old.abf');
-    fid = fopen(f, 'w'); fwrite(fid, uint8('ABF '), 'uint8'); fwrite(fid, zeros(1, 2044), 'uint8'); fclose(fid);
-    tests.verifyError(@() readABF(f), 'NeuroAnalyzer:io:abf');
-end
-
 function testOpenEphysLegacy(tests)
     x = 100e-6 * ramp(3, 2500);
     a = 2 * double(mod(0:2499, 1000) < 100);
@@ -222,42 +187,6 @@ function testIntanRHS(tests)
     f3 = tmp(tests, 'bad.rhs');
     fid = fopen(f3, 'w'); fwrite(fid, zeros(1, 200), 'uint8'); fclose(fid);
     tests.verifyError(@() readIntanRHS(f3), 'NeuroAnalyzer:io:intan');
-end
-
-function testPlexon(tests)
-    x = 100e-6 * ramp(3, 2500);
-    ai = 2 * double(mod(0:2499, 1000) < 100);
-    ev = struct('channel', {1, 3, 257}, 'sample', {[301 1301], 2001, [10 20]});
-    sp = struct('channel', {1, 1, 2}, 'unit', {0, 1, 1}, 'sample', {[100 200], 500, [700 800 900]});
-    f = tmp(tests, 'rec.plx');
-    writePlexon(f, x, 20000, 'AI', ai, 'Events', ev, 'Spikes', sp, 'Start', 4000);
-    rec = readPlexon(f);
-    tests.verifyEqual(rec.info.format, 'plexon');
-    tests.verifyEqual(rec.streams.xRAW.fs, 20000);
-    tests.verifyEqual(rec.info.channelNames, {'WB01', 'WB02', 'WB03'});
-    tests.verifyEqual(double(rec.streams.xRAW.data), x, 'AbsTol', 1e-7);
-    tests.verifyEqual(rec.info.firstTimestamp, 0.1, 'AbsTol', 1e-12);
-    tests.verifyEqual(rec.info.stimNames, {'AI01', 'EVT01', 'EVT03'}, 'strobed events left out');
-    s = double(rec.streams.Whis.data);
-    tests.verifyEqual(s(1, :), ai, 'AbsTol', 1e-4);
-    tests.verifyEqual(find(diff([0 s(2, :)]) == 1), [301 1301]);
-    tests.verifyEqual(find(s(3, :)), 2001:2020, '1 ms pulse');
-    tests.verifyEqual([rec.info.spikes.channel], [1 1 2]);
-    tests.verifyEqual([rec.info.spikes.unit], [0 1 1]);
-    tests.verifyEqual(rec.info.spikes(3).times, ([700 800 900] - 1) / 20000, 'AbsTol', 1e-9);
-    % Version 102 gains, a field-potential channel and a 0.5 s gap
-    f2 = tmp(tests, 'old.plx');
-    writePlexon(f2, x(1, :), 1000, 'Version', 102, 'Names', {'FP01'}, 'GapAfter', 1, 'GapTicks', 20000);
-    rec = readPlexon(f2);
-    tests.verifyEqual(rec.info.nGaps, 1);
-    v = double(rec.streams.xRAW.data);
-    tests.verifyEqual(size(v), [1 3000]);
-    tests.verifyEqual(v([1:1000 1501:3000]), x(1, :), 'AbsTol', 1.3e-6);
-    tests.verifyEqual(v(1001:1500), zeros(1, 500));
-    tests.verifyEqual(rec.info.stimNames, {'(no stimulus channel)'});
-    f3 = tmp(tests, 'bad.plx');
-    fid = fopen(f3, 'w'); fwrite(fid, zeros(1, 8000), 'uint8'); fclose(fid);
-    tests.verifyError(@() readPlexon(f3), 'NeuroAnalyzer:io:plexon');
 end
 
 function testMCS(tests)

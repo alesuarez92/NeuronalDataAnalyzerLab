@@ -17,8 +17,8 @@ Neuroscience analysis toolbox for **Laser Doppler Flowmetry** and **laser
 speckle flowmetry** (blood-flow maps, flow per ROI over time, responses),
 **electrophysiology** (LFP: ERP, CSD, time–frequency; MUA: spike detection,
 sorting with cluster merge/split, raster/PSTH, correlograms; TDT, Intan,
-Open Ephys, NWB, SpikeGLX, Blackrock, Neuralynx, Plexon, Multi Channel
-Systems and Axon ABF recordings), **EEG** (raw or cleaned scalp and
+Open Ephys, NWB, SpikeGLX, Blackrock, Neuralynx and Multi Channel
+Systems recordings), **EEG** (raw or cleaned scalp and
 rodent EEG from BrainVision, EDF / BDF, EGI .mff, XDF, EEG-BIDS, EEGLAB and
 FieldTrip: electrode layouts, bad channels, filters, re-reference, trials
 and rejection, ERPs, measures and statistics, scalp maps, time–frequency
@@ -114,7 +114,7 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | `core/` | `Main.m` launcher (tiles from `Techniques.m`, the table of every analysis and learning window), `UITheme`, project-path manager, data loader, validation, processing, signal-feature library. |
 | `core/imaging/` | ROI / line-based image analysis: ΔF/F, kymograph, vessel diameter, intensity, movement, motion correction, cell detection. |
 | `core/Histology.m` | Still images of sections and cultures: loading with pixel size, channel and image alignment, cell counting, marker co-localisation, counts per region. |
-| `core/io/` | Readers and writers for electrophysiology (Intan RHD / RHS, Open Ephys binary and legacy, NWB, SpikeGLX, Blackrock, Neuralynx, Plexon, Multi Channel Systems HDF5, Axon ABF), blood-flow recordings (LabChart, AcqKnowledge, Spike2 exports, EDF / BDF, tables), imaging files (TIFF metadata, Inscopix, ThorImage, Prairie View, Miniscope, ImageJ / QuPath regions), NumPy .npy, EEG files (BrainVision, EEGLAB, FieldTrip, EDF / BDF, EGI .mff, XDF, EEG-BIDS, plain matrices) and electrode position files (EEGLAB, BESA, ASA / FieldTrip / MNE .elc, EGI .sfp, BrainVision .bvef, EasyCap / BioSemi lists, tables, BIDS electrodes.tsv). |
+| `core/io/` | Readers and writers for electrophysiology (Intan RHD / RHS, Open Ephys binary and legacy, NWB, SpikeGLX, Blackrock, Neuralynx, Multi Channel Systems HDF5), blood-flow recordings (LabChart, AcqKnowledge, Spike2 exports, EDF / BDF, tables), imaging files (TIFF metadata, Inscopix, ThorImage, Prairie View, Miniscope, ImageJ / QuPath regions), NumPy .npy, EEG files (BrainVision, EEGLAB, FieldTrip, EDF / BDF, EGI .mff, XDF, EEG-BIDS, plain matrices) and electrode position files (EEGLAB, BESA, ASA / FieldTrip / MNE .elc, EGI .sfp, BrainVision .bvef, EasyCap / BioSemi lists, tables, BIDS electrodes.tsv). |
 | `core/demo/`, `core/DemoData.m` | Synthetic demo recordings with ground truth. |
 | `core/Batch.m`, `core/Session.m`, `core/Report.m`, `core/MethodsWriter.m` | Batch processing, session files, PDF reports, methods text. |
 | `apps/` | Sub-app windows: Extract / Process / Average LDF, Laser Speckle Flowmetry, Extract Ephys, LFP & MUA processing and analysis, EEG Analysis, ROI Analysis, Histology / culture, Signal Characterization, Batch Processing, Help. |

@@ -2291,11 +2291,9 @@ classdef MethodsWriter
                 case 'spikeglx',  t = 'SpikeGLX binary file (.bin with .meta)';
                 case 'blackrock', t = 'Blackrock Microsystems NSx file';
                 case 'neuralynx', t = 'Neuralynx continuous sampled channel (.ncs) files';
-                case 'plexon',    t = 'Plexon data file (.plx)';
                 case 'mcs',       t = 'Multi Channel Systems HDF5 file';
                 case 'intanrhs',  t = 'Intan RHS2000 data file (.rhs)';
                 case 'openephyslegacy', t = 'Open Ephys data format (.continuous) files';
-                case 'abf',       t = 'Axon Binary File (ABF 2)';
                 otherwise,        t = '';
             end
         end

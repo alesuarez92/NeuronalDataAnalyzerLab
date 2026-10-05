@@ -26,16 +26,12 @@
 %                    stimulus on the NEV digital input (bit 0)
 %   files.neuralynx  demo_neuralynx/ CSC1-CSC4.ncs, 32 kHz; TTL bit 0 in
 %                    Events.nev
-%   files.plexon     demo_plexon.plx: WB01-WB04 at 40 kHz, AI01 (1 V
-%                    pulses) and event channel 1
 %   files.mcs        demo_mcs.h5: Multi Channel Systems HDF5, 25 kHz,
 %                    stimulus on the digital stream bit 0 (MATLAB only:
 %                    left out where the HDF5 functions are missing)
 %   files.intanrhs   demo_intan.rhs: 30 kHz, DIGITAL-IN-01
 %   files.openephyslegacy  demo_openephys_legacy/ 100_CH1-4.continuous,
 %                    30 kHz, TTL channel 1 events
-%   files.abf        demo_abf.abf: ABF 2 gap-free, 20 kHz, 4 channels in
-%                    mV and a TTL channel (V)
 %   files.truth      onsets (s), stimDuration (0.02 s), duration (6 s),
 %                    channels (tank channels 3:6), sinkIndex (2 = tank
 %                    channel 4), and per format: fs, nSamples, lsb (volts
@@ -55,8 +51,8 @@
 % =========================================================================
 
 function files = demoFormats(folder, varargin)
-    every = {'intan', 'openephys', 'nwb', 'spikeglx', 'blackrock', 'neuralynx', 'plexon', 'mcs', ...
-        'intanrhs', 'openephyslegacy', 'abf'};
+    every = {'intan', 'openephys', 'nwb', 'spikeglx', 'blackrock', 'neuralynx', 'mcs', ...
+        'intanrhs', 'openephyslegacy'};
     if isempty(which('h5create')), every = every(~strcmp(every, 'mcs')); end
     o = struct('Formats', {every}, 'Tank', [], 'Force', false);
     for k = 1:2:numel(varargin)
@@ -204,18 +200,6 @@ function files = demoFormats(folder, varargin)
             'stimName', 'TTL bit 0');
     end
 
-    % ---- Plexon .plx (40 kHz WB, AI pulses, event channel 1) ----
-    if any(strcmp(o.Formats, 'plexon'))
-        fs = 40000;
-        [x, t] = resampleTo(raw, tT, fs, T);
-        pulse = pulses(t, onsets, dur);
-        f = fullfile(folder, 'demo_plexon.plx');
-        writePlexon(f, x, fs, 'AI', double(pulse), 'Events', struct('channel', 1, 'sample', find(diff([0 pulse]) == 1)));
-        files.plexon = f;
-        truth.plexon = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', 5000 / (0.5 * 2^16 * 1000) * 1e-3, ...
-            'data', x, 'stimName', 'AI01');
-    end
-
     % ---- Multi Channel Systems HDF5 (25 kHz, digital stream) ----
     if any(strcmp(o.Formats, 'mcs'))
         fs = 25000;
@@ -252,19 +236,6 @@ function files = demoFormats(folder, varargin)
         files.openephyslegacy = d;
         truth.openephyslegacy = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', 0.195e-6, ...
             'data', x, 'stimName', 'TTL 1');
-    end
-
-    % ---- Axon ABF 2 (20 kHz, gap-free) ----
-    if any(strcmp(o.Formats, 'abf'))
-        fs = 20000;
-        [x, t] = resampleTo(raw, tT, fs, T);
-        pulse = pulses(t, onsets, dur);
-        f = fullfile(folder, 'demo_abf.abf');
-        writeABF(f, [x * 1e3; 5 * double(pulse)], fs, 'Names', [names, {'TTL'}], ...
-            'Units', {'mV', 'mV', 'mV', 'mV', 'V'});
-        files.abf = f;
-        truth.abf = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', 1.05 * max(abs(x(:))) / 32768, ...
-            'data', x, 'stimName', 'TTL');
     end
 
     files.truth = truth;

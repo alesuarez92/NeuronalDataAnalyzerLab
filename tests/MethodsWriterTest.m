@@ -191,8 +191,8 @@ end
 function testExtractEphysFormats(tests)
     % The recording format named in the first sentence
     e = Session.new('ExtractEphysApp');
-    names = {'plexon', 'Plexon data file (.plx)'; 'mcs', 'Multi Channel Systems HDF5 file'; ...
-        'abf', 'Axon Binary File (ABF 2)'; 'openephyslegacy', 'Open Ephys data format (.continuous) files'};
+    names = {'intanrhs', 'Intan RHS2000 data file (.rhs)'; 'mcs', 'Multi Channel Systems HDF5 file'; ...
+        'openephyslegacy', 'Open Ephys data format (.continuous) files'};
     for k = 1:size(names, 1)
         e.settings = struct('format', names{k, 1});
         [txt, refs] = MethodsWriter.fromSession(e);
