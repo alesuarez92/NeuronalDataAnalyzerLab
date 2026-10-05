@@ -9,7 +9,7 @@ repo are welcome.
 Please install the project from a release ZIP (see the
 [README](README.md#install)) rather than maintaining a long-running fork.
 Neuronal Data Analyzer Lab is free for noncommercial use under the PolyForm
-Noncommercial License 1.0.0 with a citation condition
+Noncommercial License 1.0.0
 ([LICENSE.txt](LICENSE.txt)): you may change it and share it for
 noncommercial purposes. Still, if you need a change,
 the most useful path for everyone is to file an issue or open a PR back
@@ -56,7 +56,7 @@ or otherwise), you grant the project maintainer (Alejandro Suarez, Ph.D.) a
 perpetual, worldwide, royalty-free, non-exclusive license to use, modify,
 sublicense, and distribute your contribution, and you license it to everyone
 under this project's licence, the PolyForm Noncommercial License 1.0.0
-with its citation condition ([LICENSE.txt](LICENSE.txt)). You confirm that
+([LICENSE.txt](LICENSE.txt)). You confirm that
 you have the right to submit the contribution (you wrote it, or its licence
 allows this). You retain copyright on your changes;
 incorporating them into the project does not transfer ownership.

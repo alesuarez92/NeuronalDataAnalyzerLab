@@ -2,8 +2,7 @@ cff-version: 1.2.0
 title: Neuronal Data Analyzer Lab
 message: >-
   If you use this software, or results produced with it, in work that you
-  publish or present, you must cite it using the metadata below (citation
-  condition in LICENSE.txt).
+  publish or present, please cite it using the metadata below.
 type: software
 authors:
   - given-names: Alejandro
@@ -33,5 +32,5 @@ keywords:
   - signal-processing
   - matlab
 license: PolyForm-Noncommercial-1.0.0
-version: "1.0.0"
+version: "1.0.1"
 date-released: "2026-10-05"

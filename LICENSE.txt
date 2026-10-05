@@ -4,42 +4,44 @@ Copyright (C) 2026 Alejandro Suarez
 Required Notice: Copyright (C) 2026 Alejandro Suarez (https://github.com/alesuarez92/NeuronalDataAnalyzerLab)
 
 Neuronal Data Analyzer Lab is licensed under the PolyForm Noncommercial
-License 1.0.0 (full text below), together with the citation condition in
-this notice. Both are part of the terms under which you may use it.
+License 1.0.0, unmodified (full text below). The licence text is what
+counts; the notes in this header add no terms.
 
-Citation condition. If you use Neuronal Data Analyzer Lab, or results
-produced with it, in work that you publish or present (for example an
-article, preprint, thesis, report, poster or talk), you must cite it as
-given in CITATION.cff in this repository.
-
-In plain words (the licence text below is what counts):
+In plain words:
 - Free for noncommercial use: research and teaching at universities,
   public research institutes, hospitals, charities and government bodies,
   and personal study. You may use it, change it and share it for these
-  purposes, with this notice and the licence text.
-- Not for commercial use without a separate licence from the author: for
-  example selling it, building it into a product or offering it as a paid
-  service. To ask for a commercial licence, open an issue or contact the
-  author through https://github.com/alesuarez92.
-- Cite it when you publish work that used it (see CITATION.cff).
+  purposes, with the Required Notice above and the licence text.
+- For commercial use (for example selling it, building it into a product
+  or offering it as a paid service), ask the author for a separate
+  licence: open an issue or contact the author through
+  https://github.com/alesuarez92.
 
-Research use only. Neuronal Data Analyzer Lab is research software. It is
-not a medical device and must not be used to diagnose, treat or make
-decisions about patients.
+Citation (a request, not a condition): if you use Neuronal Data Analyzer
+Lab, or results produced with it, in work that you publish or present,
+please cite it as given in CITATION.cff.
+
+Research software: Neuronal Data Analyzer Lab is not a medical device and
+is not intended for diagnosing, treating or making decisions about
+patients.
 
 Other material:
-- Third-party software that Neuronal Data Analyzer Lab can use (for example
-  the TDT MATLAB SDK, see Utilities/) is not included in this repository
-  and keeps its own licence.
-- The explanatory figures in docs/ were designed by the author and made
-  with AI image tools (Google); their files carry that label.
-- MATLAB is a registered trademark of The MathWorks, Inc. TDT, Intan, Open
-  Ephys, LabChart, NWB, BrainVision, EEGLAB, FieldTrip and NumPy are names
-  of their respective owners, used only to say which file formats are
-  supported. This project is not affiliated with or endorsed by them.
+- Neuronal Data Analyzer Lab does not include third-party code. Projects
+  whose published descriptions were followed or used for checks, and
+  their licences, are listed in THIRD_PARTY_NOTICES.md.
+- Third-party software that it can use (for example the TDT MATLAB SDK,
+  see Utilities/) is not included and keeps its own licence.
+- The explanatory figures in docs/ are drawn by a script
+  (docs/art/make_figures.py).
+- Product and company names are trademarks or registered trademarks of
+  their respective owners. They are used only to say which file formats
+  are read or which software is needed; this project is not affiliated
+  with or endorsed by them. MATLAB is a registered trademark of The
+  MathWorks, Inc.
 
-Copies of this software published earlier under other terms remain under
-the terms they were published with.
+Copies of this software published earlier under other terms (GPL-3.0, or
+PolyForm Noncommercial 1.0.0 with a citation condition) remain under the
+terms they were published with.
 
 -------------------------------------------------------------------------------
 
