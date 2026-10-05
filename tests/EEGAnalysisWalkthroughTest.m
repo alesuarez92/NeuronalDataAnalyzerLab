@@ -25,7 +25,9 @@
 %   trials); then the Checks tab (the clean demo without warnings, a peak
 %   measure with unequal trial counts, the faults demo: too few Target
 %   trials, a rejection that hits Target, 8 bad channels, Pz
-%   interpolated). Checks the results
+%   interpolated; the checks of the test after Compare conditions:
+%   sample size, normality, sphericity, robustness, worded for
+%   participants). Checks the results
 %   against the demo's known answers (core/demo/demoEEG.m) and saves a
 %   frame after every step to
 %   test-artifacts/screens/walkthrough/EEGAnalysisApp_<NN>_<step>.png.
@@ -1004,6 +1006,29 @@ function testChecks(tests)
     app.setMeasure('mean', 'positive', [0.3 0.4], {'Pz'});
     tests.verifyTrue(logical(app.measure()));
     shot(tests, app, 'EEGAnalysisApp_21_checks', 'Checks');
+    % Compare conditions adds the checks of the test after those of the trials; a new measure removes them
+    trialRows = app.CheckRows;
+    nTrialRows = numel(trialRows);
+    tests.verifyTrue(logical(app.compareConditions()));
+    Q = app.CheckRows;
+    tests.verifyEqual(Q(1:nTrialRows), trialRows, 'the trial checks first');
+    tests.verifyEqual(Q(nTrialRows + 1:end), app.StatsResult.checkRows, 'then those of the test');
+    tests.log(1, sprintf('Checks of the test on the demo:\n%s', strjoin(QualityChecks.lines(app.StatsResult.checkRows), newline)));
+    chk = app.ChecksTable.Data;
+    txt = strjoin(chk(:, 3), ' | ');
+    tests.verifyTrue(hasCheck(chk, 'OK', 'Sample size', 'n = 8 subjects with a value in every condition'), txt);
+    tests.verifyTrue(any(strcmp(chk(:, 2), 'Normality')), txt);
+    tests.verifyTrue(any(strcmp(chk(:, 2), 'Sphericity')), txt);
+    tests.verifyTrue(any(strcmp(chk(:, 2), 'Robustness check')), txt);
+    rowsTxt = strjoin([{Q.found}, {Q.why}, {Q.action}], ' ');
+    tests.verifyFalse(contains(rowsTxt, 'animal'), 'participants, not animals');
+    tests.verifyFalse(contains(rowsTxt, 'Plot tab'), 'no Plot tab in this window');
+    tests.verifyTrue(any(contains(app.StatsText.Value, 'Checks of the test: ')), strjoin(app.StatsText.Value, ' '));
+    st = app.sessionState();
+    tests.verifyEqual({st.checks.topic}, {app.CheckRows.topic}, 'the test checks go into sessions');
+    shot(tests, app, 'EEGAnalysisApp_23_checks_statistics', 'Checks');
+    tests.verifyTrue(logical(app.measure()));
+    tests.verifyNumElements(app.CheckRows, nTrialRows, 'a new measure removes the checks of the old test');
 
     % 2. Faults demo: 8 channels suggested as bad, the 100 uV rejection filled in, nothing applied
     tests.verifyTrue(logical(app.loadFaultsDemo()));

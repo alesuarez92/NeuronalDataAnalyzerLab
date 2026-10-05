@@ -18,7 +18,9 @@
 %   * the group demo gives no warnings and no checks in any design; the
 %     faults study (demoGroups Faults: 6 animals, animal 6 responds 3x,
 %     the same Drug rise in every animal) fires sample size, normality and
-%     sphericity.
+%     sphericity;
+%   * the texts for EEG Analysis: participants instead of animals, the
+%     Measures tab instead of the Plot tab, its own missing-value advice.
 % Base MATLAB only; also runs in GNU Octave.
 % =========================================================================
 
@@ -200,4 +202,31 @@ function testFaultsStudy(tests)
     expect(tests, Q, 'Sphericity', 'check', 'Violated');
     Q = GroupStats.checks(GroupStats.compare({A(:, 1), A(:, 2)}, demo.conditions(1:2), 'paired'));
     expect(tests, Q, 'Normality', 'check', 'subject 6');
+end
+
+%% testParticipantWording - EEG Analysis: participants, the Measures tab and its own missing-value advice
+function testParticipantWording(tests)
+    A = faultsMatrix();
+    A(2, 3) = NaN;                                % one participant without a value in one condition
+    res = GroupStats.compare(num2cell(A, 1), {'Standard', 'Target', 'Novel'}, 'rm');
+    Q = GroupStats.checks(res);
+    all1 = strjoin([{Q.found}, {Q.why}, {Q.action}], ' ');
+    tests.verifyTrue(~isempty(strfind(all1, 'animal')), 'animals by default'); %#ok<STREMP>
+    tests.verifyTrue(~isempty(strfind(all1, 'the Plot tab')), 'the Plot tab by default'); %#ok<STREMP>
+    o = GroupStats.checkOptions();
+    o.subject = 'participant';
+    o.valuesTab = 'the Measures tab';
+    o.missingAction = 'See Trials per condition.';
+    names = arrayfun(@(i) sprintf('sub-%02d', i), [1 3 4 5 6], 'UniformOutput', false);
+    o.labels = {names, names, names};
+    Q = GroupStats.checks(res, o);
+    all2 = strjoin([{Q.found}, {Q.why}, {Q.action}], ' ');
+    tests.verifyEmpty(strfind(all2, 'animal'), all2);
+    tests.verifyEmpty(strfind(all2, 'Plot tab'), all2);
+    tests.verifyTrue(~isempty(strfind(all2, 'participant')), all2); %#ok<STREMP>
+    tests.verifyTrue(~isempty(strfind(all2, 'the Measures tab')), all2); %#ok<STREMP>
+    expect(tests, Q, 'Missing values', 'check', '1 subject left out');
+    tests.verifyEqual(row(Q, 'Missing values').action, 'See Trials per condition.');
+    expect(tests, Q, 'Sample size', 'check', 'fewer than 8');
+    tests.verifyEqual({Q.topic}, {GroupStats.checks(res).topic}, 'the same rows, other words');
 end

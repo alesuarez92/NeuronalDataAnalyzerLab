@@ -839,8 +839,14 @@ classdef GroupStats
         % nFiles       files behind each group (1 x k; [] = not known)
         % labels       {} | one cellstr of subject names per group (as in
         %              res.labels: the subjects analysed)
+        % subject      what a subject is in the texts: 'animal' (default) or
+        %              e.g. 'participant' (EEG Analysis)
+        % valuesTab    where the individual values are shown ('the Plot tab')
+        % missingAction  what to try for missing values ('' = open the files
+        %              in the Single file tab)
         function o = checkOptions()
-            o = struct('subjectMode', 'meantrace', 'nFiles', [], 'labels', {{}});
+            o = struct('subjectMode', 'meantrace', 'nFiles', [], 'labels', {{}}, 'subject', 'animal', ...
+                'valuesTab', 'the Plot tab', 'missingAction', '');
         end
 
         %% checks - Quality checks of a comparison (QualityChecks rows)
@@ -905,9 +911,28 @@ classdef GroupStats
                     txt = sprintf('%s left out: the feature could not be computed (NaN).', ...
                         GroupStats.plural(sum(res.nExcluded), 'value'));
                 end
+                act = o.missingAction;
+                if isempty(act), act = 'Open those files in the Single file tab and look at why the feature is missing.'; end
                 Q = QualityChecks.add(Q, 'check', 'Missing values', txt, ...
                     'Subjects left out lower n; when the feature fails for a reason (no response), leaving them out biases the result.', ...
-                    'Open those files in the Single file tab and look at why the feature is missing.');
+                    act);
+            end
+            Q = GroupStats.reword(Q, o);
+        end
+
+        %% reword - The texts of checks for another kind of subject and place of the values
+        % 'animal(s)' -> o.subject(s), 'the Plot tab' -> o.valuesTab.
+        function Q = reword(Q, o)
+            if strcmp(o.subject, 'animal') && strcmp(o.valuesTab, 'the Plot tab'), return; end
+            f = {'found', 'why', 'action'};
+            for i = 1:numel(Q)
+                for j = 1:numel(f)
+                    t = Q(i).(f{j});
+                    t = regexprep(t, '(?<![A-Za-z])animals(?![A-Za-z])', [o.subject 's']);
+                    t = regexprep(t, '(?<![A-Za-z])animal(?![A-Za-z])', o.subject);
+                    t = strrep(t, 'the Plot tab', o.valuesTab);
+                    Q(i).(f{j}) = t;
+                end
             end
         end
 

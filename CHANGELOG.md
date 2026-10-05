@@ -135,6 +135,11 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
     the verdict of the uncorrected p reported), **Equal spread** (ANOVA:
     Check above an SD ratio of 2, Warning with unequal group sizes),
     **Robustness check** and **Missing values**.
+  - **EEG Analysis**: **Compare conditions** (step 6) adds the same
+    checks of the test to its Checks tab, after the checks of the trials,
+    worded for participants (`GroupStats.checkOptions`: `subject`,
+    `valuesTab`, `missingAction`); the Statistics tab sums them up and a
+    new measure removes them with the old test.
   - **Demo data with each fault**: `demo_imaging_faults.mat`
     (`DemoData.imagingFaults`: a 12-bit movie whose field slides 14 px,
     the dye fading to ~65% and Cell 2 clipped at 4095, with three cell

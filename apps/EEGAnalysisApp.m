@@ -47,6 +47,9 @@
 % looks at the trials analysed (trials per condition, the share of each
 % condition rejected, trial counts against the measure, bad channels,
 % channels interpolated before loading against the measured channels);
+% Compare conditions (step 6) adds the checks of the test
+% (GroupStats.checks: sample size, normality, sphericity, robustness
+% check, missing values; worded for participants);
 % CheckRows holds the rows, sessions store them, new results clear them.
 % Step 2 always starts again from the files as read and step 3 from the
 % result of step 2 (or the files when step 2 was not applied), in the
@@ -155,7 +158,7 @@ classdef EEGAnalysisApp < handle
         ChecksTab           % = ChecksUI.Tab
         ChecksTable         % = ChecksUI.Table (Result | Topic | Finding)
         ChecksText          % = ChecksUI.Text (the clicked row in full)
-        CheckRows           % QualityChecks rows of the trials analysed (EEGAnalysis.checks)
+        CheckRows           % QualityChecks rows of the trials analysed (EEGAnalysis.checks) and of the test (GroupStats.checks)
         % Data
         Files = {}          % loaded file paths
         Maps = {}           % plain .mat: the map used for each file ([] otherwise)
@@ -489,7 +492,8 @@ classdef EEGAnalysisApp < handle
             app.StatsTable = uitable(g3, 'RowName', {}, 'FontSize', T.fontSmall + 1, 'ColumnName', ...
                 {'Comparison', ['Difference (' char(181) 'V)'], '95% CI', 'p (Holm)', 'Test'});
             app.ChecksUI = UIKit.checksTab(app.Tabs, ['Quality checks of the trials appear here after Cut into ' ...
-                'trials / Apply rejection (step 3), Show ERPs (step 4) or Measure (step 5).']);
+                'trials / Apply rejection (step 3), Show ERPs (step 4) or Measure (step 5); those of the test after ' ...
+                'Compare conditions (step 6).']);
             app.ChecksTab = app.ChecksUI.Tab;
             app.ChecksTable = app.ChecksUI.Table;
             app.ChecksText = app.ChecksUI.Text;
@@ -1249,12 +1253,21 @@ classdef EEGAnalysisApp < handle
                 UIKit.setStatus(app.StatusLabel, sprintf('Test not run: %s', ME.message), 'error');
                 return;
             end
+            o = GroupStats.checkOptions();
+            o.labels = repmat({app.Names(all(isfinite(Y), 2))}, 1, numel(conds));
+            o.subject = 'participant';
+            o.valuesTab = 'the Measures tab';
+            o.missingAction = ['A condition with no trials left (all rejected, or none of its events) has no ' ...
+                'value: see Trials per condition above and the Overview tab.'];
+            res.checkRows = GroupStats.checks(res, o);
             app.StatsResult = res;
             app.fillStats();
+            app.updateChecks();
             app.selectTab('Statistics');
             app.updateControls();
+            [extra, level] = app.checksStatus('success');
             UIKit.setStatus(app.StatusLabel, [res.summary ' Next: Save (step 8), or the time' char(8211) ...
-                'frequency of the trials (step 7).'], 'success');
+                'frequency of the trials (step 7).' extra], level);
             ok = true;
         end
 
@@ -1776,6 +1789,8 @@ classdef EEGAnalysisApp < handle
         end
 
         %% updateChecks - Quality checks of the trials analysed (EEGAnalysis.checks) into the Checks tab
+        % After Compare conditions the rows of the test (GroupStats.checks,
+        % res.checkRows) follow them.
         % Measure kind and channels: those measured (step 5), else those in
         % the window; ERP channels: those shown (step 4), else those typed.
         function updateChecks(app)
@@ -1793,6 +1808,9 @@ classdef EEGAnalysisApp < handle
                 end
                 app.CheckRows = EEGAnalysis.checks(app.EEGs, app.Names, struct('rejections', app.Rejections, ...
                     'measure', m.Measure, 'channels', {m.Channels}, 'erpChannels', {erpChans}));
+                if ~isempty(app.StatsResult) && isfield(app.StatsResult, 'checkRows')
+                    app.CheckRows = [app.CheckRows; QualityChecks.ensure(app.StatsResult.checkRows)];
+                end
             end
             if ~isempty(app.ChecksUI), UIKit.showChecks(app.ChecksUI, app.CheckRows); end
         end
@@ -2676,8 +2694,11 @@ classdef EEGAnalysisApp < handle
             end
             if r.checkAgrees, agree = 'agrees with the main test'; else, agree = 'disagrees with the main test'; end
             o = app.MeasureSettings;
+            Q = QualityChecks.none();
+            if isfield(r, 'checkRows'), Q = r.checkRows; end
             lines = {r.summary; ''; ['Assumptions: ' r.assumptions]; ''; ...
                 sprintf('Robustness check: %s, %s (%s).', r.check.test, GroupStats.formatP(r.check.p), agree); ''; ...
+                sprintf('Checks of the test: %s (Checks tab).', QualityChecks.summary(Q)); ''; ...
                 ['Values compared: ' EEGAnalysis.describeMeasure(o)]; ...
                 sprintf('Participants (matched across conditions): %s.', strjoin(app.Names, ', '))};
             app.StatsText.Value = lines;
