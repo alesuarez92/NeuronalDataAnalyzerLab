@@ -75,6 +75,8 @@ function testEveryFormat(tests)
     p = fullfile(tests.TestData.tmp, 'cropped_acq.mat');
     tests.verifyTrue(logical(app.saveCroppedTo(p)));
     s = load(p);
+    frozen(tests, s, {'stim', 'LDF', 't', 'Fs', 'flowName', 'flowUnits', 'stimName'}, ...
+        'Extract LDF cropped file');
     tests.verifyEqual(s.Fs, tr.fs, 'AbsTol', 1e-9);
     tests.verifyEqual(s.flowName, 'LDF100C');
     tests.verifyEqual(s.flowUnits, 'BPU');
@@ -183,6 +185,17 @@ end
 function p = saveTo(tests, app, name)
     p = fullfile(tests.TestData.tmp, [name Session.Extension]);
     tests.verifyTrue(logical(app.saveSessionTo(p)));
+end
+
+%% frozen - Every frozen name (1.0) is present: struct fields, table columns or a cellstr
+function frozen(tests, have, names, what)
+    if isstruct(have)
+        have = fieldnames(have);
+    elseif istable(have)
+        have = have.Properties.VariableNames;
+    end
+    missing = names(~ismember(names, have));
+    tests.verifyEmpty(missing, sprintf('%s: missing %s (frozen for 1.0)', what, strjoin(missing, ', ')));
 end
 
 function n = countOnsets(x)

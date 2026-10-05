@@ -235,9 +235,18 @@ function testEEGDemo(tests)
     lines = strsplit(strtrim(fileread(csvPath)), newline);
     tests.verifyNumElements(lines, 25);   % header + 8 participants x 3 conditions
     tests.verifyTrue(startsWith(lines{1}, '"Participant","Condition","Value_uV"'));
+    % Frozen for 1.0: exactly these columns, as EEGAnalysis.measureTable and Batch
+    cols = {'Participant', 'Condition', 'Value_uV', 'Latency_ms', 'Trials', 'PeakAtEdge'};
+    tests.verifyEqual(strtrim(lines{1}), strjoin(strcat('"', cols, '"'), ','), 'EEG .csv header');
     matPath = fullfile(tests.TestData.tmp, 'eeg.mat');
     tests.verifyTrue(logical(app.exportResultsTo(matPath)));
     m = load(matPath);
+    frozen(tests, m, {'results'}, 'EEG .mat export');
+    frozen(tests, m.results, {'participants', 'files', 'erps', 'grandAverage', 'erpSettings', ...
+        'measureSettings', 'measureHeader', 'measures', 'measureText', 'stats', 'trialWindow', 'cleaning', ...
+        'trials', 'rejection', 'timeFrequency', 'grandTimeFrequency', 'timeFrequencySettings'}, ...
+        'EEG .mat export results');
+    tests.verifyEqual(m.results.measureHeader, cols, 'EEG .mat measureHeader');
     tests.verifySize(m.results.measures, [24 6]);
     tests.verifyEqual(m.results.stats.design, 'rm');
 
@@ -1056,6 +1065,17 @@ function testChecks(tests)
     UIKit.checkSelected(app.ChecksTable, struct('Indices', [k 3]), app.ChecksText);
     tests.verifyTrue(contains(strjoin(app.ChecksText.Value, ' '), 'What to try:'));
     shot(tests, app, 'EEGAnalysisApp_22_checks_faults', 'Checks');
+end
+
+%% frozen - Every frozen name (1.0) is present: struct fields, table columns or a cellstr
+function frozen(tests, have, names, what)
+    if isstruct(have)
+        have = fieldnames(have);
+    elseif istable(have)
+        have = have.Properties.VariableNames;
+    end
+    missing = names(~ismember(names, have));
+    tests.verifyEmpty(missing, sprintf('%s: missing %s (frozen for 1.0)', what, strjoin(missing, ', ')));
 end
 
 %% hasCheck - A row of a Checks table with this result, topic and finding text

@@ -106,9 +106,17 @@ function testROIAdvancedDemo(tests)
     tests.verifyTrue(logical(app.exportResultsTo(fcsv)));
     tbl = readtable(fcsv);
     tests.verifyEqual(width(tbl), 4);                 % Time + one DFF column per cell
+    % Frozen for 1.0: Time, then <measure>_<ROI> (several ROIs)
+    frozen(tests, tbl, [{'Time'}, matlab.lang.makeValidName(strcat('DFF_', app.ResultROINames(:)'))], ...
+        'ROI .csv export');
     fmat = [tempname '.mat']; c3 = onCleanup(@() deleteIfExists(fmat));
     tests.verifyTrue(logical(app.exportResultsTo(fmat)));
     r = load(fmat);
+    frozen(tests, r, {'results'}, 'ROI .mat export');
+    frozen(tests, r.results, {'method', 'sourceFile', 't', 'intensity', 'movement', 'dff', 'speed', ...
+        'kymograph', 'diameter', 'roiMask', 'roiMasks', 'roiNames', 'lineStart', 'lineEnd', ...
+        'motionCorrection', 'shifts', 'bw256', 'smooth', 'normalize', 'dffBaselineFrames', ...
+        'robustDiameter', 'diameterStandard', 'diameterPerFrame', 'diameterReplaced'}, 'ROI .mat export results');
     tests.verifyEqual(size(r.results.roiMasks, 3), 3);
     tests.verifyEqual(numel(r.results.roiNames), 3);
     tests.verifyTrue(logical(r.results.motionCorrection));
@@ -162,6 +170,17 @@ end
 
 function deleteIfExists(f)
     if exist(f, 'file') == 2, delete(f); end
+end
+
+%% frozen - Every frozen name (1.0) is present: struct fields, table columns or a cellstr
+function frozen(tests, have, names, what)
+    if isstruct(have)
+        have = fieldnames(have);
+    elseif istable(have)
+        have = have.Properties.VariableNames;
+    end
+    missing = names(~ismember(names, have));
+    tests.verifyEmpty(missing, sprintf('%s: missing %s (frozen for 1.0)', what, strjoin(missing, ', ')));
 end
 
 function n = nFrames(app)

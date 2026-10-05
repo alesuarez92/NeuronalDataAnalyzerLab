@@ -141,11 +141,23 @@ function testHistologyDemo(tests)
     tests.verifyEqual(exist(countsPath, 'file'), 2);
     lines = strsplit(strtrim(fileread(csvPath)), newline);
     tests.verifyNumElements(lines, 121);   % header + 120 cells
+    % Frozen headers (1.0): the fixed columns, then two per marker channel
+    markers = app.ChannelNames(setdiff(1:size(app.Images{1}, 3), app.CountSettings.channel));
+    markers = markers(:)';
+    tests.verifyNotEmpty(markers);
+    frozen(tests, csvHeader(lines{1}), [{'Image', 'Cell', 'x (um)', 'y (um)', 'Area (um2)', 'Elongation', ...
+        'Region'}, strcat(markers, ' positive'), strcat(markers, ' part of cell (%)')], 'Histology cells .csv');
     lines = strsplit(strtrim(fileread(countsPath)), newline);
     tests.verifyNumElements(lines, 5);     % header + 2 images x 2 regions
+    frozen(tests, csvHeader(lines{1}), [{'Image', 'Region', 'Cells', 'Area (mm2)', 'Cells per mm2'}, ...
+        strcat('Positive', {' '}, markers), strcat('%', {' '}, markers)], 'Histology counts .csv');
     matPath = fullfile(tests.TestData.tmp, 'histology.mat');
     tests.verifyTrue(logical(app.exportResultsTo(matPath)));
     m = load(matPath);
+    frozen(tests, m, {'results'}, 'Histology .mat export');
+    frozen(tests, m.results, {'imageNames', 'channelNames', 'pixelSizeUm', 'settings', 'regions', ...
+        'alignMethod', 'shifts', 'landmarks', 'landmarkRms', 'channelShifts', 'countsHeader', 'counts', ...
+        'cellsHeader', 'cells', 'labels', 'count', 'markers'}, 'Histology .mat export results');
     tests.verifyTrue(isfield(m, 'results') && isfield(m.results, 'labels'));
     tests.verifyEqual(size(m.results.labels{1}), [400 400]);
 
@@ -249,4 +261,21 @@ function testHistologyImportedRegions(tests)
     tests.verifyEqual([S.nCells], [tr.counts.nCells]);
     tests.verifyEqual(app.importRegions(fullfile(d, 'missing.roi')), 0);
     shot(tests, app, 'HistologyApp_09_imported_regions', 'Counts');
+end
+
+%% csvHeader - Column names of a header line written with every name in double quotes
+function h = csvHeader(line)
+    h = regexp(strtrim(line), '"((?:[^"]|"")*)"', 'tokens');
+    h = strrep(cellfun(@(c) c{1}, h, 'UniformOutput', false), '""', '"');
+end
+
+%% frozen - Every frozen name (1.0) is present: struct fields, table columns or a cellstr
+function frozen(tests, have, names, what)
+    if isstruct(have)
+        have = fieldnames(have);
+    elseif istable(have)
+        have = have.Properties.VariableNames;
+    end
+    missing = names(~ismember(names, have));
+    tests.verifyEmpty(missing, sprintf('%s: missing %s (frozen for 1.0)', what, strjoin(missing, ', ')));
 end

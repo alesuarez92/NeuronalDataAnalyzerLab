@@ -154,14 +154,25 @@ function testLaserSpeckleDemo(tests)
     tests.verifyEqual(width(tbl), 7);                     % time + change and flow index per ROI
     tests.verifyEqual(height(tbl), numel(app.Result.t));
     tests.verifyTrue(any(contains(tbl.Properties.VariableNames, 'FlowChange_pct_Activated')));
+    % Frozen for 1.0: Time_s, then FlowChange_pct_<ROI> and FlowIndex_<ROI> per ROI
+    roi = app.ResultROINames(:)';
+    frozen(tests, tbl, [{'Time_s'}, matlab.lang.makeValidName(strcat('FlowChange_pct_', roi)), ...
+        matlab.lang.makeValidName(strcat('FlowIndex_', roi))], 'LSCI .csv export');
     fmat = fullfile(tests.TestData.tmp, 'lsci.mat');
     tests.verifyTrue(logical(app.exportResultsTo(fmat)));
     r = load(fmat);
+    frozen(tests, r, {'results'}, 'LSCI .mat export');
+    frozen(tests, r.results, {'t', 'fps', 'units', 'flowMean', 'K2Mean', 'meanImage', 'intensity', 'roiFlow', ...
+        'roiRel', 'roiK', 'baselineSec', 'shift', 'onsets', 'trialTime', 'trials', 'trialMean', 'trialSD', ...
+        'response', 'peak', 'peakTime', 'responseMap', 'checks', 'checkRows', 'params', 'roiNames', ...
+        'roiMasks', 'sourceFile', 'flowUnits'}, 'LSCI .mat export results');
     tests.verifyEqual(size(r.results.responseMap), [64 80]);
     tests.verifyEqual(r.results.roiNames, {'Activated area', 'Control cortex', 'Vessel'});
     ftr = fullfile(tests.TestData.tmp, 'lsci_trials.mat');
     tests.verifyTrue(logical(app.saveTrialsTo(ftr, 1)));
     q = load(ftr);
+    frozen(tests, q, {'segmentedLDF', 'segmentedTime', 'Fs', 'onsetTimes', 'roiName', 'units', 'source'}, ...
+        'LSCI trials file');
     tests.verifyEqual(size(q.segmentedLDF), [4 numel(q.segmentedTime)]);
     tests.verifyEqual(q.Fs, 2, 'AbsTol', 1e-9);
     avg = LDFGrandAverageApp(); ca = onCleanup(@() delete(avg.UIFig));
@@ -282,4 +293,15 @@ end
 %% hasCheck - A row of the Checks table with this result, topic and finding text
 function tf = hasCheck(chk, result, topic, finding)
     tf = any(strcmp(chk(:, 1), result) & strcmp(chk(:, 2), topic) & contains(chk(:, 3), finding));
+end
+
+%% frozen - Every frozen name (1.0) is present: struct fields, table columns or a cellstr
+function frozen(tests, have, names, what)
+    if isstruct(have)
+        have = fieldnames(have);
+    elseif istable(have)
+        have = have.Properties.VariableNames;
+    end
+    missing = names(~ismember(names, have));
+    tests.verifyEmpty(missing, sprintf('%s: missing %s (frozen for 1.0)', what, strjoin(missing, ', ')));
 end

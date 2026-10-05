@@ -131,6 +131,13 @@ function testCSDMethodsWalkthrough(tests)
     p = [tempname '.mat']; cleanP = onCleanup(@() deleteIfExists(p));
     app.exportResults(p);
     s = load(p);
+    % Frozen for 1.0: the ERP variables, the csd_* ones when a CSD was computed
+    frozen(tests, s, {'t', 'y', 'erp_avg', 'erp_std', 'erp_channels', 'erp_params', 'n_epochs', ...
+        'onset_times', 'lfp_fs', 'source_file'}, 'LFP ERP export');
+    frozen(tests, s, {'csd', 'csd_channel_order', 'csd_spacing_um', 'csd_method', 'csd_method_label', ...
+        'csd_unit', 'csd_params', 'csd_depth_um', 'csd_grid', 'csd_grid_depth_um', 'csd_kcsd'}, 'LFP CSD export');
+    frozen(tests, s.csd_kcsd, {'R_um', 'lambda', 'lambdaRel', 'RGridUm', 'lambdaGrid', 'cvError'}, ...
+        'LFP CSD export csd_kcsd');
     tests.verifyEqual(s.csd_method, 'kcsd');
     tests.verifyEqual(s.csd_unit, 'A/m^3');
     tests.verifyEqual(s.csd_params.sigma, 0.3);
@@ -157,4 +164,15 @@ end
 
 function deleteIfExists(p)
     if exist(p, 'file'), delete(p); end
+end
+
+%% frozen - Every frozen name (1.0) is present: struct fields, table columns or a cellstr
+function frozen(tests, have, names, what)
+    if isstruct(have)
+        have = fieldnames(have);
+    elseif istable(have)
+        have = have.Properties.VariableNames;
+    end
+    missing = names(~ismember(names, have));
+    tests.verifyEmpty(missing, sprintf('%s: missing %s (frozen for 1.0)', what, strjoin(missing, ', ')));
 end

@@ -67,6 +67,17 @@ function shot(tests, app, name, tabTitles)
     end
 end
 
+%% frozen - Every frozen name (1.0) is present: struct fields, table columns or a cellstr
+function frozen(tests, have, names, what)
+    if isstruct(have)
+        have = fieldnames(have);
+    elseif istable(have)
+        have = have.Properties.VariableNames;
+    end
+    missing = names(~ismember(names, have));
+    tests.verifyEmpty(missing, sprintf('%s: missing %s (frozen for 1.0)', what, strjoin(missing, ', ')));
+end
+
 %% verifyFile - File exists and is not empty
 function verifyFile(tests, path)
     d = dir(path);
@@ -140,6 +151,15 @@ function testGroupsAndStatistics(tests)
     tests.verifyTrue(logical(app.exportGroupResults(fullfile(out, 'group_values.csv'))));
     verifyFile(tests, fullfile(out, 'group_values.csv'));
     verifyFile(tests, fullfile(out, 'group_values_report.txt'));
+    % Frozen for 1.0: Group, Subject and the feature's column; the .mat result struct
+    frozen(tests, readtable(fullfile(out, 'group_values.csv')), {'Group', 'Subject', ...
+        matlab.lang.makeValidName(app.GroupResult.feature)}, 'Group values .csv');
+    tests.verifyTrue(logical(app.exportGroupResults(fullfile(out, 'group_result.mat'))));
+    m = load(fullfile(out, 'group_result.mat'));
+    frozen(tests, m, {'result'}, 'Group result .mat');
+    frozen(tests, m.result, {'design', 'method', 'groupNames', 'values', 'nExcluded', 'desc', 'main', ...
+        'check', 'checkAgrees', 'comparisons', 'assumptions', 'summary', 'labels', 'feature', 'subjectMode', ...
+        'designLabel', 'unit', 'settings', 'checkRows'}, 'Group result .mat result');
 end
 
 function testRepeatedMeasures(tests)
@@ -240,6 +260,9 @@ function testSingleFileFigureExport(tests)
     app = SignalCharacterizationApp(); c = onCleanup(@() delete(app.UIFig));
     tests.verifyTrue(logical(app.loadDemo()));
     tests.verifyTrue(logical(app.extract()));
+    % Frozen for 1.0: the columns of the features export (.csv header, colNames of the .mat)
+    frozen(tests, app.ResultsTable.ColumnName, {'Trial_Channel', 'PeakLatency_s', 'OnsetDelay_s', 'FWHM_s', ...
+        'AUCpos', 'AUCneg', 'RiseTime_s', 'DecayTime_s', 'PeakAmp', 'Integral'}, 'Features export columns');
     tests.verifyTrue(logical(app.exportFigure(fullfile(tests.TestData.exportDir, 'series'), 'png300', 'series')));
     verifyFile(tests, app.LastExportPath);
     tests.verifyTrue(logical(app.exportFigure(fullfile(tests.TestData.exportDir, 'series'), 'eps', 'series')));
