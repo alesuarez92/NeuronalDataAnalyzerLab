@@ -10,6 +10,8 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-05
+
 ### Added
 
 - **Quality checks, one format for every window** (quality checks step 1).
