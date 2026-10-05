@@ -209,24 +209,34 @@ function f = frozenFields(tag)
 end
 
 %% scrollToButtons - Scroll the step column so the session buttons are visible
-% The layout is drawn first (scrolling an undrawn grid does nothing), then
-% the column scrolls to the Methods text button ('bottom' where that is refused).
+% The window is drawn and given time to lay out first (scrolling before the
+% browser has the column's height does nothing), then every scrollable
+% container above the buttons scrolls to the Methods text button ('bottom'
+% where that is refused). What happened is printed to the CI log.
 function scrollToButtons(btns)
-    try
-        drawnow;
-        h = btns.Grid;
-        while ~isempty(h) && ~(isa(h, 'matlab.ui.container.GridLayout') && strcmp(char(h.Scrollable), 'on'))
-            h = h.Parent;
+    drawnow; pause(1);
+    h = btns.Grid.Parent;
+    while ~isempty(h) && ~isa(h, 'matlab.ui.Root')
+        if isprop(h, 'Scrollable') && strcmp(char(h.Scrollable), 'on')
+            before = viewport(h);
+            msg = '';
+            try
+                scroll(h, btns.Methods);
+            catch ME
+                msg = ME.message;
+                try, scroll(h, 'bottom'); catch ME2, msg = [msg ' / ' ME2.message]; end
+            end
+            drawnow; pause(0.5);
+            fprintf('scrollToButtons: %s viewport %s -> %s %s\n', class(h), mat2str(before), ...
+                mat2str(viewport(h)), msg);
         end
-        if isempty(h), return; end
-        try
-            scroll(h, btns.Methods);
-        catch
-            scroll(h, 'bottom');
-        end
-        drawnow;
-    catch
+        h = h.Parent;
     end
+end
+
+function v = viewport(h)
+    v = [];
+    if isprop(h, 'ScrollableViewportLocation'), v = h.ScrollableViewportLocation; end
 end
 
 function testExtractLDF(tests)
