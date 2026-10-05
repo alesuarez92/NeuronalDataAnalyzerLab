@@ -13,15 +13,15 @@
 % (NaN) and the measures.
 %
 %   [eeg, info] = EEGAnalysis.filter(eeg, Name, Value)
-%       Zero-phase FIR filters designed and applied as in MNE-Python
-%       (raw.filter / notch_filter, 'firwin', Hamming window; the same
-%       design as EEGLAB pop_eegfiltnew): 'HighPass' Hz, 'LowPass' Hz (one
-%       band-pass filter when both are given), 'Notch' Hz list (stop bands
-%       freq / 200 Hz wide, 0.5 Hz transitions). Transition widths 'auto':
-%       min(max(0.25 f, 2), f) below and min(max(0.25 f, 2), fs/2 - f)
-%       above; length round(3.3 fs / narrowest transition), made odd.
-%       Trials are filtered one by one. info.band / info.notch: the
-%       designs (filterDesign / notchDesign).
+%       Zero-phase FIR filters (Hamming-windowed sinc) following Widmann,
+%       Schroger & Maess (2015), J Neurosci Methods 250:34-46: 'HighPass'
+%       Hz, 'LowPass' Hz (both: the high-pass and the low-pass combined
+%       into one band-pass filter), 'Notch' Hz list (each line frequency
+%       removed +-0.5 Hz, 1 Hz transitions). Transition widths: min(max(
+%       0.25 f, 2), f) below and min(max(0.25 f, 2), fs/2 - f) above;
+%       order 3.3 fs / transition, rounded up to even; cutoff (-6 dB) in
+%       the middle of the transition. Trials are filtered one by one.
+%       info.band / info.notch: the designs (filterDesign / notchDesign).
 %   d   = EEGAnalysis.filterDesign(fs, 'HighPass', Hz, 'LowPass', Hz)
 %   d   = EEGAnalysis.notchDesign(fs, freqs)
 %       kind, edges, transitions, -6 dB cutoffs, length, order and the
@@ -34,7 +34,7 @@
 %       ref 'average' (mean of the good channels subtracted from every
 %       good channel) or channel names (their mean, e.g. {'TP9', 'TP10'}
 %       for linked mastoids; a single reference channel becomes 0). Bad
-%       channels stay as recorded, as in MNE-Python.
+%       channels are not re-referenced: their data stay as recorded.
 %   ep  = EEGAnalysis.epoch(eeg, Name, Value)
 %       Cuts a continuous recording into trials around its events.
 %       'Window' [from to] in s around each event (default [-0.2 0.8]),
@@ -139,7 +139,7 @@
 %       else A1 / A2 (any case); plain error when it has none of them.
 %   f   = EEGAnalysis.notchFrequencies(notch, fs, lowPass)
 %       The line frequency notch (Hz, 0 = off: []) and its harmonics below
-%       fs/2 - 1 Hz and below the low-pass (when on); at least notch itself.
+%       fs/2 - 1.5 Hz and below the low-pass (when on); at least notch itself.
 %   idx = EEGAnalysis.channelIndex(labels, names)
 %       Positions of channel names (any case); error listing the unknown ones.
 %   Q   = EEGAnalysis.checks(eegs, names, o)
@@ -822,65 +822,61 @@ classdef EEGAnalysis
                 error('NeuroAnalyzer:eeg:badOption', ['The high-pass frequency (%g Hz) must be below ' ...
                     'the low-pass frequency (%g Hz).'], hp, lp);
             end
+            % Transition widths (Widmann et al. 2015): a quarter of the passband edge, at
+            % least 2 Hz, but never past 0 Hz or the Nyquist frequency.
             lt = [];
             ht = [];
-            f = [0 nyq];
-            g = [1 1];
+            h = 1;
             if ~isempty(hp)
                 lt = min(max(0.25 * hp, 2), hp);
-                f = [hp - lt, hp, nyq];
-                g = [0 1 1];
-                if hp - lt ~= 0, f = [0 f]; g = [0 g]; end
+                m = EEGAnalysis.firOrder(fs, lt);
+                h = conv(h, EEGAnalysis.windowedSinc(m, fs, hp - lt / 2, 0));
             end
             if ~isempty(lp)
                 ht = min(max(0.25 * lp, 2), nyq - lp);
-                if isempty(hp)
-                    f = [0 lp lp + ht];
-                    g = [1 1 0];
-                else
-                    f = [f(1:end - 1), lp, lp + ht];
-                    g = [g(1:end - 1), 1, 0];
-                end
-                if lp + ht ~= nyq, f = [f nyq]; g = [g 0]; end
+                m = EEGAnalysis.firOrder(fs, ht);
+                h = conv(h, EEGAnalysis.windowedSinc(m, fs, lp + ht / 2, 1));
             end
-            N = EEGAnalysis.oddLength(3.3 * fs / min([lt, ht]));
+            % A band-pass is the high-pass and the low-pass applied one after the other,
+            % merged into one filter (the convolution of their taps): each edge keeps its
+            % own transition width, and the orders add up.
+            N = numel(h);
             kind = 'band-pass';
             if isempty(lp), kind = 'high-pass'; elseif isempty(hp), kind = 'low-pass'; end
             d = struct('kind', kind, 'fs', fs, 'highPass', hp, 'lowPass', lp, 'highTransition', lt, ...
                 'lowTransition', ht, 'highCutoff', hp - lt / 2, 'lowCutoff', lp + ht / 2, ...
-                'notch', [], 'notchWidth', [], 'length', N, 'order', N - 1, ...
-                'h', EEGAnalysis.firwinDesign(N, f, g, fs));
+                'notch', [], 'notchWidth', [], 'length', N, 'order', N - 1, 'h', h);
         end
 
         %% notchDesign - The FIR band-stop filter around each line-noise frequency
+        % Each line frequency f is removed from f - 0.5 to f + 0.5 Hz (a 1 Hz stop band,
+        % wide enough for the small drift of the mains frequency), with 1 Hz transitions on
+        % both sides: -6 dB at f +- 1 Hz, everything outside f +- 1.5 Hz passed. All
+        % frequencies share one band-stop filter (one Hamming window, Widmann et al. 2015).
         function d = notchDesign(fs, freqs)
             freqs = sort(double(freqs(:)'));
             nyq = fs / 2;
-            nw = freqs / 200;                  % stop band width (MNE-Python default)
-            tb = 0.5;                          % transition on each side
-            lows = freqs - nw / 2 - tb;        % passband edges
-            highs = freqs + nw / 2 + tb;
-            if isempty(freqs) || any(~isfinite(freqs)) || any(lows <= 0) || any(highs >= nyq)
-                error('NeuroAnalyzer:eeg:badOption', ['The notch frequencies must lie between 1 Hz ' ...
-                    'and just below half the sampling rate (%g Hz).'], nyq);
+            sw = 1;                            % stop band width (Hz)
+            tb = 1;                            % transition on each side (Hz)
+            reach = sw / 2 + tb;               % from f to the passband edge
+            if isempty(freqs) || any(~isfinite(freqs)) || any(freqs - reach <= 0) || any(freqs + reach >= nyq)
+                error('NeuroAnalyzer:eeg:badOption', ['The notch frequencies must lie between %g Hz ' ...
+                    'and %g Hz (half the sampling rate minus %g Hz).'], reach, nyq - reach, reach);
             end
-            f = reshape([lows; lows + tb; highs - tb; highs], 1, []);
-            g = repmat([1 0 0 1], 1, numel(freqs));
-            if any(diff(f) < 0)
+            if any(diff(freqs) < 2 * reach)
                 error('NeuroAnalyzer:eeg:badOption', 'The notch frequencies are too close together.');
             end
-            f = [0 f nyq];
-            g = [1 g 1];
-            N = EEGAnalysis.oddLength(3.3 * fs / tb);
+            cut = reshape([freqs - sw / 2 - tb / 2; freqs + sw / 2 + tb / 2], 1, []);
+            h = EEGAnalysis.windowedSinc(EEGAnalysis.firOrder(fs, tb), fs, cut, 1);
+            N = numel(h);
             d = struct('kind', 'notch', 'fs', fs, 'highPass', [], 'lowPass', [], 'highTransition', tb, ...
-                'lowTransition', tb, 'highCutoff', [], 'lowCutoff', [], 'notch', freqs, 'notchWidth', nw, ...
-                'length', N, 'order', N - 1, 'h', EEGAnalysis.firwinDesign(N, f, g, fs));
+                'lowTransition', tb, 'highCutoff', [], 'lowCutoff', [], 'notch', freqs, ...
+                'notchWidth', repmat(sw, size(freqs)), 'length', N, 'order', N - 1, 'h', h);
         end
 
         %% describeFilter - One plain sentence for a filter design
         function s = describeFilter(d)
-            tail = sprintf(['zero-phase FIR filter (Hamming-windowed sinc, %d taps, order %d, ' ...
-                'as in MNE-Python and EEGLAB pop_eegfiltnew)'], d.length, d.order);
+            tail = sprintf('zero-phase FIR filter (Hamming-windowed sinc, %d taps, order %d)', d.length, d.order);
             switch d.kind
                 case 'notch'
                     s = sprintf(['Notch filter at %s Hz (stop band %s Hz wide, transitions %g Hz): %s.'], ...
@@ -985,7 +981,7 @@ classdef EEGAnalysis
                 end
             end
             r = mean(double(eeg.data(use, :, :)), 1);
-            eeg.data(~bad, :, :) = single(double(eeg.data(~bad, :, :)) - r);   % bad channels as recorded (as MNE-Python)
+            eeg.data(~bad, :, :) = single(double(eeg.data(~bad, :, :)) - r);   % bad channels keep their data
             eeg.history{end + 1} = sprintf('Re-referenced to the %s (was: %s).', words, eeg.reference);
             eeg.reference = words;
         end
@@ -1111,7 +1107,7 @@ classdef EEGAnalysis
             f = [];
             if ~isnumeric(notch) || isempty(notch) || notch <= 0, return; end
             f = notch * (1:floor(fs / 2 / notch));
-            f = f(f < fs / 2 - 1);
+            f = f(f < fs / 2 - 1.5);             % the notch passes from f + 1.5 Hz (notchDesign)
             if lowPass > 0, f = f(f < lowPass); end
             if isempty(f), f = notch; end      % at least the line frequency itself
         end
@@ -1627,69 +1623,83 @@ classdef EEGAnalysis
             end
         end
 
-        %% firwinDesign - Windowed-sinc FIR from band edges and gains (as MNE-Python _firwin_design)
-        % f: band edges in Hz from 0 to fs/2, g: gain 0 or 1 at each edge. Each change of gain adds
-        % or subtracts a Hamming-windowed sinc low-pass cut off in the middle of that transition,
-        % as long as the transition needs (3.3 * fs / width taps), centred in the N taps.
-        function h = firwinDesign(N, f, g, fs)
-            h = zeros(1, N);
-            if g(end) == 1, h((N + 1) / 2) = 1; end
-            pf = f(end);
-            pg = g(end);
-            for k = numel(f) - 1:-1:1
-                if g(k) ~= pg
-                    M = EEGAnalysis.oddLength(3.3 * fs / (pf - f(k)));
-                    if M > N
-                        error('NeuroAnalyzer:eeg:badOption', 'The filter is too short for this transition.');
-                    end
-                    fc = (pf + f(k)) / 2 / fs;                  % cutoff in cycles per sample
-                    m = (0:M - 1) - (M - 1) / 2;
-                    x = 2 * fc * m;
-                    s = ones(1, M);
-                    nz = x ~= 0;
-                    s(nz) = sin(pi * x(nz)) ./ (pi * x(nz));
-                    win = ones(1, M);
-                    if M > 1, win = 0.54 - 0.46 * cos(2 * pi * (0:M - 1) / (M - 1)); end
-                    hk = 2 * fc * s .* win;
-                    hk = hk / sum(hk);
-                    off = (N - M) / 2;
-                    if g(k) == 0
-                        h(off + 1:N - off) = h(off + 1:N - off) - hk;
-                    else
-                        h(off + 1:N - off) = h(off + 1:N - off) + hk;
-                    end
-                end
-                pg = g(k);
-                pf = f(k);
+        %% firOrder - Filter order for a transition width (Hamming window)
+        % Widmann et al. (2015), Table 1: with a Hamming window the transition band is
+        % about 3.3 / order of the sampling rate wide, so order = 3.3 fs / width. Rounded
+        % up (the transition is never wider than asked) to an even order, so the filter
+        % has an odd number of taps and a whole-sample delay of order / 2.
+        function m = firOrder(fs, width)
+            m = ceil(3.3 * fs / width - 1e-9);
+            m = m + mod(m, 2);
+        end
+
+        %% windowedSinc - Linear-phase FIR from cutoff frequencies (windowed-sinc method)
+        % The ideal (infinitely long) filter whose gain is g0 below the first cutoff and
+        % flips between 1 and 0 at each cutoff fc (Hz, ascending) is a sum of sinc
+        % functions: gain(f) = gEnd + sum_k (gain below fc_k - gain above fc_k) * LP_k(f),
+        % LP_k the ideal low-pass at fc_k, whose impulse response is 2 fc sinc(2 fc n)
+        % (fc in cycles per sample). It is cut to the samples n = -m/2..m/2 and tapered by
+        % a Hamming window 0.54 + 0.46 cos(2 pi n / m) (Widmann et al. 2015). Each low-pass
+        % part is scaled to a gain of exactly 1 at 0 Hz, so a high-pass removes a constant
+        % offset completely and a low-pass keeps it unchanged. Each cutoff lies in the
+        % middle of its transition band (-6 dB).
+        function h = windowedSinc(m, fs, fc, g0)
+            n = -m / 2:m / 2;
+            w = 0.54 + 0.46 * cos(2 * pi * n / max(m, 1));
+            h = zeros(size(n));
+            g = g0;
+            for k = 1:numel(fc)
+                v = 2 * fc(k) / fs;                     % 2 fc in cycles per sample
+                lowpass = v * EEGAnalysis.sinc(v * n) .* w;
+                lowpass = lowpass / sum(lowpass);
+                h = h + (g - (1 - g)) * lowpass;        % +LP when the gain drops, -LP when it rises
+                g = 1 - g;
             end
+            if g == 1                                   % gain at the Nyquist frequency
+                h(m / 2 + 1) = h(m / 2 + 1) + 1;
+            end
+        end
+
+        %% sinc - sin(pi x) / (pi x), 1 at x = 0
+        function y = sinc(x)
+            y = ones(size(x));
+            k = x ~= 0;
+            y(k) = sin(pi * x(k)) ./ (pi * x(k));
         end
 
         %% applyFIR - Zero-phase FIR along the samples of every channel and trial
-        % Each channel is padded at both ends with its odd reflection (MNE-Python
-        % 'reflect_limited', min(N, samples) - 1 samples), convolved by FFT and
-        % shifted back by (N - 1) / 2.
+        % The taps are symmetric (linear phase), so the filter only delays the signal by
+        % half its order; that delay is removed by taking the output centred on each
+        % input sample (Widmann et al. 2015), which leaves the phase unchanged.
+        % Edges: near each end the filter needs order / 2 samples beyond the recording.
+        % They are made by mirroring the signal about its first (last) sample and turning
+        % the mirror image upside down (2 x(1) - x(1 + k)), so the level and the slope
+        % continue smoothly across the edge and an offset or slow drift does not produce a
+        % step there. When the recording is shorter than that, the last mirrored value is
+        % held for the rest of the padding.
         function y = applyFIR(x, h)
             [nCh, nS, nTr] = size(x);
             N = numel(h);
-            e = min(N, nS) - 1;
+            P = (N - 1) / 2;                           % padding at each end = the delay
+            r = min(P, nS - 1);                        % samples that can be mirrored
             y = zeros(nCh, nS, nTr, 'single');
-            L = nS + 2 * e + N - 1;
-            nfft = 2 ^ nextpow2(L);
+            nfft = 2 ^ nextpow2(nS + 2 * P + N - 1);
             H = fft(h(:)', nfft);
             for k = 1:nTr
                 X = double(x(:, :, k));
-                if e > 0
-                    X = [2 * X(:, 1) - X(:, e + 1:-1:2), X, 2 * X(:, end) - X(:, end - 1:-1:end - e)];
+                if P > 0
+                    before = 2 * X(:, 1) - X(:, r + 1:-1:2);           % x(1 - r) .. x(0)
+                    after = 2 * X(:, end) - X(:, end - 1:-1:end - r);  % x(nS + 1) .. x(nS + r)
+                    if r < P
+                        if r == 0, before = X(:, 1); after = X(:, end); end
+                        before = [repmat(before(:, 1), 1, P - size(before, 2)), before];
+                        after = [after, repmat(after(:, end), 1, P - size(after, 2))];
+                    end
+                    X = [before, X, after];
                 end
                 Y = real(ifft(fft(X, nfft, 2) .* H, [], 2));
-                y(:, :, k) = single(Y(:, e + (N - 1) / 2 + (1:nS)));
+                y(:, :, k) = single(Y(:, 2 * P + (1:nS)));     % sample i of the input: P + i, plus the delay P
             end
-        end
-
-        %% oddLength - round(n), made odd by adding 1
-        function n = oddLength(n)
-            n = max(1, round(n));
-            n = n + 1 - mod(n, 2);
         end
 
         %% checkFrequency - [] or one frequency between 0 and Nyquist

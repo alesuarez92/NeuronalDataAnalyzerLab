@@ -2,9 +2,10 @@
 % =========================================================================
 % UNIT TESTS FOR SCALP MAPS (core/ScalpMap.m)
 % =========================================================================
-% Spherical splines against MNE-Python 1.13 (the interpolation matrix of
-% mne.channels.interpolation._make_interpolation_matrix, with alpha=None
-% and with its default 1e-5) on the 32 positions of the demo; thin-plate
+% Spherical splines checked against Perrin et al. (1989): g(x) as the
+% Legendre series, exact values at the electrodes, a smooth dipolar field
+% reproduced between the 32 electrodes of the demo, smoothing (lambda) and
+% coincident electrodes; thin-plate
 % splines against scipy 1.x RBFInterpolator ('thin_plate_spline', degree
 % 1); exact values at the electrodes, constants and planes kept; the
 % demo's known scalp distributions (P300 at Pz, N1 at Cz) recovered
@@ -33,21 +34,52 @@ function teardownOnce(tests)
     if exist(tests.TestData.tmp, 'dir') == 7, rmdir(tests.TestData.tmp, 's'); end
 end
 
-%% --------------------------------------------------- Against MNE-Python and scipy
+%% --------------------------------------------------- Perrin et al. (1989) and scipy
 
-function testSphericalSplineAsMNE(tests)
+function testSphericalSplinePerrin(tests)
+    % g(x) = 1/(4 pi) sum_{n=1..50} (2n + 1) / (n (n + 1))^4 P_n(x), P_n from Bonnet's recurrence
+    x = linspace(-1, 1, 401)';
+    p0 = ones(size(x));
+    p1 = x;
+    g = 3 / 2 ^ 4 * p1;
+    for n = 2:50
+        p2 = ((2 * n - 1) * x .* p1 - (n - 1) * p0) / n;
+        g = g + (2 * n + 1) / (n * (n + 1)) ^ 4 * p2;
+        p0 = p1;
+        p1 = p2;
+    end
+    verifyEqual(tests, ScalpMap.gFunction(x, 4, 50), g / (4 * pi), 'AbsTol', 1e-15);
+    verifyEqual(tests, ScalpMap.gFunction(1, 1, 1), 3 / 2 / (4 * pi), 'AbsTol', 1e-15, 'one term: 3 / 2 P_1(1) / 4 pi');
+    % A smooth field (a dipole 0.3 radii deep under the vertex, tilted, as on a
+    % spherical head), average-referenced: between the electrodes over the cap
+    [u, ~, labels] = demoPositions();
+    r0 = [0.05 0 0.3];
+    p = [0.3 0.2 1];
+    dip = @(e) ((e - r0) * p') ./ sum((e - r0) .^ 2, 2) .^ 1.5;
+    ref = mean(dip(u));
+    [A, E] = meshgrid(-180:5:175, 0:5:85);
+    to = azelVectors([A(:), E(:)]);
+    est = ScalpMap.sphericalSpline(u, dip(u) - ref, to);
+    err = max(abs(est - (dip(to) - ref))) / max(abs(dip(u) - ref));
+    verifyLessThan(tests, err, 0.03, sprintf('dipolar field: largest error %.3f of the peak', err));
+    % ... and at each inner electrode left out in turn
+    worst = 0;
+    for k = find(u(:, 3) > 0.3)'
+        keep = setdiff(1:numel(labels), k);
+        worst = max(worst, abs(ScalpMap.sphericalSpline(u(keep, :), dip(u(keep, :)), u(k, :)) - dip(u(k, :))));
+    end
+    verifyLessThan(tests, worst / max(abs(dip(u) - ref)), 0.05, 'leave-one-out');
+    % Smoothing (Perrin's lambda) moves the map off the electrodes, towards a flatter map
     [u, v] = demoPositions();
-    to = azelVectors([180 67.5; 180 22.5; 0 67.5; 90 67.5; 45 22; 150 30; -100 -10; 30 80]);
-    % mne.channels.interpolation._make_interpolation_matrix(u, to, alpha=None) @ v
-    mne = [0.575320063248; 0.582845006296; -0.095577749372; 0.109179670856; -0.200983471841; ...
-        0.485169428843; -0.188666084551; 0.042922083076];
-    verifyEqual(tests, ScalpMap.sphericalSpline(u, v, to), mne, 'AbsTol', 1e-9);
-    % ... with its default regularization alpha = 1e-5 (as MNE interpolates bad channels)
-    mneReg = [0.55983759708; 0.564094663065; -0.093231856441; 0.119426114802; -0.206450553031; ...
-        0.484954267793; -0.190806320823; 0.051599598592];
-    verifyEqual(tests, ScalpMap.sphericalSpline(u, v, to, 'Lambda', 1e-5), mneReg, 'AbsTol', 1e-9);
+    s = ScalpMap.sphericalSpline(u, v, u, 'Lambda', 1e-3);
+    verifyGreaterThan(tests, max(abs(s - v)), 1e-3);
+    verifyLessThan(tests, max(abs(s)), max(abs(v)));
+    % Two electrodes at the same place: the map takes their mean there
+    o = ScalpMap.sphericalSpline([u; u(14, :)], [v; v(14) + 0.1], u(14, :));
+    verifyEqual(tests, o, v(14) + 0.05, 'AbsTol', 1e-6);
     % positions need not be unit vectors; values as a row
-    verifyEqual(tests, ScalpMap.sphericalSpline(85 * u, v', 2 * to), mne, 'AbsTol', 1e-9);
+    to = azelVectors([180 67.5; 0 67.5; 45 22; -100 -10]);
+    verifyEqual(tests, ScalpMap.sphericalSpline(85 * u, v', 2 * to), ScalpMap.sphericalSpline(u, v, to), 'AbsTol', 1e-12);
 end
 
 function testThinPlateAsScipy(tests)
@@ -71,7 +103,7 @@ function testExactConstantsAndPlanes(tests)
         'a constant stays constant');
     two = ScalpMap.sphericalSpline(u, [v, -2 * v], to);
     verifyEqual(tests, two, [1 -2] .* ScalpMap.sphericalSpline(u, v, to), 'AbsTol', 1e-12, 'several maps at once');
-    seven = ScalpMap.sphericalSpline(u, v, to, 'Terms', 7);    % EEGLAB's number of terms
+    seven = ScalpMap.sphericalSpline(u, v, to, 'Terms', 7);    % 7 Legendre terms instead of 50
     verifyEqual(tests, seven, ScalpMap.sphericalSpline(u, v, to), 'AbsTol', 0.03 * max(abs(v)));
     xy = [0 0; 3 0; 0 2; 3 2; 1.2 0.7; -1 1.5];
     to = [0.5 0.5; 2.5 1.9; -0.5 1; 1.5 1.5];

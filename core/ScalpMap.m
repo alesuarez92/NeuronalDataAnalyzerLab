@@ -8,21 +8,18 @@
 % (core/EEGLayout.m) and draws it:
 %   scalp layouts  spherical spline on the head (Perrin F, Pernier J,
 %                  Bertrand O, Echallier JF (1989), Electroencephalogr Clin
-%                  Neurophysiol 72:184-187) with stiffness m = 4 and 50
-%                  Legendre terms, without regularization, so the map
-%                  passes through every electrode's value: the matrix of
-%                  MNE-Python's spherical spline interpolation
-%                  (_make_interpolation_matrix with alpha=None; for bad
-%                  channels MNE adds 1e-5 to the diagonal, which moves the
-%                  map 5-10% off the electrodes). EEGLAB uses 7 terms: up
-%                  to 3% of the peak different, mostly beyond the outer
-%                  electrodes. Drawn over the disk of EEGLayout.project out
-%                  to the outermost electrode (at least the head line).
+%                  Neurophysiol 72:184-187; corrigendum (1990) 76:565) with
+%                  m = 4 and 50 Legendre terms, without smoothing, so the
+%                  map passes through every electrode's value. With 7 terms
+%                  instead of 50 the map changes by up to 3% of the peak,
+%                  mostly beyond the outer electrodes. Drawn over the disk
+%                  of EEGLayout.project out to the outermost electrode (at
+%                  least the head line).
 %   skull layouts  flat interpolation in mm from bregma: a thin-plate spline
-%                  (Duchon J (1977), Lecture Notes in Mathematics 571:85-100;
-%                  as scipy RBFInterpolator 'thin_plate_spline' with a linear
-%                  term), drawn only inside the outline of the electrodes
-%                  (their convex hull), since nothing is known outside it.
+%                  with a linear term (Duchon J (1977), Lecture Notes in
+%                  Mathematics 571:85-100), drawn only inside the outline of
+%                  the electrodes (their convex hull), since nothing is
+%                  known outside it.
 % Both pass exactly through the electrodes' values.
 %
 %   M = ScalpMap.make(L, values, Name, Value)
@@ -155,24 +152,37 @@ classdef ScalpMap
             M.range = [min([Z(:); M.values]) max([Z(:); M.values])];
         end
 
-        %% sphericalSpline - Spherical spline interpolation (Perrin et al. 1989)
-        % V(r) = c0 + sum_i C_i g(cos(r, r_i)), g(x) = 1/(4 pi) sum_n (2n + 1) /
-        % (n (n + 1))^m P_n(x); [G + lambda I, 1; 1', 0] [C; c0] = [V; 0].
+        %% sphericalSpline - Spherical spline interpolation (Perrin et al. 1989, 1990)
+        % Perrin et al. write the potential at a point E of the unit sphere as
+        %   V(E) = c0 + sum_i c_i g(cos(E, E_i)),
+        %   g(x) = 1/(4 pi) sum_{n=1..N} (2n + 1) / (n (n + 1))^m P_n(x),
+        % with the n + 1 unknowns fixed by V(E_i) = the measured value at each
+        % electrode i and the constraint sum_i c_i = 0:
+        %   [G, 1; 1', 0] [c; c0] = [V; 0],  G(i, j) = g(cos(E_i, E_j)).
+        % 'Lambda' adds Perrin's smoothing term lambda to the diagonal of G (0: the
+        % map passes through every value). Two electrodes at (almost) the same place
+        % make G singular; the system is then solved in the least-squares sense with
+        % the smallest coefficients (pseudo-inverse), which gives such electrodes the
+        % mean of their values instead of failing.
         function out = sphericalSpline(from, values, to, varargin)
             o = EEGLayout.options(struct('Stiffness', 4, 'Terms', 50, 'Lambda', 0), varargin);
-            from = ScalpMap.unitRows(from);
-            to = ScalpMap.unitRows(to);
-            n = size(from, 1);
-            values = double(values);
-            if size(values, 1) ~= n, values = values.'; end
-            if size(values, 1) ~= n
+            E = ScalpMap.unitRows(from);
+            n = size(E, 1);
+            V = double(values);
+            if size(V, 1) ~= n, V = V.'; end
+            if size(V, 1) ~= n
                 error('NeuroAnalyzer:eeg:invalid', '%d values for %d positions.', numel(values), n);
             end
-            G = ScalpMap.gFunction(from * from', o.Stiffness, o.Terms);
-            G(1:n + 1:end) = G(1:n + 1:end) + o.Lambda;
-            A = [G, ones(n, 1); ones(1, n), 0];
-            W = pinv(A) * [values; zeros(1, size(values, 2))];
-            out = [ScalpMap.gFunction(to * from', o.Stiffness, o.Terms), ones(size(to, 1), 1)] * W;
+            G = ScalpMap.gFunction(E * E', o.Stiffness, o.Terms) + o.Lambda * eye(n);
+            S = [G, ones(n, 1); ones(1, n), 0];
+            rhs = [V; zeros(1, size(V, 2))];
+            if rcond(S) > 1e-12
+                c = S \ rhs;
+            else
+                c = pinv(S) * rhs;
+            end
+            P = ScalpMap.unitRows(to);
+            out = ScalpMap.gFunction(P * E', o.Stiffness, o.Terms) * c(1:n, :) + c(n + 1, :);
         end
 
         %% thinPlate - Thin-plate spline in the plane, with a linear term
@@ -285,19 +295,23 @@ classdef ScalpMap
 
     methods(Static, Hidden)
 
-        %% gFunction - g(x) = 1/(4 pi) sum_{n=1..N} (2n + 1) / (n (n + 1))^m P_n(x)
+        %% gFunction - Perrin's g(x) = 1/(4 pi) sum_{n=1..N} (2n + 1) / (n (n + 1))^m P_n(x)
+        % The Legendre series is summed with Clenshaw's backward recurrence (Clenshaw
+        % 1955, Math Tables Aids Comput 9:118-120), using the three-term recurrence of
+        % the Legendre polynomials (n + 1) P_{n+1} = (2n + 1) x P_n - n P_{n-1}.
         function g = gFunction(x, m, N)
             x = max(-1, min(1, x));
-            p0 = ones(size(x));
-            p1 = x;
-            g = (3 / 2 ^ m) * p1;
-            for k = 2:N
-                p2 = ((2 * k - 1) * x .* p1 - (k - 1) * p0) / k;
-                g = g + (2 * k + 1) / (k * (k + 1)) ^ m * p2;
-                p0 = p1;
-                p1 = p2;
+            n = 1:N;
+            a = (2 * n + 1) ./ (n .* (n + 1)) .^ m;       % coefficient of P_n
+            b1 = zeros(size(x));                          % b_{k+1}
+            b2 = zeros(size(x));                          % b_{k+2}
+            for k = N:-1:1
+                b0 = a(k) + (2 * k + 1) / (k + 1) * x .* b1 - (k + 1) / (k + 2) * b2;
+                b2 = b1;
+                b1 = b0;
             end
-            g = g / (4 * pi);
+            % sum_{n>=1} a_n P_n = b_1 P_1 + (beta_1 b_2) P_0, beta_1 = -1/2; P_0 = 1, P_1 = x
+            g = (x .* b1 - 0.5 * b2) / (4 * pi);
         end
 
         %% phi - Thin-plate kernel r^2 log r (0 at r = 0)

@@ -8,7 +8,7 @@
 % Pz, N1 negative at Cz near 100 ms, one table row per participant and
 % condition, and cutting the continuous rodent recording into trials
 % around its light flashes (visual evoked potential over V1). Cleaning
-% raw recordings: filter designs and taps as MNE-Python, drift and line
+% raw recordings: filter designs following Widmann et al. (2015), drift and line
 % noise removed, exact re-references, bad channels (suggested, left out
 % of the reference, rejection, ERPs and measures), event names and gaps,
 % exact trial rejection, and the raw demo (T7 suggested, exactly the blink
@@ -310,35 +310,70 @@ end
 
 %% --------------------------------------------------- Cleaning raw recordings
 
-function testFilterDesignMatchesMNE(tests)
-    % Lengths, edges and taps as MNE-Python 1.13 create_filter(..., fir_design='firwin')
-    d = EEGAnalysis.filterDesign(500, 'HighPass', 0.1, 'LowPass', 30);
+function testFilterDesignFollowsWidmann(tests)
+    % Rules of Widmann, Schroger & Maess (2015): transition max(0.25 f, 2 Hz) (not past
+    % 0 Hz or Nyquist), Hamming order 3.3 fs / transition (rounded up to even), cutoff
+    % (-6 dB) in the middle of the transition; passband within ~0.2-0.4% of 1 and the
+    % stop band ~53 dB down (Hamming window; 3.3 / order is an approximation, so at
+    % the very edge of the stop band at least 51 dB); symmetric taps (linear phase).
+    fs = 500;
+    d = EEGAnalysis.filterDesign(fs, 'HighPass', 0.1, 'LowPass', 30);
     verifyEqual(tests, d.kind, 'band-pass');
-    verifyEqual(tests, d.length, 16501);
     verifyEqual(tests, [d.highTransition d.lowTransition], [0.1 7.5], 'AbsTol', 1e-12);
     verifyEqual(tests, [d.highCutoff d.lowCutoff], [0.05 33.75], 'AbsTol', 1e-12);
-    lp = EEGAnalysis.filterDesign(500, 'LowPass', 40);
-    verifyEqual(tests, lp.length, 165);
-    verifyEqual(tests, lp.h([83 1 71]), [0.17982833336141163 0.0002123807816329227 0.012156937905843782], 'AbsTol', 1e-12);
+    verifyEqual(tests, d.order, 16500 + 220, 'band-pass: the orders of its high-pass and low-pass add up');
+    verifyEqual(tests, d.length, d.order + 1);
+    lp = EEGAnalysis.filterDesign(fs, 'LowPass', 40);
+    verifyEqual(tests, lp.order, 166, '3.3 * 500 / 10 = 165, rounded up to even');
+    hp = EEGAnalysis.filterDesign(fs, 'HighPass', 1);
+    verifyEqual(tests, hp.order, 1650, 'transition 1 Hz (not past 0 Hz)');
+    hp8 = EEGAnalysis.filterDesign(fs, 'HighPass', 8);
+    n = EEGAnalysis.notchDesign(fs, [50 100]);
+    verifyEqual(tests, n.order, 1650, '1 Hz transitions');
+    verifyEqual(tests, n.notchWidth, [1 1], 'AbsTol', 1e-12);
+    for c = {d, lp, hp, hp8, n}
+        verifyEqual(tests, c{1}.h, fliplr(c{1}.h), 'AbsTol', 1e-15, [c{1}.kind ': symmetric taps']);
+    end
     verifyEqual(tests, sum(lp.h), 1, 'AbsTol', 1e-12, 'low-pass: DC gain 1');
-    hp = EEGAnalysis.filterDesign(500, 'HighPass', 1);
-    verifyEqual(tests, hp.length, 1651);
-    verifyEqual(tests, hp.h([826 1]), [0.997990231681618 2.7636500548030848e-05], 'AbsTol', 1e-12);
     verifyEqual(tests, sum(hp.h), 0, 'AbsTol', 1e-12, 'high-pass: DC gain 0');
-    gain = @(d, f) abs(sum(d.h .* exp(-2i * pi * f * (0:d.length - 1) / 500)));
-    verifyEqual(tests, gain(lp, 20), 1, 'AbsTol', 0.003);
-    verifyEqual(tests, gain(lp, lp.lowCutoff), 0.5, 'AbsTol', 0.01, '-6 dB at the cutoff');
-    verifyLessThan(tests, gain(lp, 60), 0.003);
-    n = EEGAnalysis.notchDesign(500, [50 100]);
-    verifyEqual(tests, n.length, 3301);
-    verifyEqual(tests, n.notchWidth, [0.25 0.5], 'AbsTol', 1e-12);
-    verifyLessThan(tests, [gain(n, 50) gain(n, 100)], [0.01 0.01]);
-    verifyEqual(tests, [gain(n, 45) gain(n, 75)], [1 1], 'AbsTol', 0.003);
+    nf = 2 ^ 21;
+    f = (0:nf - 1) * fs / nf;
+    f = min(f, fs - f);                          % |H(f)| = |H(fs - f)| for real taps
+    G = @(h) abs(fft(h, nf));
+    dB = @(g) 20 * log10(max(g));
+    g = G(lp.h);
+    verifyLessThan(tests, max(abs(g(f <= 40) - 1)), 0.004, 'low-pass: passband');
+    verifyLessThan(tests, dB(g(f >= 50)), -51, 'low-pass: stop band');
+    gain = @(h, f0) abs(sum(h .* exp(-2i * pi * f0 * (0:numel(h) - 1) / fs)));
+    verifyEqual(tests, gain(lp.h, lp.lowCutoff), 0.5, 'AbsTol', 0.01, '-6 dB at the cutoff');
+    verifyEqual(tests, gain(hp.h, hp.highCutoff), 0.5, 'AbsTol', 0.01, '-6 dB at the cutoff');
+    g = G(hp.h);
+    verifyLessThan(tests, max(abs(g(f >= 1) - 1)), 0.004, 'high-pass: passband');
+    g = G(hp8.h);
+    verifyLessThan(tests, dB(g(f <= 6)), -51, 'high-pass: stop band');
+    verifyLessThan(tests, dB(g(f <= 5.5)), -53, 'high-pass: stop band');
+    g = G(d.h);
+    verifyLessThan(tests, max(abs(g(f >= 0.1 & f <= 30) - 1)), 0.005, 'band-pass: passband');
+    verifyLessThan(tests, dB(g(f >= 37.5)), -51, 'band-pass: stop band');
+    g = G(n.h);
+    verifyLessThan(tests, dB(g(abs(f - 50) <= 0.5 | abs(f - 100) <= 0.5)), -51, 'notch: stop bands');
+    verifyLessThan(tests, max(abs(g(abs(f - 50) >= 1.5 & abs(f - 100) >= 1.5) - 1)), 0.004, 'notch: passband');
+    verifyEqual(tests, [gain(n.h, 49) gain(n.h, 51) gain(n.h, 101)], [0.5 0.5 0.5], 'AbsTol', 0.01, 'notch: -6 dB at +-1 Hz');
+    % Zero phase: a symmetric pulse stays centred; the output is as long as the input
+    x = zeros(1, 4001);
+    x(1996:2006) = 1;
+    y = double(EEGAnalysis.applyFIR(single(x), lp.h));
+    verifySize(tests, y, size(x));
+    [~, i] = max(y);
+    verifyEqual(tests, i, 2001, 'peak not shifted');
+    verifyEqual(tests, sum((1:4001) .* y) / sum(y), 2001, 'AbsTol', 1e-6, 'centre not shifted');
     verifySubstring(tests, EEGAnalysis.describeFilter(d), 'Band-pass filter 0.1-30 Hz');
+    verifySubstring(tests, EEGAnalysis.describeFilter(d), '16721 taps, order 16720');
     verifySubstring(tests, EEGAnalysis.describeFilter(n), 'Notch filter at 50 and 100 Hz');
     verifyError(tests, @() EEGAnalysis.filterDesign(500, 'HighPass', 40, 'LowPass', 30), 'NeuroAnalyzer:eeg:badOption');
     verifyError(tests, @() EEGAnalysis.filterDesign(500, 'LowPass', 300), 'NeuroAnalyzer:eeg:badOption');
     verifyError(tests, @() EEGAnalysis.notchDesign(500, 250), 'NeuroAnalyzer:eeg:badOption');
+    verifyError(tests, @() EEGAnalysis.notchDesign(500, [50 52]), 'NeuroAnalyzer:eeg:badOption');
 end
 
 function testFilterRemovesDriftAndLineNoise(tests)
@@ -353,6 +388,9 @@ function testFilterRemovesDriftAndLineNoise(tests)
     mid = 7 * fs:13 * fs;                                        % away from the edges (the filter is 6.6 s long)
     verifyEqual(tests, double(out.data(1, mid)), sig(mid), 'AbsTol', 0.05, 'offset, drift and 50 Hz removed');
     verifyEqual(tests, double(out.data(2, mid)), -sig(mid), 'AbsTol', 0.05);
+    line = EEGSource.make(single(sin(2 * pi * 50 * t)), fs, 'Labels', {'A'}, 'Unit', 'uV', 'IsEpoched', false);
+    line = EEGAnalysis.filter(line, 'Notch', 50);
+    verifyLessThan(tests, max(abs(line.data(mid))), 0.003, 'a 50 Hz sine removed');
     verifyEqual(tests, numel(out.history), 2);
     verifySubstring(tests, out.history{1}, 'High-pass filter: passband edge 1 Hz');
     % Trials are filtered one by one; a filter longer than a trial is noted
@@ -370,7 +408,7 @@ function testRereferenceExact(tests)
     a = EEGAnalysis.rereference(eeg, 'average');
     m = mean(double(x(1:3, :)), 1);
     verifyEqual(tests, double(a.data(1:3, :)), double(x(1:3, :)) - m, 'AbsTol', 1e-5);
-    verifyEqual(tests, a.data(4, :), x(4, :), 'bad channel as recorded (as MNE-Python)');
+    verifyEqual(tests, a.data(4, :), x(4, :), 'bad channel as recorded');
     verifyEqual(tests, a.reference, 'average of the 3 good channels (T7 marked bad and left out)');
     verifySubstring(tests, a.history{end}, 'was: FCz');
     l = EEGAnalysis.rereference(eeg, {'tp9', 'TP10'});
