@@ -207,7 +207,7 @@ function testRepeatedMeasures(tests)
 
     % 6 Every trial counted as a subject: the Sample size warning
     tests.verifyTrue(logical(app.loadGroupDemo()));
-    app.SubjectMenu.Value = app.SubjectModes{3};
+    app.SubjectMenu.Value = 'Each series';
     tests.verifyTrue(logical(app.runGroupStats('Peak amplitude', 'paired', 'parametric', {'Control', 'Stimulated'})));
     chk = app.ChecksTable.Data;
     tests.verifyTrue(hasCheck(chk, 'Warning', 'Sample size', 'Every series is counted'), strjoin(chk(:, 3), ' | '));
