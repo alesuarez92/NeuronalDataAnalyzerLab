@@ -196,7 +196,7 @@ The website has the same on its Community page (About → Community).
 ## How to cite
 
 If you use Neuronal Data Analyzer Lab, or results produced with it, in work
-that you publish or present, cite it (this is a condition of the licence):
+that you publish or present, please cite it (a request, not a licence condition):
 
 > Suarez, A. (2026). *Neuronal Data Analyzer Lab* (version 1.0.1) [Computer
 > software]. https://github.com/alesuarez92/NeuronalDataAnalyzerLab
