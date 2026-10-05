@@ -109,6 +109,17 @@ function testMUAClusterEditingAndResponses(tests)
     tests.verifyTrue(logical(app.undoClusterEdit()));
     tests.verifyEqual(unitIds(app), merged);
 
+    % 6b) Save results (frozen for 1.0: the variables of the .mat and their main fields)
+    f = [tempname '.mat']; cf = onCleanup(@() deleteIfExists(f));
+    tests.verifyTrue(logical(app.saveResultsTo(f)));
+    m = load(f);
+    frozen(tests, m, {'SpikeResults', 'SpikeSortParams', 'clusterQuality', 'info'}, 'MUA results .mat');
+    frozen(tests, m.SpikeResults, {'spikeTimes', 'clusterIdx', 'waveformsAligned'}, 'MUA SpikeResults');
+    frozen(tests, m.clusterQuality, {'id', 'n', 'snr', 'isiPct', 'rejected', 'reason'}, 'MUA clusterQuality');
+    frozen(tests, m.info, {'sourceFile', 'channel', 'segmentIndex', 'segmentWindow', 'segmentParams', ...
+        'fs', 'clusterEdits'}, 'MUA info');
+    tests.verifyEqual(m.SpikeResults.clusterIdx, app.SpikeResults.clusterIdx);
+
     % 7) Undo the auto-merge too: back to the K-means clusters
     if ~isempty(mergeLog)
         tests.verifyTrue(logical(app.undoClusterEdit()));
@@ -166,4 +177,19 @@ function testMUASortingIsReproducible(tests)
     tests.verifyTrue(logical(app.runSorting(p)));
     tests.verifyEqual(app.SpikeResults.clusterIdx, first);
     tests.verifyEqual(rng, before);              % the caller's generator is restored
+end
+
+function deleteIfExists(f)
+    if exist(f, 'file') == 2, delete(f); end
+end
+
+%% frozen - Every frozen name (1.0) is present: struct fields, table columns or a cellstr
+function frozen(tests, have, names, what)
+    if isstruct(have)
+        have = fieldnames(have);
+    elseif istable(have)
+        have = have.Properties.VariableNames;
+    end
+    missing = names(~ismember(names, have));
+    tests.verifyEmpty(missing, sprintf('%s: missing %s (frozen for 1.0)', what, strjoin(missing, ', ')));
 end

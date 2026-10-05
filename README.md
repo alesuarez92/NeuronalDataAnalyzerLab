@@ -44,7 +44,7 @@ launcher their tiles show a greyed-out *Coming soon* button.
 
 > **Status: early release (v0.10.0).** The UI works end-to-end on the lab's
 > data formats. The session files, exported files and script functions that
-> 1.0 will keep stable are listed in [docs/FORMATS.md](docs/FORMATS.md); see
+> 1.0 keeps stable are settled and listed in [docs/FORMATS.md](docs/FORMATS.md); see
 > [CHANGELOG.md](CHANGELOG.md) for what's in this release and
 > [ROADMAP.md](ROADMAP.md) for what 1.0 still needs.
 

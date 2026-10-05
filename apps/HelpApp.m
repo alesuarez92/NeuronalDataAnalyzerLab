@@ -1022,7 +1022,7 @@ classdef HelpApp < handle
                 'Inscopix `.isxd` movies (processed recordings; raw nVista files with frame headers: export them from Inscopix Data Processing first)'
                 'ThorImageLS: choose `Experiment.xml` (or the `.raw`) of the folder; Bruker Prairie View: choose the T-series `.xml` (its TIFFs are read, with their frame times); UCLA Miniscope: choose `0.avi` (or `msCam1.avi`): every numbered video of the folder is read, with the times of `timeStamps.csv`'};
             t.outputs = {
-                '.csv: `Time` plus one column per measure (Intensity, Movement, DFF; with several ROIs `<measure>_<ROI name>`), or `Diameter_px` (+ `Diameter_standard_px`, `Replaced` when robust); for a kymograph, a matrix (first row = time)'
+                '.csv: `Time_s` plus one column per measure and ROI (`<measure>_<ROI name>`, e.g. `DFF_Cell_1`; measures Intensity, Movement, DFF, Speed), or `Diameter_px` (+ `Diameter_standard_px`, `Replaced` when robust); for a kymograph, a matrix (first row = time)'
                 '.mat: struct `results` with the series (one row per ROI), `roiMasks` / `roiNames`, `roiMask` (ROI 1), `lineStart` / `lineEnd`, `motionCorrection` and `shifts`, and the preprocessing and diameter settings'};
             t.details = {
                 '## Methods using the ROI'
@@ -1281,8 +1281,9 @@ classdef HelpApp < handle
                 'LFP from Extract Ephys: `lfp_data`, `t_lfp` (mean over channels = one series)'
                 'ERP export from LFP analysis, or any `.mat` with `t` and `y` (or `t` and `LDF`)'};
             t.outputs = {
-                '.csv: one row per series, columns Trial_Channel, PeakLatency_s, OnsetDelay_s, FWHM_s, AUCpos, AUCneg, RiseTime_s, DecayTime_s, PeakAmp, Integral'
-                '.mat: `data` (the table as a cell array) and `colNames`'};
+                '.csv: one row per series, columns Series, PeakLatency_s, OnsetDelay_s, FWHM_s, AUCpos, AUCneg, RiseTime_s, DecayTime_s, PeakAmp, Integral'
+                '.mat: `data` (the table as a cell array) and `colNames`'
+                'Groups & statistics, **Export values & report…**: .csv with `Group, Subject, <feature>` plus `<name>_report.txt`, or .mat with the struct `results` (the test, its checks and the settings)'};
             t.details = {
                 '## Reference level and direction'
                 '* **Baseline**: the mean of the signal inside the baseline window is the reference for every feature. If the window holds no samples, the pre-onset mean is used; if end ≤ start, the first 0.05 s of the trace. For trials that start before t0 the window is set to the pre-stimulus part when the file is loaded.'

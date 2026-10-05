@@ -1996,7 +1996,20 @@ classdef MUAAnalysisApp < handle
                 UIKit.setStatus(app.StatusLabel, 'Save cancelled', 'info');
                 return;
             end
+            if app.saveResultsTo(fullfile(path, file))
+                Exporter.setLastUsedPath(path);
+            end
+        end
 
+        %% saveResultsTo - Save the results to this .mat file without dialogs; true on success
+        function ok = saveResultsTo(app, outFile)
+            ok = false;
+            if ~app.hasResults()
+                UIKit.alert(app.UIFig, 'Run spike sorting before saving results.', 'Nothing to save', 'warning');
+                return;
+            end
+            [~, name, ext] = fileparts(outFile);
+            file = [name ext];
             SpikeResults = app.SpikeResults;
             SpikeSortParams = app.SpikeSortParams; %#ok<NASGU>
             clusterQuality = rmfield(app.ClusterQC, 'isiMs');
@@ -2005,7 +2018,6 @@ classdef MUAAnalysisApp < handle
                 'segmentParams', app.SegmentParams, 'fs', app.MUAData.fs);
             % Merges / splits applied after sorting (saved with info below)
             info.clusterEdits = app.ClusterEdits; %#ok<STRNU>
-            outFile = fullfile(path, file);
             UIKit.setStatus(app.StatusLabel, sprintf('Saving %s...', file), 'busy');
             try
                 try
@@ -2013,9 +2025,9 @@ classdef MUAAnalysisApp < handle
                 catch
                     save(outFile, 'SpikeResults', 'SpikeSortParams', 'clusterQuality', 'info', '-v7.3');
                 end
-                Exporter.setLastUsedPath(path);
                 UIKit.setStatus(app.StatusLabel, sprintf('Saved %s (%d spikes, %d clusters)', file, ...
                     numel(SpikeResults.spikeTimes), numel(clusterQuality)), 'success');
+                ok = true;
             catch ME
                 UIKit.alert(app.UIFig, sprintf('Could not save %s:\n%s', file, ME.message), 'Save failed', 'error');
                 UIKit.setStatus(app.StatusLabel, sprintf('Save failed: %s', ME.message), 'error');

@@ -187,6 +187,14 @@ function testLaserSpeckleDemo(tests)
     tests.verifyEqual(b.OnsetDropdown.Value, 'regular');
     tests.verifyEqual(b.Result.response, app.Result.response, 'AbsTol', 1e-9);
     s = Session.load(ps);
+    % Frozen for 1.0: the session fields of this flow (a change goes through Session.upgrade)
+    tests.verifyEqual(s.formatVersion, Session.FormatVersion);
+    frozen(tests, s.settings, {'params', 'onsetSource', 'regular', 'roiNames', 'roiSources', 'roiPositions', ...
+        'roiMasks', 'display'}, 'Laser speckle session settings');
+    frozen(tests, s.settings.params, {'InputType', 'Contrast', 'Window', 'Frames', 'Dark', 'FlowModel', ...
+        'Beta', 'ExposureMs', 'Fps', 'PreSec', 'PostSec', 'ResponseSec'}, 'Laser speckle session settings.params');
+    frozen(tests, s.results, {'t', 'fps', 'roiNames', 'roiFlow', 'roiRel', 'onsets', 'trialTime', 'trialMean', ...
+        'trialSD', 'response', 'peak', 'peakTime', 'units', 'checks', 'baselineSec'}, 'Laser speckle session results');
     tests.verifyEqual({s.checks.topic}, {app.Result.checkRows.topic}, 'the checks are in the session');
     tests.verifyTrue(any(strcmp(s.summary, ['Checks: ' QualityChecks.summary(s.checks)])), strjoin(s.summary, newline));
     left = Report.lines(s);

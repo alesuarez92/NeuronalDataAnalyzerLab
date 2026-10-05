@@ -8,7 +8,7 @@
 %   eeg.fs           sampling rate (Hz)
 %   eeg.times        1 x samples, seconds (epoch time for trials: 0 = event)
 %   eeg.labels       1 x channels cell of channel names
-%   eeg.chanlocs     1 x channels struct: label, x, y, z, theta, radius
+%   eeg.chanlocs     1 x channels struct: label, labels (the same name, EEGLAB's field), x, y, z, theta, radius
 %                    (as stored in the file; NaN = no position)
 %   eeg.coordSystem  what the positions mean, e.g. 'EEGLAB (x = nose, ...)'
 %                    or 'FieldTrip (ras, mm)'; '' = no positions. Step 3 of
@@ -887,10 +887,11 @@ classdef EEGSource
             end
         end
 
-        %% normaliseChanlocs - 1 x n struct with label, x, y, z, theta, radius
+        %% normaliseChanlocs - 1 x n struct with label, labels, x, y, z, theta, radius
+        % labels = label (EEGLAB's name for it), so EEGLAB code reads the names too
         function locs = normaliseChanlocs(in, labels)
             n = numel(labels);
-            locs = struct('label', labels, 'x', NaN, 'y', NaN, 'z', NaN, 'theta', NaN, 'radius', NaN);
+            locs = struct('label', labels, 'labels', labels, 'x', NaN, 'y', NaN, 'z', NaN, 'theta', NaN, 'radius', NaN);
             if isempty(in), return; end
             if numel(in) ~= n
                 error('NeuroAnalyzer:eeg:invalid', 'There are %d channel positions for %d channels.', numel(in), n);

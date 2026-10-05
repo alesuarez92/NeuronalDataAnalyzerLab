@@ -156,10 +156,10 @@ function testGroupsAndStatistics(tests)
         matlab.lang.makeValidName(app.GroupResult.feature)}, 'Group values .csv');
     tests.verifyTrue(logical(app.exportGroupResults(fullfile(out, 'group_result.mat'))));
     m = load(fullfile(out, 'group_result.mat'));
-    frozen(tests, m, {'result'}, 'Group result .mat');
-    frozen(tests, m.result, {'design', 'method', 'groupNames', 'values', 'nExcluded', 'desc', 'main', ...
+    frozen(tests, m, {'results'}, 'Group result .mat');
+    frozen(tests, m.results, {'design', 'method', 'groupNames', 'values', 'nExcluded', 'desc', 'main', ...
         'check', 'checkAgrees', 'comparisons', 'assumptions', 'summary', 'labels', 'feature', 'subjectMode', ...
-        'designLabel', 'unit', 'settings', 'checkRows'}, 'Group result .mat result');
+        'designLabel', 'unit', 'settings', 'checkRows'}, 'Group result .mat results');
 end
 
 function testRepeatedMeasures(tests)
@@ -261,8 +261,18 @@ function testSingleFileFigureExport(tests)
     tests.verifyTrue(logical(app.loadDemo()));
     tests.verifyTrue(logical(app.extract()));
     % Frozen for 1.0: the columns of the features export (.csv header, colNames of the .mat)
-    frozen(tests, app.ResultsTable.ColumnName, {'Trial_Channel', 'PeakLatency_s', 'OnsetDelay_s', 'FWHM_s', ...
-        'AUCpos', 'AUCneg', 'RiseTime_s', 'DecayTime_s', 'PeakAmp', 'Integral'}, 'Features export columns');
+    cols = {'Series', 'PeakLatency_s', 'OnsetDelay_s', 'FWHM_s', ...
+        'AUCpos', 'AUCneg', 'RiseTime_s', 'DecayTime_s', 'PeakAmp', 'Integral'};
+    frozen(tests, app.ResultsTable.ColumnName, cols, 'Features export columns');
+    fcsv = fullfile(tests.TestData.exportDir, 'signal_features.csv');
+    tests.verifyTrue(logical(app.exportResultsTo(fcsv)));
+    tbl = readtable(fcsv);
+    frozen(tests, tbl, cols, 'Features .csv');
+    tests.verifyEqual(height(tbl), size(app.ResultsTable.Data, 1));
+    tests.verifyTrue(logical(app.exportResultsTo(fullfile(tests.TestData.exportDir, 'signal_features.mat'))));
+    m = load(fullfile(tests.TestData.exportDir, 'signal_features.mat'));
+    frozen(tests, m, {'data', 'colNames'}, 'Features .mat');
+    frozen(tests, m.colNames, cols, 'Features .mat colNames');
     tests.verifyTrue(logical(app.exportFigure(fullfile(tests.TestData.exportDir, 'series'), 'png300', 'series')));
     verifyFile(tests, app.LastExportPath);
     tests.verifyTrue(logical(app.exportFigure(fullfile(tests.TestData.exportDir, 'series'), 'eps', 'series')));

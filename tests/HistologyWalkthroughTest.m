@@ -175,6 +175,16 @@ function testHistologyDemo(tests)
     tests.verifyEqual(b.ChecksTable.Data, app.ChecksTable.Data, 'the same checks after reopening');
     s = Session.load(p);
     tests.verifyEqual(s.checks, app.Checks);
+    % Frozen for 1.0: the session fields of this flow (a change goes through Session.upgrade)
+    tests.verifyEqual(s.formatVersion, Session.FormatVersion);
+    frozen(tests, s.settings, {'generator', 'pixelSizeUm', 'pixelSizeFromFile', 'channelNames', 'imageNames', ...
+        'alignChannels', 'alignMethod', 'alignChannel', 'alignedMethod', 'channelsAligned', 'landmarks', ...
+        'count', 'regions'}, 'Histology session settings');
+    frozen(tests, s.settings.count, {'channel', 'backgroundRadiusUm', 'threshold', 'split', 'minAreaUm2', ...
+        'maxAreaUm2', 'maxElongation', 'minFractionPct', 'markerThreshold', 'pixelSizeUm'}, ...
+        'Histology session settings.count');
+    frozen(tests, s.results, {'shifts', 'landmarkRms', 'channelShifts', 'counts', 'countsHeader'}, ...
+        'Histology session results');
     shot(tests, b, 'HistologyApp_07_session_reopened', 'Counts');
 
     % Methods text of this analysis, with what the checks reported

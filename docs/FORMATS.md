@@ -40,10 +40,10 @@ opening.
 | LFP Analysis | `<file>_ERP.mat` | `t, y, erp_avg, erp_std, erp_channels, erp_params, n_epochs, onset_times, lfp_fs, source_file`; with a CSD `csd, csd_channel_order, csd_spacing_um, csd_method, csd_unit, csd_params, csd_depth_um` |
 | MUA Analysis | `<file>_ch<N>_spikes.mat` | `SpikeResults, SpikeSortParams, clusterQuality, info` |
 | Laser speckle | `.csv` / `.mat` | `Time_s`, `FlowChange_pct_<ROI>`, `FlowIndex_<ROI>` / `results` |
-| ROI Analysis | `.csv` / `.mat` | `Time` and one column per measure (and ROI), `Diameter_px` / `results` |
+| ROI Analysis | `.csv` / `.mat` | `Time_s` and one column per measure and ROI (`<measure>_<ROI>`, e.g. `DFF_Cell_1`, also with one ROI), or `Diameter_px` / `results` |
 | Histology / culture | cells and counts `.csv`, `.mat` | `Image, Cell, x (um), y (um), Area (um2), Elongation, Region, …` / `Image, Region, Cells, Area (mm2), Cells per mm2, …` / `results` |
 | EEG Analysis | `.csv` / `.mat` | `Participant, Condition, Value_uV, Latency_ms, Trials, PeakAtEdge` / `results` |
-| Signal Characterization | features `.csv` / `.mat`; group `.csv` / `.mat` | `Trial_Channel` and the 9 feature columns / `data, colNames`; `Group, Subject, <feature>` / `result` |
+| Signal Characterization | features `.csv` / `.mat`; group `.csv` / `.mat` | `Series` and the 9 feature columns (as Batch) / `data, colNames`; `Group, Subject, <feature>` / `results` |
 | Batch | `<name>_summary.csv`, `<name>_summary.mat`, `<name>_log.txt` | columns `File, Status, Message`, then `Batch.columns(pipeline)`; `.mat`: `summary` (table) and `batch` (`pipeline, params, files, fileStatus, messages, log, created`); **Export…** writes the same two variables |
 | every window with sessions | report `.pdf`, methods `.txt` | one page; plain text |
 
@@ -81,7 +81,8 @@ return (each class's header comment lists them in full):
 - `Session`, `MethodsWriter` (`fromSession`, `write`), `DemoData`.
 - Readers in `core/io`: `EEGSource.open`, `EphysSource.open`,
   `SignalSource.open` and the `read*` functions, with the fields of the
-  structs they return.
+  structs they return. EEG channel positions (`eeg.chanlocs`) carry the
+  name as `label` and as `labels` (EEGLAB's field).
 
 Private helpers, the windows' internal properties and the layout of the
 windows are not part of this promise.

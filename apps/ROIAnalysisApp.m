@@ -1333,8 +1333,8 @@ classdef ROIAnalysisApp < handle
         end
 
         %% exportResultsTo - Save the current result without dialogs; true on success
-        % .csv: Time + one column per measure and ROI (single ROI: Intensity,
-        % Movement, DFF; several: <measure>_<ROI name>), or
+        % .csv: Time_s + one column per measure and ROI (<measure>_<ROI
+        % name>, e.g. DFF_Cell_1, also with one ROI), or
         % Diameter_px (+ Diameter_standard_px, Replaced when robust); the
         % kymograph as a matrix (first row = time). .mat: struct results
         % with every series, all ROI masks and names, line, shifts and settings.
@@ -1352,21 +1352,21 @@ classdef ROIAnalysisApp < handle
                         % Kymograph: first row = time, then one row per position along the line
                         writematrix([app.T(:)'; app.Kymo], fullPath);
                     else
-                        tbl = table(t, 'VariableNames', {'Time'});
+                        tbl = table(t, 'VariableNames', {'Time_s'});
                         names = app.ResultROINames;
-                        K = numel(names);
                         cols = {'Intensity', app.Intensity; 'Movement', app.Movement; ...
                             'DFF', app.DFF; 'Speed', app.Speed};
                         for m = 1:size(cols, 1)
                             v = cols{m, 2};
                             if isempty(v), continue; end
                             for k = 1:size(v, 1)
-                                if K <= 1
-                                    col = cols{m, 1};
-                                else
+                                % <measure>_<ROI name>, also with one ROI
+                                if k <= numel(names)
                                     col = matlab.lang.makeValidName(sprintf('%s_%s', cols{m, 1}, names{k}));
-                                    col = matlab.lang.makeUniqueStrings(col, tbl.Properties.VariableNames);
+                                else
+                                    col = cols{m, 1};
                                 end
+                                col = matlab.lang.makeUniqueStrings(col, tbl.Properties.VariableNames);
                                 tbl.(col) = padTo(v(k, :), numel(t));
                             end
                         end

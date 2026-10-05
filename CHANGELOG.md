@@ -25,9 +25,19 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   - Sessions: `Session.load` reads `formatVersion`, upgrades older files
     in one place (`Session.upgrade`) and refuses a file from a newer
     format with a message to update the toolbox.
+  - The same names across windows: ROI Analysis' `.csv` starts with
+    `Time_s` (was `Time`) and always names the ROI (`DFF_<ROI>`, also
+    with one ROI, where it wrote `DFF`); Signal Characterization's
+    features table and `.csv` start with `Series` (was `Trial_Channel`),
+    as Batch, and its group `.mat` holds `results` (was `result`), as the
+    other windows; EEG channel positions (`chanlocs`) get `labels`,
+    EEGLAB's name, next to `label`.
 
 ### Added
 
+- **Saving without dialogs** for scripts and tests, as in the other
+  windows: `MUAAnalysisApp.saveResultsTo(path)` and
+  `SignalCharacterizationApp.exportResultsTo(path)`.
 - **Extract Ephys: Electrode spacing (µm)** in step 4, saved with the LFP
   as `lfp_spacing_um` (0 = not known) and kept in sessions; LFP Analysis
   and Batch use it for the CSD and the spacing check says it came from

@@ -255,6 +255,14 @@ function testEEGDemo(tests)
     p = fullfile(tests.TestData.tmp, ['EEGAnalysisApp' Session.Extension]);
     tests.verifyTrue(logical(app.saveSessionTo(p, 'EEG walkthrough: demo P300')));
     s = Session.load(p);
+    % Frozen for 1.0: the session fields of this flow (a change goes through Session.upgrade)
+    tests.verifyEqual(s.formatVersion, Session.FormatVersion);
+    frozen(tests, s.settings, {'generator', 'participants', 'maps', 'sources', 'continuous', 'cleaning', ...
+        'trials', 'trialWindow', 'fs', 'nChannels', 'reference', 'recordedReference', 'history', ...
+        'baselineOn', 'baseline', 'channels', 'erpsShown', 'measure', 'measured', 'statsMethod', 'tested', ...
+        'scalpMaps', 'tfShown', 'timeFrequency', 'tfPlot'}, 'EEG session settings');
+    frozen(tests, s.results, {'conditions', 'trials', 'measureHeader', 'measures', 'groupTest'}, ...
+        'EEG session results');
     [txt, ~] = MethodsWriter.fromSession(s);
     tests.verifyTrue(contains(txt, 'the mean amplitude from 300 to 400 ms at Pz was measured'));
     b = EEGAnalysisApp(); cb = onCleanup(@() delete(b.UIFig));

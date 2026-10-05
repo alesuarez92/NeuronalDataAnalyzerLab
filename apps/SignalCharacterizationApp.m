@@ -280,7 +280,7 @@ classdef SignalCharacterizationApp < handle
             tableCard = UIKit.card(right, 'Results (one row per series; NaN = not computed or not found)');
             tg = uigridlayout(tableCard, [1 1], 'Padding', [6 6 6 6], 'BackgroundColor', T.cardBg);
             app.ResultsTable = uitable(tg, ...
-                'ColumnName', {'Trial_Channel', 'PeakLatency_s', 'OnsetDelay_s', 'FWHM_s', 'AUCpos', 'AUCneg', 'RiseTime_s', 'DecayTime_s', 'PeakAmp', 'Integral'}, ...
+                'ColumnName', {'Series', 'PeakLatency_s', 'OnsetDelay_s', 'FWHM_s', 'AUCpos', 'AUCneg', 'RiseTime_s', 'DecayTime_s', 'PeakAmp', 'Integral'}, ...
                 'RowName', {}, 'FontSize', T.fontBody, ...
                 'Tooltip', 'Click a row to plot that series', ...
                 'CellSelectionCallback', @(~,evt)app.onTableSelect(evt));
@@ -801,7 +801,7 @@ classdef SignalCharacterizationApp < handle
             end
             UIKit.done(dlg);
 
-            % Columns in FeatureItems order: Trial_Channel, PeakLatency_s, ..., Integral
+            % Columns in FeatureItems order: Series, PeakLatency_s, ..., Integral
             app.ResultsTable.Data = [names(:), num2cell(rows)];
             app.HasResults = ~isempty(names);
             app.NFeatures = numel(selected);
@@ -886,8 +886,7 @@ classdef SignalCharacterizationApp < handle
         end
 
         function exportResults(app)
-            data = app.ResultsTable.Data;
-            if isempty(data)
+            if isempty(app.ResultsTable.Data)
                 UIKit.alert(app.UIFig, 'No results to export. Run Extract features first (step 3).', 'Export');
                 return;
             end
@@ -897,17 +896,31 @@ classdef SignalCharacterizationApp < handle
                 'Export features', fullfile(startDir, 'signal_features.csv'));
             figure(app.UIFig);
             if isequal(file, 0), return; end
-            fullPath = fullfile(path, file);
+            app.exportResultsTo(fullfile(path, file));
+        end
+
+        %% exportResultsTo - Save the features table without dialogs; true on success
+        % .csv: one row per series, columns Series and the features;
+        % .mat: data (cell, as the table) and colNames.
+        function ok = exportResultsTo(app, fullPath)
+            ok = false;
+            data = app.ResultsTable.Data;
+            if isempty(data)
+                UIKit.alert(app.UIFig, 'No results to export. Run Extract features first (step 3).', 'Export');
+                return;
+            end
+            [~, name, ext] = fileparts(fullPath);
             colNames = app.ResultsTable.ColumnName;
             if iscell(colNames), colNames = colNames(:)'; end
             try
-                if endsWith(lower(fullPath), '.csv')
+                if strcmpi(ext, '.csv')
                     T = cell2table(data, 'VariableNames', colNames);
                     writetable(T, fullPath);
                 else
                     save(fullPath, 'data', 'colNames');
                 end
-                UIKit.setStatus(app.W.Status, sprintf('Exported %d rows to %s', size(data, 1), file), 'success');
+                UIKit.setStatus(app.W.Status, sprintf('Exported %d rows to %s%s', size(data, 1), name, ext), 'success');
+                ok = true;
             catch ME
                 UIKit.setStatus(app.W.Status, 'Export failed', 'error');
                 UIKit.alert(app.UIFig, sprintf('Export failed: %s', ME.message), 'Export');
@@ -1788,8 +1801,8 @@ classdef SignalCharacterizationApp < handle
             [folder, name, ext] = fileparts(filePath);
             try
                 if strcmpi(ext, '.mat')
-                    result = r; %#ok<NASGU>
-                    save(filePath, 'result');
+                    results = r; %#ok<NASGU>
+                    save(filePath, 'results');
                     written = [name ext];
                 else
                     csvPath = fullfile(folder, [name '.csv']);

@@ -105,9 +105,9 @@ function testROIAdvancedDemo(tests)
     fcsv = [tempname '.csv']; c2 = onCleanup(@() deleteIfExists(fcsv));
     tests.verifyTrue(logical(app.exportResultsTo(fcsv)));
     tbl = readtable(fcsv);
-    tests.verifyEqual(width(tbl), 4);                 % Time + one DFF column per cell
-    % Frozen for 1.0: Time, then <measure>_<ROI> (several ROIs)
-    frozen(tests, tbl, [{'Time'}, matlab.lang.makeValidName(strcat('DFF_', app.ResultROINames(:)'))], ...
+    tests.verifyEqual(width(tbl), 4);                 % Time_s + one DFF column per cell
+    % Frozen for 1.0: Time_s, then <measure>_<ROI>
+    frozen(tests, tbl, [{'Time_s'}, matlab.lang.makeValidName(strcat('DFF_', app.ResultROINames(:)'))], ...
         'ROI .csv export');
     fmat = [tempname '.mat']; c3 = onCleanup(@() deleteIfExists(fmat));
     tests.verifyTrue(logical(app.exportResultsTo(fmat)));
@@ -166,6 +166,15 @@ function testROIMultiRoiEditing(tests)
     tests.verifyTrue(logical(app.runAnalysis('Both')));
     tests.verifyEqual(size(app.Intensity, 1), 1);
     shot(tests, app, 'ROIAnalysisApp_x08_both_single_roi', 'Result');
+
+    % One ROI: the .csv still names the ROI in every column (frozen for 1.0)
+    fcsv = [tempname '.csv']; c2 = onCleanup(@() deleteIfExists(fcsv));
+    tests.verifyTrue(logical(app.exportResultsTo(fcsv)));
+    tbl = readtable(fcsv);
+    roi = app.ResultROINames{1};
+    frozen(tests, tbl, {'Time_s', matlab.lang.makeValidName(['Intensity_' roi]), ...
+        matlab.lang.makeValidName(['Movement_' roi])}, 'ROI .csv export, one ROI');
+    tests.verifyEqual(width(tbl), 3);
 end
 
 function deleteIfExists(f)

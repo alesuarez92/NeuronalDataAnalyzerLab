@@ -126,7 +126,8 @@ function testEEGSourceStruct(tests)
         'conditions', 'events', 'reference', 'bad', 'history', 'notes', 'source', 'format', 'file'};
     frozen(tests, eeg, names, 'EEGSource.open');
     frozen(tests, eeg.trials, {'condition'}, 'EEG trials');
-    frozen(tests, eeg.chanlocs, {'label', 'x', 'y', 'z', 'theta', 'radius'}, 'EEG chanlocs');
+    frozen(tests, eeg.chanlocs, {'label', 'labels', 'x', 'y', 'z', 'theta', 'radius'}, 'EEG chanlocs');
+    tests.verifyEqual({eeg.chanlocs.labels}, eeg.labels, 'chanlocs labels = the channel names (EEGLAB)');
     frozen(tests, tinyEEG(), names, 'EEGSource.make');
 end
 
@@ -170,13 +171,14 @@ function testBatchRunResult(tests)
     frozen(tests, R.record, rec, 'Batch.run R.record');
     frozen(tests, R.paths, {'folder', 'csv', 'mat', 'log', 'trials'}, 'Batch.run R.paths');
     tests.verifyEqual(R.nOK, 1, strjoin(R.log, newline));
-    cols = [{'File'; 'Status'; 'Message'}; Batch.columns('features')];
-    frozen(tests, R.summary, cols(:, 1)', 'Batch.run R.summary');
+    c = Batch.columns('features');                % name, type
+    cols = [{'File'; 'Status'; 'Message'}; c(:, 1)];
+    frozen(tests, R.summary, cols', 'Batch.run R.summary');
     s = load(R.paths.mat);
     frozen(tests, s, {'summary', 'batch'}, '<Name>_summary.mat');
     frozen(tests, s.batch, rec, '<Name>_summary.mat batch');
     T = readtable(R.paths.csv);
-    frozen(tests, T, cols(:, 1)', '<Name>_summary.csv');
+    frozen(tests, T, cols', '<Name>_summary.csv');
 end
 
 %% ---------------------------------------------------- Pipelines (no window)
