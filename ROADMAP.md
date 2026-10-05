@@ -48,7 +48,7 @@ them exposed two limits, which are now fixed.
 | ✅ | Motion correction and many ROIs | Imaging | Rigid registration, several ROIs at once, automatic cell detection from a local correlation image. |
 | ✅ | Laser speckle flowmetry | Blood flow | Raw speckle, contrast or perfusion images: speckle contrast, flow index, flow per ROI over time, trials and a response map. |
 | ✅ | Histology and culture images | Imaging | Cell counts in still images, marker-positive cells, counts per region and per mm², channel and section / time-point alignment (shift or landmarks), with plain-language checks. |
-| ✅ | More acquisition systems | Data formats | Intan RHD2000, Open Ephys binary and NWB 2.x import; NWB export. Then SpikeGLX, Blackrock, Neuralynx, Multi Channel Systems HDF5, Intan `.rhs` and Open Ephys legacy `.continuous` in Extract Ephys; LabChart, AcqKnowledge exports, Spike2, EDF and tables in Extract LDF. |
+| ✅ | More acquisition systems | Data formats | Intan RHD2000, Open Ephys binary and NWB 2.x import; NWB export. Then SpikeGLX, Blackrock, Neuralynx, Intan `.rhs` and Open Ephys legacy `.continuous` in Extract Ephys; LabChart, AcqKnowledge exports, Spike2, EDF and tables in Extract LDF. |
 | ✅ | Batch processing | Every pipeline | Run one pipeline over a folder of animals or sessions with the same settings and get one summary table plus a per-file log. |
 | ✅ | Session files and reports | Reproducibility | Save settings, input-file provenance (with checksums) and results together; a one-page PDF report per analysis for the lab notebook. |
 | ✅ | CSD methods | LFP | Inverse CSD (delta, step, spline) and kernel CSD next to the standard CSD, tested against laminar data with a known CSD. |

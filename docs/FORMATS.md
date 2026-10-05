@@ -86,3 +86,31 @@ return (each class's header comment lists them in full):
 
 Private helpers, the windows' internal properties and the layout of the
 windows are not part of this promise.
+
+## Where the readers' file layouts come from
+
+A reader of a company's file format is written only from a format
+description that the company publishes (or allows in writing), never from
+its software development kit or its own code. Open formats follow their
+published specifications. Company and product names here only say which
+files are read.
+
+| Reader (`core/io`) | Published description followed |
+|---|---|
+| `readIntanRHD`, `readIntanRHS` | Intan Technologies' RHD2000 / RHS2000 data file format documents (intantech.com) |
+| `readBlackrock` | Blackrock's NEV / NSx file specification (File Spec 2.1-3.0; support.blackrockneurotech.com) |
+| `readNeuralynx` | "Neuralynx Data File Formats" (Neuralynx, Inc.; linked from https://support.neuralynx.com/hc/en-us/articles/360040444811) |
+| `readSpikeGLX` | SpikeGLX metadata documentation (billkarsh.github.io/SpikeGLX) |
+| `readOpenEphysBinary`, `readOpenEphysLegacy` | Open Ephys GUI documentation, data formats (open-ephys.github.io) |
+| `readNWB` | NWB 2.x format specification (nwb-schema.readthedocs.io) |
+| `readEDF` | EDF (Kemp et al. 1992) and EDF+ (Kemp & Olivan 2003; edfplus.info) |
+| `readXDF` | XDF specification (github.com/sccn/xdf) |
+| `readEEGBIDS` | BIDS specification, EEG (bids-specification.readthedocs.io) |
+| `readNPY` | NumPy `.npy` format specification |
+
+Readers whose layout had no such published description were removed:
+Perimed `.dat`, Plexon `.plx`, Axon ABF, AcqKnowledge `.acq` and EGI
+`.mff` in 1.0.1; Multi Channel Systems HDF5, Inscopix `.isxd`, ThorImageLS
+`.raw`, Bruker Prairie View and UCLA Miniscope folders after 1.0.1. Export
+such recordings with the company's own software to a format that is read
+(for example NWB, EDF, TIFF or a MATLAB file).

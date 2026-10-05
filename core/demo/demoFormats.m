@@ -26,9 +26,6 @@
 %                    stimulus on the NEV digital input (bit 0)
 %   files.neuralynx  demo_neuralynx/ CSC1-CSC4.ncs, 32 kHz; TTL bit 0 in
 %                    Events.nev
-%   files.mcs        demo_mcs.h5: Multi Channel Systems HDF5, 25 kHz,
-%                    stimulus on the digital stream bit 0 (MATLAB only:
-%                    left out where the HDF5 functions are missing)
 %   files.intanrhs   demo_intan.rhs: 30 kHz, DIGITAL-IN-01
 %   files.openephyslegacy  demo_openephys_legacy/ 100_CH1-4.continuous,
 %                    30 kHz, TTL channel 1 events
@@ -51,9 +48,8 @@
 % =========================================================================
 
 function files = demoFormats(folder, varargin)
-    every = {'intan', 'openephys', 'nwb', 'spikeglx', 'blackrock', 'neuralynx', 'mcs', ...
+    every = {'intan', 'openephys', 'nwb', 'spikeglx', 'blackrock', 'neuralynx', ...
         'intanrhs', 'openephyslegacy'};
-    if isempty(which('h5create')), every = every(~strcmp(every, 'mcs')); end
     o = struct('Formats', {every}, 'Tank', [], 'Force', false);
     for k = 1:2:numel(varargin)
         o.(varargin{k}) = varargin{k+1};
@@ -198,18 +194,6 @@ function files = demoFormats(folder, varargin)
         files.neuralynx = d;
         truth.neuralynx = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', 1e-3 / 32768, 'data', x, ...
             'stimName', 'TTL bit 0');
-    end
-
-    % ---- Multi Channel Systems HDF5 (25 kHz, digital stream) ----
-    if any(strcmp(o.Formats, 'mcs'))
-        fs = 25000;
-        [x, t] = resampleTo(raw, tT, fs, T);
-        pulse = pulses(t, onsets, dur);
-        f = fullfile(folder, 'demo_mcs.h5');
-        writeMCS(f, x, fs, 'Digital', double(pulse));
-        files.mcs = f;
-        truth.mcs = struct('fs', fs, 'nSamples', size(x, 2), 'lsb', 59605e-12, 'data', x, ...
-            'stimName', 'Digital Data1 bit 0');
     end
 
     % ---- Intan RHS2000 (30 kHz) ----

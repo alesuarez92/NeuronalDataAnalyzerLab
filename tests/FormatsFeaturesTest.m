@@ -11,8 +11,8 @@
 % header, NumPy .npy header, Open Ephys structure.oebin + continuous.dat,
 % an NWB-shaped HDF5 file made with h5create/h5write), plus clear-error
 % checks (wrong magic number, missing files, truncated data). The other
-% readers (SpikeGLX, Blackrock, Neuralynx, Multi Channel Systems, Intan
-% RHS, Open Ephys legacy) have their own tests in
+% readers (SpikeGLX, Blackrock, Neuralynx, Intan RHS, Open Ephys
+% legacy) have their own tests in
 % EphysFormatsTest; here the demo in each of those formats goes through
 % EphysSource (detection by extension, folder contents and first bytes).
 % =========================================================================
@@ -491,16 +491,15 @@ function testEphysSourceHelpers(tests)
     verifyEqual(tests, rec.info.channelNames, {'Ch 1', 'Ch 2'});
     list = EphysSource.formats();
     verifyEqual(tests, {list.key}, {'tdt', 'intan', 'openephys', 'nwb', 'spikeglx', 'blackrock', ...
-        'neuralynx', 'mcs', 'intanrhs', 'openephyslegacy'});
+        'neuralynx', 'intanrhs', 'openephyslegacy'});
 end
 
 function testEphysSourceMoreFormatsDemo(tests)
     % The demo in each of the other formats, opened with format detection
     d = tests.TestData.demo;
-    fmts = {'spikeglx', 'blackrock', 'neuralynx', 'mcs', 'intanrhs', 'openephyslegacy'};
+    fmts = {'spikeglx', 'blackrock', 'neuralynx', 'intanrhs', 'openephyslegacy'};
     for k = 1:numel(fmts)
         f = fmts{k};
-        if ~isfield(d, f), continue; end                % mcs: needs the HDF5 functions
         tr = d.truth.(f);
         verifyEqual(tests, EphysSource.detect(d.(f)), f, f);
         rec = EphysSource.open(d.(f));
@@ -531,12 +530,6 @@ function testEphysSourceDetectByContents(tests)
         g = fullfile(tests.TestData.tmp, sprintf('renamed%d.dat', k));
         copyfile(src{k}, g);
         verifyEqual(tests, EphysSource.detect(g), expect{k}, expect{k});
-    end
-    if isfield(d, 'mcs')
-        verifyEqual(tests, EphysSource.detect(d.mcs), 'mcs');
-        g = fullfile(tests.TestData.tmp, 'renamed_mcs.dat');
-        copyfile(d.mcs, g);
-        verifyEqual(tests, EphysSource.detect(g), 'mcs', 'HDF5 signature, MCS attribute');
     end
 end
 

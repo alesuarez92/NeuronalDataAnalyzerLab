@@ -11,10 +11,9 @@
 % events, Neuralynx .ncs folders (ADBitVolts, inverted input, natural
 % channel order) with Events.nev TTLs, Open Ephys legacy .continuous
 % folders (CH, ADC, TTL events, first timestamp), Intan RHS2000 (digital
-% and analog inputs, stimulation current, DC amplifier data saved) and
-% Multi Channel Systems HDF5 (electrode, auxiliary and digital streams,
-% event entities, gaps; MATLAB only). Values in volts, rates, channel
-% names and the stimulus lines are checked. No display needed.
+% and analog inputs, stimulation current, DC amplifier data saved).
+% Values in volts, rates, channel names and the stimulus lines are
+% checked. No display needed.
 % =========================================================================
 
 function tests = EphysFormatsTest
@@ -189,42 +188,3 @@ function testIntanRHS(tests)
     tests.verifyError(@() readIntanRHS(f3), 'NeuroAnalyzer:io:intan');
 end
 
-function testMCS(tests)
-    tests.assumeTrue(~isempty(which('h5create')), 'needs MATLAB''s HDF5 functions');
-    x = 100e-6 * ramp(3, 2000);
-    aux = 1.5 * double(mod(0:1999, 500) < 50);
-    dw = zeros(1, 2000); dw(301:400) = 1; dw(1001:1100) = 4;
-    ev = struct('label', {'Stim', 'Light'}, 'sample', {[201 1201], 1501}, 'duration', {[10 10], 0});
-    f = tmp(tests, 'mea.h5');
-    writeMCS(f, x, 20000, 'Aux', aux, 'Digital', dw, 'Events', ev, 'StartUs', 1e6);
-    rec = readMCS(f);
-    tests.verifyEqual(rec.info.format, 'mcs');
-    tests.verifyEqual(rec.streams.xRAW.fs, 20000);
-    tests.verifyEqual(rec.info.channelNames, {'E1', 'E2', 'E3'});
-    tests.verifyEqual(double(rec.streams.xRAW.data), x, 'AbsTol', 3e-8);
-    tests.verifyEqual(rec.info.firstTimestampUs, 1e6);
-    tests.verifyEqual(rec.info.stimNames, {'A1', 'Digital Data1 bit 0', 'Digital Data1 bit 2', 'Stim', 'Light'});
-    s = double(rec.streams.Whis.data);
-    tests.verifyEqual(s(1, :), aux, 'AbsTol', 1e-4);
-    tests.verifyEqual(find(s(2, :)), 301:400);
-    tests.verifyEqual(find(s(3, :)), 1001:1100);
-    tests.verifyEqual(find(diff([0 s(4, :)]) == 1), [201 1201]);
-    tests.verifyEqual(find(s(5, :)), 1501:1520, 'at least 1 ms');
-    % Two pieces with a 500-sample gap
-    f2 = tmp(tests, 'gap.h5');
-    writeMCS(f2, x(1, :), 10000, 'Gap', [1000 500]);
-    rec = readMCS(f2);
-    tests.verifyEqual(rec.info.nGaps, 1);
-    v = double(rec.streams.xRAW.data);
-    tests.verifyEqual(size(v), [1 2500]);
-    tests.verifyEqual(v([1:1000 1501:2500]), x(1, :), 'AbsTol', 3e-8);
-    tests.verifyEqual(v(1001:1500), zeros(1, 500));
-    tests.verifyEqual(rec.info.stimNames, {'(no stimulus channel)'});
-    % HDF5 that is not from Multi Channel Systems; not HDF5 at all
-    f3 = tmp(tests, 'other.h5');
-    h5create(f3, '/x', [1 3]); h5write(f3, '/x', [1 2 3]);
-    tests.verifyError(@() readMCS(f3), 'NeuroAnalyzer:io:mcs');
-    f4 = tmp(tests, 'text.h5');
-    fid = fopen(f4, 'w'); fprintf(fid, 'not hdf5'); fclose(fid);
-    tests.verifyError(@() readMCS(f4), 'NeuroAnalyzer:io:mcs');
-end

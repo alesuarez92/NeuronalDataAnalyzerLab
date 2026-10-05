@@ -520,14 +520,14 @@ classdef HelpApp < handle
                 '| demo_eeg_faults.mat | EEG Analysis | One oddball participant (an EEGLAB dataset, trials) with faults for the **Checks** tab: blinks in most Target trials (a 100 µV rejection leaves few Target trials and removes far more Target than Standard trials), 8 of 32 channels noisy or flat, and Pz interpolated in EEGLAB |'
                 '| groups/ | Signal Characterization (Groups & statistics) | 24 LDF trial files: the same 8 animals in Control, Stimulated and Drug (true peaks 18, 30 and 24 PU) |'
                 '| groups_faults/ | Signal Characterization (Groups & statistics) | A study with faults for the **Checks** tab: 18 LDF trial files, the same 6 animals in Control, Stimulated and Drug; animal 6 responds three times as much to Stimulated (+40 instead of about +12 PU), and Drug raises every animal by the same 5–7 PU (sphericity violated) |'
-                '| formats/ | Ephys Extract | The first 6 s of demo channels 3–6 in every format Extract Ephys reads: Intan .rhd / .rhs, Open Ephys binary and legacy, NWB, SpikeGLX, Blackrock, Neuralynx and Multi Channel Systems HDF5 (MATLAB only) |'
+                '| formats/ | Ephys Extract | The first 6 s of demo channels 3–6 in every format Extract Ephys reads: Intan .rhd / .rhs, Open Ephys binary and legacy, NWB, SpikeGLX, Blackrock and Neuralynx |'
                 'Each file also stores the ground truth in a `truth` variable. Use **Generate all demo files…** to write them to a folder (and optionally make it your Import folder), or the **Try it with demo data** button on any topic to open that window with its demo already loaded.'};
             t.inputs = {
                 'LDF recordings: LabChart, AcqKnowledge exports, Spike2, EDF / BDF or a text table'
                 'Laser speckle images: raw camera frames, contrast or exported perfusion images (.mat, TIFF or video)'
-                'Electrophysiology recordings: TDT tank (needs the TDT MATLAB SDK), Intan .rhd / .rhs, Open Ephys (binary or legacy), NWB 2.x, SpikeGLX, Blackrock, Neuralynx, Multi Channel Systems HDF5'
+                'Electrophysiology recordings: TDT tank (needs the TDT MATLAB SDK), Intan .rhd / .rhs, Open Ephys (binary or legacy), NWB 2.x, SpikeGLX, Blackrock, Neuralynx'
                 'EEG: BrainVision, EDF / BDF, XDF, EEG-BIDS, EEGLAB, FieldTrip or plain .mat'
-                'Image stacks: .mat, multi-frame TIFF, Inscopix .isxd, ThorImage, Bruker Prairie View or UCLA Miniscope (imaging); still images for histology (TIFF, PNG / JPG, .mat)'
+                'Image stacks: .mat, multi-frame TIFF or video (imaging; export other microscope files as TIFF first); still images for histology (TIFF, PNG / JPG, .mat)'
                 'Any saved result with a time vector and signal (response features)'};
             t.outputs = {
                 'Intermediate .mat files that the next step loads (cropped LDF, LDF trials, LFP, MUA)'
@@ -539,7 +539,7 @@ classdef HelpApp < handle
                 'The **Analyses** area has one tile per technique, grouped by family in the same order as the website''s Analyses menu. Each tile has its steps as numbered buttons (hover one to see which file goes in and out) and a **?** that opens its topic here.'
                 '| Family | Tile: windows, in order | Starts from | Ends with |'
                 '| Blood flow | LDF: 1 Extract → 2 Process → 3 Average; Laser speckle | LDF recording (LabChart, AcqKnowledge export, Spike2, EDF or a table); laser speckle images (raw, contrast or perfusion) | Trials .mat; grand average (mean ± SD); flow maps, flow per ROI, response map |'
-                '| Electrophysiology | LFP: 1 Extract → 2 LFP analysis; MUA: 1 Extract → 2 MUA analysis | TDT, Intan, Open Ephys, NWB, SpikeGLX, Blackrock, Neuralynx or MCS recording | ERP, CSD, time–frequency; spike times, clusters, rasters, rates |'
+                '| Electrophysiology | LFP: 1 Extract → 2 LFP analysis; MUA: 1 Extract → 2 MUA analysis | TDT, Intan, Open Ephys, NWB, SpikeGLX, Blackrock or Neuralynx recording | ERP, CSD, time–frequency; spike times, clusters, rasters, rates |'
                 '| EEG | EEG analysis | Raw or cleaned EEG: BrainVision .vhdr, EDF / BDF, XDF, EEG-BIDS, EEGLAB .set, FieldTrip .mat or plain .mat, one file per participant | ERPs per condition, mean / peak amplitude, statistics, time–frequency |'
                 '| Imaging | ROI analysis; Histology / culture | Image stack (.mat or TIFF); still images (TIFF, PNG / JPG, .mat) | Brightness, ΔF/F, kymograph, vessel diameter; cell counts, markers, regions |'
                 '| Across techniques | Response features; Batch processing; Sessions and reports | LDF trials, LFP / ERP .mat or any t and y; a folder of files; a saved session | Feature table and group statistics; one summary table and a log; the analysis reopened in its window |'
@@ -788,10 +788,10 @@ classdef HelpApp < handle
         %% topicEphysExtract - Extract Ephys (TDT, LFP, MUA)
         function t = topicEphysExtract()
             t = mkTopic('Ephys Extract', 'Electrophysiology · step 1', ...
-                'Load a recording (TDT, Intan, Open Ephys, NWB, SpikeGLX, Blackrock, Neuralynx, Multi Channel Systems) and extract the LFP and MUA signals for analysis.');
+                'Load a recording (TDT, Intan, Open Ephys, NWB, SpikeGLX, Blackrock, Neuralynx) and extract the LFP and MUA signals for analysis.');
             t.quick = {
                 '**1 Load recording**: choose the **Source** (the acquisition system or file format; see **Inputs**), click **Load recording…** and select the file or folder it asks for (a TDT tank / block folder, an Open Ephys or Neuralynx folder, or a data file). The channel lists are filled from the recording.'
-                '**2 Choose channels**: pick the **Stimulus channel** (TDT: Whis; Intan: DIGITAL-IN / ANALOG-IN, and the stimulation current in .rhs files; Open Ephys: TTL line / ADC; NWB: stimulus TimeSeries or trials; SpikeGLX: sync or digital bits, analog inputs; Blackrock: analog inputs, digital input bits from the .nev; Neuralynx: TTL bits; Multi Channel Systems: auxiliary and digital streams, events) and one or more raw channels (**All** / **None** help).'
+                '**2 Choose channels**: pick the **Stimulus channel** (TDT: Whis; Intan: DIGITAL-IN / ANALOG-IN, and the stimulation current in .rhs files; Open Ephys: TTL line / ADC; NWB: stimulus TimeSeries or trials; SpikeGLX: sync or digital bits, analog inputs; Blackrock: analog inputs, digital input bits from the .nev; Neuralynx: TTL bits) and one or more raw channels (**All** / **None** help).'
                 '**3 Process**: optionally **Plot RAW**; then **Process LFP…** (low-pass, optional 60 Hz notch, downsample) and/or **Process MUA…** (band-pass, default 300–3000 Hz).'
                 '**4 Save**: type the probe''s **Electrode spacing (µm)** if you know it (0 = not known; it is saved with the LFP and used for the CSD), then **Save LFP…** / **Save MUA…**, choose which channels to keep and a file name (default `<recording>_LFP.mat` / `<recording>_MUA.mat`). Open these files in **LFP analysis** / **MUA analysis**. **Export NWB…** writes the processed LFP and its stimulus channel as an NWB 2.x file (default `<recording>_LFP.nwb`).'
                 '**Session / report (optional)**: in step 4, **Save session…** stores the recording (with checksum), channels and LFP / MUA settings; **Open session…** re-processes them; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
@@ -800,7 +800,7 @@ classdef HelpApp < handle
                 '* **Process LFP** (low-pass, downsample to ~1017 Hz): each stimulus evokes a negative deflection at **15 ms** and a positive one at **40 ms**, largest on **channel 4** and weaker with distance from it.'
                 '* **Process MUA** (300–3000 Hz): spikes on **channels 3–5** (two units on channel 4, one on channel 5), denser in the 50 ms after each stimulus. Save both to try LFP and MUA Analysis.'
                 '* **Other formats**: choose a **Source** before **Try demo data** to open the first 6 s of demo channels 3–6 written as an Intan .rhd (20 kHz; stimulus on DIGITAL-IN-01 and a 1 V copy on ANALOG-IN-1), an Open Ephys folder (30 kHz; TTL line 1 and ADC1) or an NWB file (24414 Hz; the whisker stimulus TimeSeries and a trials table). There are 3 stimuli (1, 3 and 5 s). **Process LFP** gives 1000 Hz (Intan, Open Ephys) or 1017.25 Hz (NWB), with the evoked negative deflection at **15 ms**, largest on **RAW Ch 2** (= demo channel 4).'
-                '* The same 6 s are also written as SpikeGLX (30 kHz, sync bit 6), Blackrock (.ns6, 30 kHz, NEV digital input bit 0), Neuralynx (32 kHz, TTL bit 0), Multi Channel Systems HDF5 (25 kHz, digital stream bit 0), Intan .rhs (30 kHz, DIGITAL-IN-01) and Open Ephys legacy (30 kHz, TTL 1): the first stimulus candidate is the demo stimulus in each.'
+                '* The same 6 s are also written as SpikeGLX (30 kHz, sync bit 6), Blackrock (.ns6, 30 kHz, NEV digital input bit 0), Neuralynx (32 kHz, TTL bit 0), Intan .rhs (30 kHz, DIGITAL-IN-01) and Open Ephys legacy (30 kHz, TTL 1): the first stimulus candidate is the demo stimulus in each.'
                 '* **Export NWB…** after Process LFP, then choose Source **NWB file** and **Load recording…** with the exported file: the LFP opens at its LFP rate with the same channel names and stimulus.'};
             t.inputs = {
                 'TDT tank / block folder containing the `Whis` (stimulus) and `xRAW` (raw neural) streams (needs the TDT MATLAB SDK, `TDTbin2mat`, under `Utilities/TDTMatlabSDK/`)'
@@ -810,7 +810,6 @@ classdef HelpApp < handle
                 'SpikeGLX `.bin` + `.meta` (Neuropixels 1.0 / 2.0 imec AP or LF, nidq)'
                 'Blackrock `.ns1`–`.ns6` (NSx 2.1–3.0), with the `.nev` of the same name for the digital input'
                 'Neuralynx folder of `.ncs` channels, with `Events.nev` for TTLs'
-                'Multi Channel Systems HDF5 `.h5` (exported by Multi Channel DataManager from `.msrd` / `.mcd`; needs MATLAB''s HDF5 functions)'
                 'Intan RHS2000 `.rhs` (stimulation / recording controller, traditional single-file format)'
                 'Open Ephys legacy folder: `<processor>_CH<n>.continuous` files (GUI before 0.6), `all_channels.events`'};
             t.outputs = {
@@ -832,7 +831,6 @@ classdef HelpApp < handle
                 '* **SpikeGLX**: int16 × imAiRangeMax / imMaxInt / gain (per channel from the imro table; Neuropixels 2.0: gain 80); the sync word and nidq digital words become one 0/1 trace per bit that changes.'
                 '* **Blackrock**: electrodes scaled from the NSx extended headers (2.1: 0.25 µV per bit); several data blocks are put one after the other; analog inputs (ids above 128) and the NEV digital-input bits are stimulus candidates.'
                 '* **Neuralynx**: value × ADBitVolts (sign flipped when InputInverted); channels in natural order (CSC2 before CSC10); each TTL bit in Events.nev becomes a 0/1 trace.'
-                '* **Multi Channel Systems**: (raw − ADZero) × ConversionFactor × 10^Exponent at 1e6 / Tick Hz; the electrode stream is the raw data, auxiliary channels, digital bits and events are stimulus candidates.'
                 '* **Intan .rhs**: amplifier channels (0.195 µV per bit); digital inputs, analog inputs and the stimulation current of each channel that stimulated are stimulus candidates.'
                 '* **Open Ephys legacy**: CH channels × bitVolts; ADC channels and each TTL channel of all_channels.events are stimulus candidates.'
                 '## NWB export'
@@ -849,7 +847,6 @@ classdef HelpApp < handle
                 '"No structure.oebin found"', 'Choose the Open Ephys recording folder (…/Record Node */experiment*/recording*) or a folder above it. For the older "Open Ephys format" (.continuous files) choose Source **Open Ephys legacy folder**.'
                 '"not an HDF5 file" / "without the NWB root attribute nwb_version" / "No ElectricalSeries"', 'The file is not an NWB 2.x file with extracellular data. NWB 1.x files are not supported.'
                 '"Cannot tell the recording format"', 'Choose the Source yourself before Load recording…; the file may be a format that is not read (for example Blackrock .ccf).'
-                'Multi Channel Systems .msrd / .mcd does not load', 'Export the recording to HDF5 with Multi Channel DataManager and load the .h5 file.'
                 'The stimulus channel list shows "(no stimulus channel)"', 'The recording has no digital / analog input, TTL events or stimulus series. LFP / MUA files are still saved, with an all-zero stimulus.'
                 'Export NWB says "NWB-style file (not validated)"', 'matnwb is not installed. The file follows the NWB 2.7 layout; install matnwb (https://github.com/NeurodataWithoutBorders/matnwb) to write it with the official schema classes, or validate it with nwbinspector.'
                 'Loading a long recording runs out of memory', 'The whole recording is loaded (as for TDT tanks). Split long recordings, or export a shorter segment from the acquisition software.'};
@@ -1017,8 +1014,8 @@ classdef HelpApp < handle
                 '`.mat` with `stack` or `frames` (H × W × N grayscale or H × W × 3 × N RGB; otherwise the first variable is used)'
                 'Optional in the .mat: `timeVec` or `t` (one time per frame), `roiMask` (logical H × W) or `roiMasks` (H × W × K, optional `roiNames`), used as the first ROIs'
                 'Multi-frame TIFF: RGB frames are converted to grayscale (mean of the colour channels). The frame interval, pixel size and channels are read from ImageJ, OME-TIFF and ScanImage files (one channel and the first slice are used); otherwise time = frame index'
-                'Inscopix `.isxd` movies (processed recordings; raw nVista files with frame headers: export them from Inscopix Data Processing first)'
-                'ThorImageLS: choose `Experiment.xml` (or the `.raw`) of the folder; Bruker Prairie View: choose the T-series `.xml` (its TIFFs are read, with their frame times); UCLA Miniscope: choose `0.avi` (or `msCam1.avi`): every numbered video of the folder is read, with the times of `timeStamps.csv`'};
+                'Video (`.avi`, `.mp4`): grey frames and the frame rate of the file'
+                'Files saved by microscope software in its own layout are not read: export the recording as a multi-frame TIFF (or a video) with that software first'};
             t.outputs = {
                 '.csv: `Time_s` plus one column per measure and ROI (`<measure>_<ROI name>`, e.g. `DFF_Cell_1`; measures Intensity, Movement, DFF), or `Diameter_px` (+ `Diameter_standard_px`, `Replaced` when robust); for a kymograph, a matrix (first row = time)'
                 '.mat: struct `results` with the series (one row per ROI), `roiMasks` / `roiNames`, `roiMask` (ROI 1), `lineStart` / `lineEnd`, `motionCorrection` and `shifts`, and the preprocessing and diameter settings'};

@@ -13,7 +13,7 @@ are used only to say this; they do not endorse this project.
 | Neo (python-neo) | BSD-3-Clause | Used to cross-check the Intan reader (`core/io/readIntanRHD.m`) on test files. No Neo code is included. |
 | pyxdf | BSD-2-Clause | The XDF reader (`core/io/readXDF.m`, `writeXDF.m`) follows the open XDF specification (sccn/xdf). It applies clock offsets in the way pyxdf does by default. |
 | phys2bids | Apache-2.0 | The text-export reader (`core/io/readSignalText.m`) follows phys2bids' description of how LabChart and AcqKnowledge text exports are laid out. No phys2bids code is included. |
-| McsPyDataTools (Multi Channel Systems MCS GmbH) | BSD-3-Clause | The Multi Channel Systems HDF5 reader (`core/io/readMCS.m`, `writeMCS.m`) reads the layout that the vendor's own open-source tool reads. |
+| McsPyDataTools (Multi Channel Systems MCS GmbH) | BSD-3-Clause | Up to version 1.0.1, the Multi Channel Systems HDF5 reader and writer (`core/io/readMCS.m`, `writeMCS.m`) read the layout that this open-source tool reads. They were removed after 1.0.1. The notice stays for the earlier versions. |
 
 Tools used only to make files (nothing of them is shipped): the figures in
 `docs/` are drawn by `docs/art/make_figures.py` with matplotlib and NumPy,

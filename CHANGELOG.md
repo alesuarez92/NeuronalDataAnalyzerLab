@@ -20,6 +20,27 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
   the address is shown so you can copy it. The Help (Welcome topic) says
   where the Course is. The **Virtual lab** is still *Coming soon*.
 
+### Removed
+
+Readers whose file layout has no format specification published by the
+vendor are removed. *If you used one of them, export the recording with
+the vendor's own software to a format that is read (for example NWB, EDF,
+TIFF, a video or a MATLAB file), or keep using 1.0.1 for it.*
+
+- **Multi Channel Systems HDF5** (Extract Ephys): `readMCS`, `writeMCS`
+  and their demo file. The reader followed the layout the vendor's
+  open-source tool reads, not a published specification.
+- **Inscopix `.isxd`, ThorImageLS `Experiment.xml` + `.raw`, Bruker
+  Prairie View and UCLA Miniscope folders** (ROI analysis):
+  `readImagingFolder` and `writeImagingFormat`. `readImageStack` now
+  refuses a folder with a message saying to export the images as TIFF.
+  Multi-frame TIFF (with ImageJ, OME-TIFF and ScanImage metadata) and
+  videos open as before.
+- As in 1.0.1, these removals break the promise in `docs/FORMATS.md` that
+  the `read*` functions keep their names until 2.0; they are made for
+  legal reasons. `docs/FORMATS.md` now lists the published description
+  each remaining reader follows.
+
 ## [1.0.1] - 2026-10-05
 
 **A legal-compliance release.** It removes file readers whose layouts did

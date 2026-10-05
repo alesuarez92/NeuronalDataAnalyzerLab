@@ -382,16 +382,15 @@ classdef ROIAnalysisApp < handle
         function loadStack(app)
             startDir = ProjectManager.getImportDir();
             if isempty(startDir), startDir = pwd; end
-            [file, path] = uigetfile({'*.mat;*.tif;*.tiff;*.isxd;*.xml;*.raw;*.avi', 'Stack or MAT (also .isxd, ThorImage / Prairie View .xml, Miniscope .avi)'; ...
-                '*.mat', 'MAT'; '*.tif;*.tiff', 'TIFF'; '*.isxd', 'Inscopix (*.isxd)'; ...
-                '*.xml;*.raw', 'ThorImageLS Experiment.xml / .raw, Prairie View .xml'; '*.avi', 'Miniscope video (*.avi)'}, ...
+            [file, path] = uigetfile({'*.mat;*.tif;*.tiff;*.avi;*.mp4', 'Stack, MAT or video'; ...
+                '*.mat', 'MAT'; '*.tif;*.tiff', 'TIFF'; '*.avi;*.mp4', 'Video (*.avi, *.mp4)'}, ...
                 'Load image stack', startDir);
             figure(app.UIFig);
             if isequal(file, 0), return; end
             app.openFile(fullfile(path, file));
         end
 
-        %% openFile - Load a stack (.mat, TIFF or a microscope's files) without dialogs and show it
+        %% openFile - Load a stack (.mat, TIFF or video) without dialogs and show it
         % A .mat may hold roiMask (H x W) or roiMasks (H x W x K, optional
         % roiNames); they become the ROIs. Returns true on success.
         function ok = openFile(app, fullPath)
@@ -435,8 +434,7 @@ classdef ROIAnalysisApp < handle
                     if ismember('truth', fn) && isstruct(s.truth), truth = s.truth; end
                     timeFromFile = ~isempty(timeVec);
                 else
-                    % TIFF (ImageJ, OME, ScanImage metadata), video, Inscopix .isxd,
-                    % ThorImageLS, Prairie View or Miniscope folders (core/io/readImageStack)
+                    % TIFF (ImageJ, OME, ScanImage metadata) or video (core/io/readImageStack)
                     if isempty(which('readImageStack'))
                         addpath(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'core', 'io'));
                     end

@@ -9,7 +9,8 @@ function writeNeuralynx(folder, data, fs, varargin)
 %          writes), 'StartUs' (first timestamp, default 1e6), 'TTL'
 %          struct(sample (1-based), value) for Events.nev
 % Layout as readNeuralynx reads it (16 kB text header, 1044-byte records;
-% 184-byte event records). Base MATLAB only; also runs in GNU Octave.
+% 184-byte event records), from the vendor's published "Neuralynx Data
+% File Formats" document (see readNeuralynx). Base MATLAB only; also runs in GNU Octave.
 %
 [nCh, n] = size(data);
 o = struct('Names', {{}}, 'ADBitVolts', 1e-3 / 32768, 'InputInverted', true, 'StartUs', 1e6, ...

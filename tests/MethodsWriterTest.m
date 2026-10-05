@@ -191,7 +191,7 @@ end
 function testExtractEphysFormats(tests)
     % The recording format named in the first sentence
     e = Session.new('ExtractEphysApp');
-    names = {'intanrhs', 'Intan RHS2000 data file (.rhs)'; 'mcs', 'Multi Channel Systems HDF5 file'; ...
+    names = {'intanrhs', 'Intan RHS2000 data file (.rhs)'; 'neuralynx', 'Neuralynx continuous sampled channel (.ncs) files'; ...
         'openephyslegacy', 'Open Ephys data format (.continuous) files'};
     for k = 1:size(names, 1)
         e.settings = struct('format', names{k, 1});

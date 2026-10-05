@@ -5,6 +5,11 @@
 % rec = readNeuralynx(pathOrFolder)    a .ncs file (every .ncs of its folder
 %                                      is read) or the session folder
 %
+% Format description: "Neuralynx Data File Formats", the document
+% Neuralynx, Inc. publishes for its file formats (linked from its support
+% article "TechTip: Neuralynx Data File Formats",
+% https://support.neuralynx.com/hc/en-us/articles/360040444811). The names
+% Neuralynx, Cheetah and Pegasus only say which files are read.
 % Neuralynx (Cheetah / Pegasus), little-endian; each file starts with a
 % 16384-byte text header of '-Key value' lines:
 %   .ncs  one channel: -SamplingFrequency, -ADBitVolts (volts per bit),
