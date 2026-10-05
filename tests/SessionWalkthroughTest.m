@@ -240,24 +240,41 @@ function extra = scrollToButtons(btns)
         if isprop(h, 'Scrollable') && strcmp(char(h.Scrollable), 'on')
             before = viewport(h);
             msg = '';
-            try
-                scroll(h, btns.Methods);
-            catch ME
-                msg = ME.message;
-                try, scroll(h, 'bottom'); catch ME2, msg = [msg ' / ' ME2.message]; end
+            moved = 0;
+            for attempt = 1:3                         % a window busy drawing plots may ignore the first
+                try
+                    scroll(h, btns.Methods);
+                catch ME
+                    msg = ME.message;
+                    try, scroll(h, 'bottom'); catch ME2, msg = [msg ' / ' ME2.message]; end
+                end
+                drawnow; pause(0.5 * attempt);
+                after = viewport(h);
+                if numel(before) == 2 && numel(after) == 2, moved = abs(after(2) - before(2)); end
+                if moved > 0, break; end
             end
-            drawnow; pause(0.5);
-            after = viewport(h);
-            fprintf('scrollToButtons: %s viewport %s -> %s %s\n', class(h), mat2str(before), ...
-                mat2str(after), msg);
-            if numel(before) == 2 && numel(after) == 2
-                extra = max(extra, abs(after(2) - before(2)));
-            end
+            if moved == 0, moved = overflow(h); end   % from the fixed row heights
+            fprintf('scrollToButtons: %s viewport %s -> %s, %d px %s\n', class(h), mat2str(before), ...
+                mat2str(after), round(moved), msg);
+            extra = max(extra, moved);
             try, scroll(h, 'top'); catch, end
         end
         h = h.Parent;
     end
     extra = ceil(extra) + 12 * (extra > 0);      % a little room under the buttons
+end
+
+%% overflow - Height of a scrollable grid's rows beyond its visible height (0 when unknown)
+function d = overflow(h)
+    d = 0;
+    try
+        rh = h.RowHeight;
+        if ~all(cellfun(@isnumeric, rh)), return; end
+        content = sum([rh{:}]) + h.RowSpacing * (numel(rh) - 1) + h.Padding(2) + h.Padding(4);
+        pos = getpixelposition(h);
+        d = max(0, content - pos(4));
+    catch
+    end
 end
 
 function v = viewport(h)
