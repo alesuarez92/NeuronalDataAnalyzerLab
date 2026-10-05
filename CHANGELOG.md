@@ -142,6 +142,9 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
     worded for participants (`GroupStats.checkOptions`: `subject`,
     `valuesTab`, `missingAction`); the Statistics tab sums them up and a
     new measure removes them with the old test.
+- **ROADMAP: what 1.0 means**: every window with its checks (done), the
+  session, export and script formats frozen, the tool used on the lab's
+  real recordings, and one pass over the Help and website.
   - **Demo data with each fault**: `demo_imaging_faults.mat`
     (`DemoData.imagingFaults`: a 12-bit movie whose field slides 14 px,
     the dye fading to ~65% and Cell 2 clipped at 4095, with three cell

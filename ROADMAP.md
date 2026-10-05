@@ -11,6 +11,22 @@ synthetic demo data that has a known answer (see `core/DemoData.m` and `core/dem
 
 **Status:** ✅ done · 🔨 in progress · 📅 planned · 🟢 open for contributors
 
+## Version 1.0
+
+1.0 is a promise of stability, not a feature count: from 1.0 on, a change
+that breaks sessions, exports or scripts waits for 2.0. It is released when
+all of these hold:
+
+| | Condition | What it means |
+|---|---|---|
+| ✅ | Every window has its checks | A Checks tab in every analysis window and a Checks column in Batch (quality checks steps 1–4, released in 0.10.0). |
+| 📅 | Formats and script functions frozen | The session file, the .csv / .mat exports and the main script functions (`GroupStats`, `EEGAnalysis`, `Batch`, the readers) keep their names and fields; anything still to change changes before 1.0. |
+| 📅 | Used on the lab's real recordings | Every window run on real data from the lab, not only the demo data; the readers for other imagers only from real sample files. |
+| 📅 | Help and website checked | One full pass over the Help and the website against fresh frames of every window. |
+
+Live parameter previews, Import and compare and the other planned items
+below can come after 1.0.
+
 ## Found by the demo data
 
 The synthetic demo recordings have known ground truth. Running every window on
@@ -137,7 +153,7 @@ correctly and that teaches while it is used:
 | | Item | Notes |
 |---|---|---|
 | ✅ | Methods-section writer | *Methods text…* in every window drafts the methods from one or several saved sessions: every step, parameter, software version and citation, with placeholders for what only you know. |
-| 🔨 | Quality checks | A plain-language check per step (too few trials, refractory violations, CSD sink at an edge contact, sphericity, motion larger than a cell), each saying why it matters and what to try. Step 1 done: one format and one Checks tab for every window (Laser speckle and Histology use it), kept in sessions, reports and the methods text. Step 2 done: blood flow, the needle probe and perfusion images with the same checks (drift, movement artefacts, signal stuck at 0 or at the top, trials, time resolution) plus each source's own (probe baseline and filter; speckle field shift, speckle size, exposure, illumination, static scattering; clipped perfusion images), in LDF Process, Batch and Laser speckle, with demo files that contain each fault. Step 3 done: electrophysiology, in LFP, MUA and EEG Analysis and Batch (LFP: a stimulus artefact into the N1 window, the CSD sink at an edge contact, a missing electrode spacing; MUA: refractory violations, low signal-to-noise, spike amplitude drift; EEG: trials left per condition, a rejection that hits one condition more, unbalanced trial counts with a peak measure, many bad channels, a measured channel that was interpolated), with demo files that contain each fault. Step 4 done: imaging and statistics, in ROI Analysis (motion larger than a cell, bleaching, clipped pixels) and Groups & statistics and EEG Analysis' statistics (n and pseudoreplication, normality with Shapiro–Wilk, sphericity, equal spread), with demo files that contain each fault. |
+| ✅ | Quality checks | A plain-language check per step (too few trials, refractory violations, CSD sink at an edge contact, sphericity, motion larger than a cell), each saying why it matters and what to try. Step 1 done: one format and one Checks tab for every window (Laser speckle and Histology use it), kept in sessions, reports and the methods text. Step 2 done: blood flow, the needle probe and perfusion images with the same checks (drift, movement artefacts, signal stuck at 0 or at the top, trials, time resolution) plus each source's own (probe baseline and filter; speckle field shift, speckle size, exposure, illumination, static scattering; clipped perfusion images), in LDF Process, Batch and Laser speckle, with demo files that contain each fault. Step 3 done: electrophysiology, in LFP, MUA and EEG Analysis and Batch (LFP: a stimulus artefact into the N1 window, the CSD sink at an edge contact, a missing electrode spacing; MUA: refractory violations, low signal-to-noise, spike amplitude drift; EEG: trials left per condition, a rejection that hits one condition more, unbalanced trial counts with a peak measure, many bad channels, a measured channel that was interpolated), with demo files that contain each fault. Step 4 done: imaging and statistics, in ROI Analysis (motion larger than a cell, bleaching, clipped pixels) and Groups & statistics and EEG Analysis' statistics (n and pseudoreplication, normality with Shapiro–Wilk, sphericity, equal spread), with demo files that contain each fault. |
 | 📅 | Live parameter previews | Thresholds, filters, CSD smoothing: a small preview updates as the value changes. |
 | 📅 | Import and compare | Kilosort / Phy units and Suite2p ROIs: quality checks, and side-by-side comparison with Neuronal Data Analyzer Lab's own sorting and cell detection. |
 | 📅 | Course and Virtual lab | A very interactive, hands-on course that uses a virtual lab: plan, record and analyse simulated experiments in the real windows, with feedback on every step. Coming soon (the launcher shows them as *Coming soon*). |
