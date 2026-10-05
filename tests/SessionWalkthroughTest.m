@@ -75,8 +75,7 @@ function sessionSteps(tests, app, tag, ctor, btns)
     tests.verifyEqual(char(btns.Methods.Enable), 'on', [tag ': Methods text disabled']);
     tests.verifyEqual(btns.Save.Text, ['Save session' char(8230)]);
     tests.verifyEqual(btns.Methods.Text, ['Methods text' char(8230)]);
-    scrollToButtons(btns);
-    shot(tests, app, sprintf('%s_s01_session_buttons', tag));
+    buttonsShot(tests, app, btns, sprintf('%s_s01_session_buttons', tag));
 
     p = fullfile(tests.TestData.tmp, [tag Session.Extension]);
     tests.verifyTrue(logical(app.saveSessionTo(p, sprintf('%s walkthrough: demo data', tag))));
@@ -208,12 +207,33 @@ function f = frozenFields(tag)
     end
 end
 
+%% buttonsShot - Frame of the window with the session buttons in view
+% exportapp draws a scrolled column from its top, so scrolling alone does
+% not show the buttons: the window is made taller by the distance the
+% column had to scroll, the frame is taken, and the window gets its size back.
+function buttonsShot(tests, app, btns, name)
+    extra = scrollToButtons(btns);
+    fig = app.UIFig;
+    pos = fig.Position;
+    if extra > 0
+        fig.Position = [pos(1), max(1, pos(2) - extra), pos(3), pos(4) + extra];
+        drawnow; pause(1);
+    end
+    shot(tests, app, name);
+    if extra > 0
+        fig.Position = pos;
+        drawnow;
+    end
+end
+
 %% scrollToButtons - Scroll the step column so the session buttons are visible
 % The window is drawn and given time to lay out first (scrolling before the
 % browser has the column's height does nothing), then every scrollable
 % container above the buttons scrolls to the Methods text button ('bottom'
-% where that is refused). What happened is printed to the CI log.
-function scrollToButtons(btns)
+% where that is refused) and back to the top. Returns the largest distance
+% scrolled (px). What happened is printed to the CI log.
+function extra = scrollToButtons(btns)
+    extra = 0;
     drawnow; pause(1);
     h = btns.Grid.Parent;
     while ~isempty(h) && ~isa(h, 'matlab.ui.Root')
@@ -227,11 +247,17 @@ function scrollToButtons(btns)
                 try, scroll(h, 'bottom'); catch ME2, msg = [msg ' / ' ME2.message]; end
             end
             drawnow; pause(0.5);
+            after = viewport(h);
             fprintf('scrollToButtons: %s viewport %s -> %s %s\n', class(h), mat2str(before), ...
-                mat2str(viewport(h)), msg);
+                mat2str(after), msg);
+            if numel(before) == 2 && numel(after) == 2
+                extra = max(extra, abs(after(2) - before(2)));
+            end
+            try, scroll(h, 'top'); catch, end
         end
         h = h.Parent;
     end
+    extra = ceil(extra) + 12 * (extra > 0);      % a little room under the buttons
 end
 
 function v = viewport(h)
@@ -319,8 +345,7 @@ function testSignalCharacterization(tests)
     % The Groups tab has the same buttons
     tests.verifyTrue(logical(app.loadGroupDemo()));
     tests.verifyTrue(logical(app.runGroupStats('Peak amplitude', 'paired', 'parametric', {'Control', 'Stimulated'})));
-    scrollToButtons(app.GroupSessionBtns);
-    shot(tests, app, 'SignalCharacterizationApp_s03_group_session_buttons');
+    buttonsShot(tests, app, app.GroupSessionBtns, 'SignalCharacterizationApp_s03_group_session_buttons');
     pdf = fullfile(tests.TestData.reportDir, 'SignalCharacterizationApp_groups_report.pdf');
     tests.verifyTrue(logical(app.makeReport(pdf)));
     d = dir(pdf);
