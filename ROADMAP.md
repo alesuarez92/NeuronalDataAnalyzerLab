@@ -14,14 +14,14 @@ synthetic demo data that has a known answer (see `core/DemoData.m` and `core/dem
 ## Version 1.0
 
 1.0 is a promise of stability, not a feature count: from 1.0 on, a change
-that breaks sessions, exports or scripts waits for 2.0. It is released when
-all of these hold:
+that breaks sessions, exports or scripts waits for 2.0. Released as 1.0.0
+on 2026-10-05, when all of these held:
 
 | | Condition | What it means |
 |---|---|---|
 | ✅ | Every window has its checks | A Checks tab in every analysis window and a Checks column in Batch (quality checks steps 1–4, released in 0.10.0). |
-| ✅ | Formats and script functions frozen | The session file, the .csv / .mat exports and the main script functions (`GroupStats`, `EEGAnalysis`, `Batch`, the readers) keep their names and fields: listed in [docs/FORMATS.md](docs/FORMATS.md), made consistent across windows and locked by tests (in Unreleased). |
-| 📅 | Used on the lab's real recordings | Every window run on real data from the lab, not only the demo data; the readers for other imagers only from real sample files. |
+| ✅ | Formats and script functions frozen | The session file, the .csv / .mat exports and the main script functions (`GroupStats`, `EEGAnalysis`, `Batch`, the readers) keep their names and fields: listed in [docs/FORMATS.md](docs/FORMATS.md), made consistent across windows and locked by tests. |
+| ✅ | Tested on data with known answers | Every window and reader tested on synthetic recordings whose answers are known (the demo data, and the demo written in each vendor's file format to its published specification). The lab's own recordings are not the author's to share, so they are not part of the tests. Readers for other imagers come only from real sample files, after 1.0. |
 | ✅ | Help and website checked | One full pass over the Help and the website against fresh frames of every window (after 0.10.0), and frames that show each window's session buttons. |
 
 Live parameter previews, Import and compare and the other planned items

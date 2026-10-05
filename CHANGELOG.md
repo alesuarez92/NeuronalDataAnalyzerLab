@@ -10,6 +10,13 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-05
+
+**1.0: the files, sessions and script functions listed in
+`docs/FORMATS.md` keep their names until 2.0** (ROADMAP: every window has
+its checks, formats frozen, tested on data with known answers, Help and
+website checked).
+
 ### Changed
 
 - **Formats ready to freeze for 1.0** (ROADMAP 1.0; listed in

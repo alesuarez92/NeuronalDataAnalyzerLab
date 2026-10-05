@@ -1,6 +1,6 @@
 # Neuronal Data Analyzer Lab
 
-[![Version](https://img.shields.io/badge/version-0.10.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE.txt)
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2021a+-orange.svg)](https://www.mathworks.com/products/matlab.html)
 
@@ -8,7 +8,7 @@
 > not the green *Code → Download ZIP* button at the top of this page.
 > The green button gives you the in-development `main` branch; the
 > Releases page gives you a tagged, tested version (currently
-> [v0.10.0](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.10.0)).
+> [v1.0.0](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.0)).
 > Full walk-through below in [Install](#install).
 
 ![The launcher: Learn (Course and Virtual lab, coming soon) and one tile per analysis, grouped as blood flow, electrophysiology, EEG, imaging and across techniques](docs/main-launcher.png)
@@ -42,11 +42,11 @@ any window with synthetic data whose answers are known; the
 (plan, record and analyse a simulated experiment) are coming soon, also free; in the
 launcher their tiles show a greyed-out *Coming soon* button.
 
-> **Status: early release (v0.10.0).** The UI works end-to-end on the lab's
-> data formats. The session files, exported files and script functions that
-> 1.0 keeps stable are settled and listed in [docs/FORMATS.md](docs/FORMATS.md); see
-> [CHANGELOG.md](CHANGELOG.md) for what's in this release and
-> [ROADMAP.md](ROADMAP.md) for what 1.0 still needs.
+> **Status: 1.0 (v1.0.0).** Every window works end-to-end and has its
+> quality checks. The session files, exported files and script functions
+> listed in [docs/FORMATS.md](docs/FORMATS.md) keep their names until 2.0;
+> see [CHANGELOG.md](CHANGELOG.md) for what's in this release and
+> [ROADMAP.md](ROADMAP.md) for what comes next.
 
 ## Licence and use
 
@@ -196,7 +196,7 @@ The website has the same on its Community page (About → Community).
 If you use Neuronal Data Analyzer Lab, or results produced with it, in work
 that you publish or present, cite it (this is a condition of the licence):
 
-> Suarez, A. (2026). *Neuronal Data Analyzer Lab* (version 0.10.0) [Computer
+> Suarez, A. (2026). *Neuronal Data Analyzer Lab* (version 1.0.0) [Computer
 > software]. https://github.com/alesuarez92/NeuronalDataAnalyzerLab
 
 GitHub's **Cite this repository** button (right-hand column) gives the same
