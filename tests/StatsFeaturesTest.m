@@ -2,13 +2,17 @@
 % =========================================================================
 % UNIT TESTS FOR GroupStats, FigureExport AND THE GROUP DEMO DATA
 % =========================================================================
-% GroupStats is checked against published textbook results that are
-% reproduced by every statistics package:
-%   - Student's (1908) sleep data (R dataset "sleep"): paired and Welch
-%     t-tests, Wilcoxon signed-rank with ties and a zero difference;
-%   - Hollander & Wolfe examples (R wilcox.test help): exact signed-rank
-%     and exact Mann-Whitney p-values (the latter also by enumeration);
-%   - PlantGrowth (R dataset): one-way ANOVA, Tukey HSD, Kruskal-Wallis;
+% GroupStats is checked on made-up numbers written for these tests (no
+% published data set is used), whose expected results were computed
+% independently with SciPy 1.17.1 (scipy.stats: ttest_rel, ttest_ind,
+% wilcoxon, mannwhitneyu, f_oneway, tukey_hsd, kruskal) on the same
+% numbers:
+%   - paired values with one zero and one tied difference: paired and
+%     Welch t-tests, Wilcoxon signed-rank (normal approximation);
+%   - 9 pairs and 10 + 5 values without ties: exact signed-rank and exact
+%     Mann-Whitney p-values (the latter also by enumeration);
+%   - three groups of 10 with one tie: one-way ANOVA, Tukey HSD,
+%     Kruskal-Wallis;
 % and against identities (t quantiles, F = t^2 for two groups, the
 % studentized range for 2 groups = sqrt(2) |t|, symmetry, zero effect).
 % Repeated measures: rmAnova against the sum-of-squares decomposition,
@@ -45,17 +49,19 @@ end
 
 %% ---- Shared data ---------------------------------------------------------
 
-% Student's sleep data: extra hours of sleep with drug 1 and drug 2, same 10 patients
-function [g1, g2] = sleepData()
-    g1 = [0.7 -1.6 -0.2 -1.2 -0.1 3.4 3.7 0.8 0.0 2.0];
-    g2 = [1.9 0.8 1.1 0.1 -0.1 4.4 5.5 1.6 4.6 3.4];
+% Made-up paired values, 10 animals in two conditions. Multiples of 0.25,
+% so the differences are exact: g1 - g2 has one zero (animal 5), one tie
+% (-0.75, animals 2 and 4) and is negative otherwise.
+function [g1, g2] = pairedData()
+    g1 = [1.25 0.50 2.75 1.00 3.50 0.75 2.00 1.50 4.25 2.50];
+    g2 = [2.75 1.25 5.00 1.75 3.50 2.00 5.00 2.00 6.00 5.00];
 end
 
-% PlantGrowth: dried plant weight, control and two treatments (n = 10 each)
-function [ctrl, trt1, trt2] = plantGrowth()
-    ctrl = [4.17 5.58 5.18 6.11 4.50 4.61 5.17 4.53 5.33 5.14];
-    trt1 = [4.81 4.17 4.41 3.59 5.87 3.83 6.03 4.89 4.32 4.69];
-    trt2 = [6.31 5.12 5.54 5.50 5.37 5.29 4.92 6.15 5.80 5.26];
+% Made-up values of three groups (n = 10 each); 4.36 occurs in ctrl and low
+function [ctrl, low, high] = threeGroups()
+    ctrl = [5.12 4.36 5.83 4.71 5.27 4.48 5.95 4.59 5.08 5.61];
+    low  = [4.92 4.15 5.32 3.98 5.66 4.29 4.93 4.36 4.71 5.40];
+    high = [5.84 5.18 6.05 5.02 5.91 5.49 5.33 6.17 5.36 5.76];
 end
 
 %% ---- Descriptives and distributions ---------------------------------------
@@ -104,25 +110,27 @@ end
 
 %% ---- t-tests -------------------------------------------------------------
 
-function testPairedT_sleepData(tests)
-    [g1, g2] = sleepData();
+function testPairedT_pairedData(tests)
+    [g1, g2] = pairedData();
     r = GroupStats.ttestPaired(g1, g2);
-    verifyEqual(tests, r.stat, -4.062128, 'AbsTol', 1e-5);
+    % Expected: scipy.stats.ttest_rel (SciPy 1.17.1) and its confidence_interval
+    verifyEqual(tests, r.stat, -4.704838, 'AbsTol', 1e-5);
     verifyEqual(tests, r.df, 9);
-    verifyEqual(tests, r.p, 0.002833, 'AbsTol', 1e-6);
-    verifyEqual(tests, r.meanDiff, -1.58, 'AbsTol', 1e-12);
-    verifyEqual(tests, r.ci, [-2.4598858 -0.7001142], 'AbsTol', 1e-6);
-    verifyEqual(tests, r.effect, -1.58 / std(g1 - g2), 'AbsTol', 1e-12);   % d_z
+    verifyEqual(tests, r.p, 0.001113, 'AbsTol', 1e-6);
+    verifyEqual(tests, r.meanDiff, -1.425, 'AbsTol', 1e-12);
+    verifyEqual(tests, r.ci, [-2.1101615 -0.7398385], 'AbsTol', 1e-6);
+    verifyEqual(tests, r.effect, -1.425 / std(g1 - g2), 'AbsTol', 1e-12);   % d_z
     verifyEqual(tests, GroupStats.dz(g1, g2), r.effect, 'AbsTol', 1e-12);
 end
 
-function testWelchT_sleepData(tests)
-    [g1, g2] = sleepData();
+function testWelchT_pairedData(tests)
+    [g1, g2] = pairedData();
     r = GroupStats.ttestWelch(g1, g2);
-    verifyEqual(tests, r.stat, -1.860813, 'AbsTol', 1e-5);
-    verifyEqual(tests, r.df, 17.77647, 'AbsTol', 1e-4);
-    verifyEqual(tests, r.p, 0.07939, 'AbsTol', 1e-5);
-    verifyEqual(tests, r.ci, [-3.3654832 0.2054832], 'AbsTol', 1e-6);
+    % Expected: scipy.stats.ttest_ind(equal_var=False) (SciPy 1.17.1)
+    verifyEqual(tests, r.stat, -2.140680, 'AbsTol', 1e-5);
+    verifyEqual(tests, r.df, 16.41765, 'AbsTol', 1e-4);
+    verifyEqual(tests, r.p, 0.04763, 'AbsTol', 1e-5);
+    verifyEqual(tests, r.ci, [-2.8332588 -0.0167412], 'AbsTol', 1e-6);
 end
 
 function testWelchT_handComputedAndSymmetric(tests)
@@ -146,23 +154,25 @@ end
 
 %% ---- ANOVA -----------------------------------------------------------------
 
-function testAnova_plantGrowth(tests)
-    [ctrl, trt1, trt2] = plantGrowth();
-    r = GroupStats.anova1way({ctrl, trt1, trt2}, {'ctrl', 'trt1', 'trt2'});
+function testAnova_threeGroups(tests)
+    [ctrl, low, high] = threeGroups();
+    r = GroupStats.anova1way({ctrl, low, high}, {'ctrl', 'low', 'high'});
+    % Expected: scipy.stats.f_oneway and tukey_hsd (SciPy 1.17.1); sums of
+    % squares computed directly with NumPy
     verifyEqual(tests, r.df, [2 27]);
-    verifyEqual(tests, r.table.SSB, 3.76634, 'AbsTol', 1e-5);
-    verifyEqual(tests, r.table.SSW, 10.49209, 'AbsTol', 1e-5);
-    verifyEqual(tests, r.stat, 4.846088, 'AbsTol', 1e-5);
-    verifyEqual(tests, r.p, 0.01591, 'AbsTol', 1e-5);
-    verifyEqual(tests, r.effect, 3.76634 / (3.76634 + 10.49209), 'AbsTol', 1e-5);
-    % Tukey HSD (as reported by R's TukeyHSD): trt1-ctrl, trt2-ctrl, trt2-trt1
-    verifyEqual(tests, [r.posthoc.diff], [-0.371 0.494 0.865], 'AbsTol', 1e-10);
-    verifyEqual(tests, [r.posthoc.p], [0.3908711 0.1979960 0.0120064], 'AbsTol', 2e-6);
-    verifyEqual(tests, r.posthoc(3).ci, [0.1737839 1.5562161], 'AbsTol', 2e-6);
+    verifyEqual(tests, r.table.SSB, 3.57542, 'AbsTol', 1e-5);
+    verifyEqual(tests, r.table.SSW, 7.20045, 'AbsTol', 1e-5);
+    verifyEqual(tests, r.stat, 6.703494, 'AbsTol', 1e-5);
+    verifyEqual(tests, r.p, 0.004328, 'AbsTol', 1e-5);
+    verifyEqual(tests, r.effect, 3.57542 / (3.57542 + 7.20045), 'AbsTol', 1e-5);
+    % Tukey HSD: low-ctrl, high-ctrl, high-low
+    verifyEqual(tests, [r.posthoc.diff], [-0.328 0.511 0.839], 'AbsTol', 1e-10);
+    verifyEqual(tests, [r.posthoc.p], [0.3449329 0.0870745 0.0032182], 'AbsTol', 2e-6);
+    verifyEqual(tests, r.posthoc(3).ci, [0.2663851 1.4116149], 'AbsTol', 2e-6);
     % Same result from values + labels
-    r2 = GroupStats.anova1way([ctrl trt1 trt2], [repmat({'ctrl'}, 1, 10), repmat({'trt1'}, 1, 10), repmat({'trt2'}, 1, 10)]);
+    r2 = GroupStats.anova1way([ctrl low high], [repmat({'ctrl'}, 1, 10), repmat({'low'}, 1, 10), repmat({'high'}, 1, 10)]);
     verifyEqual(tests, r2.stat, r.stat, 'AbsTol', 1e-12);
-    verifyEqual(tests, r2.groupNames, {'ctrl', 'trt1', 'trt2'});
+    verifyEqual(tests, r2.groupNames, {'ctrl', 'low', 'high'});
 end
 
 function testAnova_equalMeansGivesZeroF(tests)
@@ -187,10 +197,12 @@ end
 
 %% ---- Rank tests -----------------------------------------------------------
 
-function testWilcoxon_exactHollanderWolfe(tests)
-    % Hamilton depression scale, 9 patients, first vs second visit
-    x = [1.83 0.50 1.62 2.48 1.68 1.88 1.55 3.06 1.30];
-    y = [0.878 0.647 0.598 2.05 1.06 1.29 1.06 3.14 1.29];
+function testWilcoxon_exactSignedRank(tests)
+    % Made-up values, 9 pairs; x - y has no ties and no zeros, and the
+    % negative differences have ranks 1 and 4 (W- = 5, W+ = 40). SciPy
+    % 1.17.1 (scipy.stats.wilcoxon, method 'exact') gives p = 0.0390625 = 20/512.
+    x = [2.10 1.45 3.20 2.75 1.90 2.60 3.05 1.70 2.35];
+    y = [1.45 1.60 2.30 3.15 1.35 2.25 2.25 1.45 1.65];
     r = GroupStats.wilcoxonSignedRank(x, y);
     verifyEqual(tests, r.stat, 40);
     verifyEqual(tests, r.method, 'exact');
@@ -203,20 +215,20 @@ function testWilcoxon_exactHollanderWolfe(tests)
 end
 
 function testWilcoxon_normalApproxWithTiesAndZero(tests)
-    [g1, g2] = sleepData();
+    [g1, g2] = pairedData();
     r = GroupStats.wilcoxonSignedRank(g1, g2);
     % One zero difference dropped (n = 9), one tie of 2: V = 0,
     % z = (0 - 22.5 + 0.5) / sqrt(9*10*19/24 - (2^3 - 2)/48)
     verifyEqual(tests, r.stat, 0);
     verifyEqual(tests, r.z, -22 / sqrt(71.125), 'AbsTol', 1e-12);
-    verifyEqual(tests, r.p, 0.009091, 'AbsTol', 1e-6);
+    verifyEqual(tests, r.p, 0.009091, 'AbsTol', 1e-6);   % SciPy 1.17.1 wilcoxon, approx, correction
     verifySubstring(tests, r.method, 'normal approximation');
 end
 
 function testMannWhitney_exactMatchesEnumeration(tests)
-    % Permeability constants, term (x) vs 12-26 weeks (y); no ties
-    x = [0.80 0.83 1.89 1.04 1.45 1.38 1.91 1.64 0.73 1.46];
-    y = [1.15 0.88 0.90 0.74 1.21];
+    % Made-up values, 10 vs 5, no ties; 35 of the 50 pairs have x > y
+    x = [1.35 0.89 1.88 1.02 1.52 1.18 1.67 0.97 0.78 0.91];
+    y = [1.12 0.86 0.93 0.71 1.24];
     r = GroupStats.mannWhitney(x, y);
     verifyEqual(tests, r.stat, 35);
     verifyEqual(tests, r.method, 'exact');
@@ -230,7 +242,7 @@ function testMannWhitney_exactMatchesEnumeration(tests)
     end
     pEnum = min(1, 2 * min(mean(U >= 35), mean(U <= 35)));
     verifyEqual(tests, r.p, pEnum, 'AbsTol', 1e-12);
-    verifyEqual(tests, r.p / 2, 0.1272, 'AbsTol', 1e-4);   % R: one-sided p-value = 0.1272
+    verifyEqual(tests, r.p / 2, 0.1272, 'AbsTol', 1e-4);   % SciPy 1.17.1 mannwhitneyu, exact, one-sided: 0.127206
     % Complete separation, 4 vs 4: two-sided p = 2 / C(8, 4)
     r = GroupStats.mannWhitney([5 6 7 8], [1 2 3 4]);
     verifyEqual(tests, r.p, 2 / 70, 'AbsTol', 1e-12);
@@ -248,12 +260,13 @@ function testMannWhitney_tiesSymmetry(tests)
     verifyLessThan(tests, r1.effect, 0);   % a tends to be smaller
 end
 
-function testKruskalWallis_plantGrowth(tests)
-    [ctrl, trt1, trt2] = plantGrowth();
-    r = GroupStats.kruskalWallis({ctrl, trt1, trt2}, {'ctrl', 'trt1', 'trt2'});
-    verifyEqual(tests, r.stat, 7.988229, 'AbsTol', 1e-5);
+function testKruskalWallis_threeGroups(tests)
+    [ctrl, low, high] = threeGroups();
+    r = GroupStats.kruskalWallis({ctrl, low, high}, {'ctrl', 'low', 'high'});
+    % Expected: scipy.stats.kruskal (SciPy 1.17.1; tie-corrected)
+    verifyEqual(tests, r.stat, 9.684309, 'AbsTol', 1e-5);
     verifyEqual(tests, r.df, 2);
-    verifyEqual(tests, r.p, 0.01842, 'AbsTol', 1e-5);
+    verifyEqual(tests, r.p, 0.00789, 'AbsTol', 1e-5);
     verifyNumElements(tests, r.posthoc, 3);
 end
 
@@ -365,7 +378,7 @@ function testRmAnova_violatedSphericityUsesGreenhouseGeisser(tests)
 end
 
 function testRmAnova_twoConditionsIsPairedTSquared(tests)
-    [g1, g2] = sleepData();
+    [g1, g2] = pairedData();
     r = GroupStats.rmAnova([g1(:) g2(:)]);
     t = GroupStats.ttestPaired(g2, g1);
     verifyEqual(tests, r.stat, t.stat^2, 'RelTol', 1e-10);
@@ -374,7 +387,7 @@ function testRmAnova_twoConditionsIsPairedTSquared(tests)
     verifyFalse(tests, r.sphericity.testable);
     verifyEqual(tests, [r.sphericity.epsGG r.sphericity.epsHF], [1 1]);
     verifyEqual(tests, r.posthoc(1).p, t.p, 'AbsTol', 1e-12);   % one pair: Holm = raw
-    verifyEqual(tests, r.posthoc(1).diff, 1.58, 'AbsTol', 1e-12);
+    verifyEqual(tests, r.posthoc(1).diff, 1.425, 'AbsTol', 1e-12);
 end
 
 function testFriedman_textbookFormula(tests)
@@ -452,16 +465,16 @@ end
 %% ---- compare (what the app shows) ------------------------------------------
 
 function testCompare_pairedSummaryAndDirection(tests)
-    [g1, g2] = sleepData();
-    res = GroupStats.compare({g1, g2}, {'Drug 1', 'Drug 2'}, 'paired');
+    [g1, g2] = pairedData();
+    res = GroupStats.compare({g1, g2}, {'Before', 'After'}, 'paired');
     verifyEqual(tests, res.main.test, 'Paired t-test');
-    verifyEqual(tests, res.comparisons(1).diff, 1.58, 'AbsTol', 1e-12);   % B - A
-    verifyEqual(tests, res.main.p, 0.002833, 'AbsTol', 1e-6);
+    verifyEqual(tests, res.comparisons(1).diff, 1.425, 'AbsTol', 1e-12);   % B - A
+    verifyEqual(tests, res.main.p, 0.001113, 'AbsTol', 1e-6);
     verifyEqual(tests, res.check.test, 'Wilcoxon signed-rank test');
     verifyTrue(tests, res.checkAgrees);
-    verifySubstring(tests, res.summary, 't(9) = 4.06');
+    verifySubstring(tests, res.summary, 't(9) = 4.7');   % 4.704838, shown with 3 significant digits
     verifyNotEmpty(tests, res.assumptions);
-    res = GroupStats.compare({g1, g2}, {'Drug 1', 'Drug 2'}, 'unpaired', 'nonparametric');
+    res = GroupStats.compare({g1, g2}, {'Before', 'After'}, 'unpaired', 'nonparametric');
     verifyEqual(tests, res.main.test, 'Mann-Whitney U test');
     verifyEqual(tests, res.check.test, 'Welch t-test');
 end
@@ -474,7 +487,7 @@ function testCompare_errors(tests)
 end
 
 function testCompare_pairedDropsIncompletePairs(tests)
-    [g1, g2] = sleepData();
+    [g1, g2] = pairedData();
     g1(3) = NaN;
     res = GroupStats.compare({g1, g2}, {'A', 'B'}, 'paired');
     verifyEqual(tests, res.desc(1).n, 9);
