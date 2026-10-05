@@ -1,13 +1,13 @@
 function s = demoPerfusion(opts)
 % demoPerfusion - Synthetic perfusion images as a commercial imager exports them.
 %
-% Perfusion / flux images of a rodent cortex (as PeriCam PSI / PIMSoft,
-% moorFLPI or a laser Doppler imager export them: one perfusion value per
+% Perfusion / flux images of a rodent cortex (as a commercial laser
+% speckle or laser Doppler imager exports them: one perfusion value per
 % pixel, in the device's units), 64 x 80 px, one image per second for 90 s,
 % with faults that the quality checks find:
 %   * Parenchyma 1000 PU; a vessel (vertical band at x = 14-25 px) at
 %     3400 PU, above the export range: every value is clipped at 3000 PU
-%     (PIMSoft exports 0-3000 PU), so the vessel sits at the top.
+%     (a typical export range), so the vessel sits at the top.
 %   * Activated area: a disk at (x, y) = (52, 28), radius 12 px, whose
 %     perfusion rises by 25% after each stimulus (the shape of demoLSCI:
 %     peak 4 s after onset).

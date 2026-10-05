@@ -2,9 +2,7 @@
 % =========================================================================
 % SIGNAL SOURCE - PHYSIOLOGY RECORDINGS FROM THE COMMON ACQUISITION SYSTEMS
 % =========================================================================
-% Laser Doppler monitors (Perimed PeriFlux, Moor moorVMS-LDF, Oxford
-% Optronix OxyFlo, ADInstruments Blood FlowMeter, BIOPAC LDF100C,
-% Transonic BLF22) are usually recorded, next to the stimulus trigger, by a
+% Laser Doppler monitors are usually recorded, next to the stimulus trigger, by a
 % general data acquisition system. This class reads their files into one
 % structure, so Extract LDF (and scripts) can pick the flow channel and the
 % stimulus from any of them:

@@ -241,27 +241,6 @@ function testPerfusionImagesFromTiff(tests)
     shot(tests, app, 'LSCIAnalysisApp_09_perfusion_tiff', 'Average response');
 end
 
-function testPerimedDatFile(tests)
-    % A PIMSoft .dat of the demo: variance and intensity images give the same flow as the contrast images
-    s = demoLSCI();
-    n = 200;
-    K = LaserSpeckle.spatialContrast(double(s.frames(:, :, 1:n)) - s.dark, 7);
-    I = 1000 * ones(size(K));
-    beta = 0.95;
-    V = (K .* I / beta) .^ 2;
-    f = fullfile(tests.TestData.tmp, 'demo_pimsoft.dat');
-    writePerimedDat(f, V, I, struct('version', 2, 'gain', 1, 'beta', beta, 'name', 'Demo', ...
-        'frameRateText', sprintf('%g img/s', s.fps), 'resolutionMm', 0.01));
-    app = LSCIAnalysisApp(); c = onCleanup(@() delete(app.UIFig));
-    tests.verifyTrue(logical(app.openFile(f)));
-    tests.verifyEqual(app.InputDropdown.Value, 'contrast', 'PIMSoft files open as contrast images');
-    tests.verifyEqual(double(app.Data.stack), K, 'RelTol', 1e-5);
-    tests.verifyEqual(app.Data.fps, s.fps, 'RelTol', 1e-9);
-    tests.verifyEqual(app.Data.pixelSizeUm, 10, 'AbsTol', 1e-9);
-    tests.verifyEqual(app.Data.info.format, 'perimed');
-    shot(tests, app, 'LSCIAnalysisApp_10_pimsoft_dat', '');
-end
-
 %% testLaserSpeckleFaults - The faults demos: each blood-flow check fires
 function testLaserSpeckleFaults(tests)
     app = LSCIAnalysisApp(); c = onCleanup(@() delete(app.UIFig));

@@ -3,7 +3,6 @@ function S = readImageStack(p, opts)
 %
 % S = readImageStack(path)
 % S = readImageStack(path, struct('Channel', 2))
-% S = readImageStack(path, struct('Perimed', 'perfusion'))
 % S = readImageStack(folder)       ThorImageLS, Prairie View or Miniscope folder
 %
 % One reader for the imaging windows (Laser speckle, ROI analysis), so a
@@ -30,10 +29,6 @@ function S = readImageStack(p, opts)
 %            ThorImageLS (Experiment.xml + .raw), Bruker Prairie View (the
 %            PVScan .xml and its TIFFs), UCLA Miniscope (numbered .avi with
 %            timeStamps.csv / timestamp.dat and metaData.json)
-%   .dat   - Perimed PeriCam PSI / PIMSoft recording (readPerimedDat):
-%            speckle contrast images (kind 'contrast'), or the perfusion
-%            images PIMSoft shows with opts.Perimed = 'perfusion' (kind
-%            'flow'); frame rate and pixel size from the header.
 %
 % Output struct S:
 %   stack        H x W x N, class of the file (uint8 / uint16 / single /
@@ -78,11 +73,9 @@ switch lower(ext)
         S = readTiff(p, S, opts);
     case {'.avi', '.mp4', '.mov', '.mj2', '.m4v'}
         S = readVideo(p, S);
-    case '.dat'
-        S = readPerimed(p, S, opts);
     otherwise
         error('NeuroAnalyzer:io:unknownFormat', ...
-            'Cannot read %s: choose a .mat, .tif / .tiff, a video (.avi, .mp4) or a PIMSoft .dat file.', p);
+            'Cannot read %s: choose a .mat, .tif / .tiff, or a video (.avi, .mp4).', p);
 end
 N = size(S.stack, 3);
 if ~isempty(S.t) && numel(S.t) ~= N
@@ -206,32 +199,6 @@ S.fps = M.fps;
 if ~isempty(M.t), S.t = M.t - M.t(1); end
 S.pixelSizeUm = M.pixelSizeUm;
 S.info.notes = [S.info.notes, M.notes];
-end
-
-%% readPerimed - PIMSoft .dat: contrast (default) or perfusion images
-function S = readPerimed(p, S, opts)
-P = readPerimedDat(p);
-S.info.format = 'perimed';
-asPerfusion = isfield(opts, 'Perimed') && strcmpi(opts.Perimed, 'perfusion');
-if asPerfusion
-    S.stack = single(P.perfusion);
-    S.kind = 'flow';
-    S.info.variable = 'perfusion';
-    S.info.notes{end+1} = 'Perfusion images (PU) computed as PIMSoft does: gain x (1/C - 1), limited to 0-3000.';
-else
-    S.stack = single(P.contrast);
-    S.kind = 'contrast';
-    S.info.variable = 'contrast';
-    S.info.notes{end+1} = 'Speckle contrast images computed from the variance and intensity images (beta x SD / I).';
-end
-S.fps = P.fps;
-if ~isfinite(S.fps) && P.durationS > 0 && P.nFrames > 1
-    S.fps = P.nFrames / P.durationS;
-    S.info.notes{end+1} = sprintf('Frame rate %g images/s from the duration (%g s).', S.fps, P.durationS);
-end
-if isfinite(P.resolutionMm) && P.resolutionMm > 0, S.pixelSizeUm = 1000 * P.resolutionMm; end
-S.info.notes = [S.info.notes, P.notes];
-S.info.perimed = rmfield(P, {'variance', 'intensity', 'contrast', 'perfusion'});
 end
 
 %% ------------------------------------------------------------------------

@@ -46,7 +46,7 @@ them exposed two limits, which are now fixed.
 | ✅ | Time–frequency analysis | LFP | Welch spectrum, spectrogram, Morlet ERSP / ITPC and band power next to the ERP and CSD. |
 | ✅ | Per-unit responses | MUA | Raster and PSTH per unit, auto- and cross-correlograms. |
 | ✅ | Motion correction and many ROIs | Imaging | Rigid registration, several ROIs at once, automatic cell detection from a local correlation image. |
-| ✅ | Laser speckle flowmetry | Blood flow | Raw speckle, contrast or perfusion images (including PeriCam PSI `.dat`): speckle contrast, flow index, flow per ROI over time, trials and a response map. |
+| ✅ | Laser speckle flowmetry | Blood flow | Raw speckle, contrast or perfusion images: speckle contrast, flow index, flow per ROI over time, trials and a response map. |
 | ✅ | Histology and culture images | Imaging | Cell counts in still images, marker-positive cells, counts per region and per mm², channel and section / time-point alignment (shift or landmarks), with plain-language checks. |
 | ✅ | More acquisition systems | Data formats | Intan RHD2000, Open Ephys binary and NWB 2.x import; NWB export. Then SpikeGLX, Blackrock, Neuralynx, Plexon `.plx`, Multi Channel Systems HDF5, Intan `.rhs`, Open Ephys legacy `.continuous` and Axon ABF 2 in Extract Ephys; LabChart, AcqKnowledge, Spike2, EDF and tables in Extract LDF. |
 | ✅ | Batch processing | Every pipeline | Run one pipeline over a folder of animals or sessions with the same settings and get one summary table plus a per-file log. |
