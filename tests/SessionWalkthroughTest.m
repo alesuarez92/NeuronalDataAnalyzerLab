@@ -92,13 +92,22 @@ function sessionSteps(tests, app, tag, ctor, btns)
 end
 
 %% scrollToButtons - Scroll the step column so the session buttons are visible
+% The layout is drawn first (scrolling an undrawn grid does nothing), then
+% the column scrolls to the Methods text button ('bottom' where that is refused).
 function scrollToButtons(btns)
     try
+        drawnow;
         h = btns.Grid;
         while ~isempty(h) && ~(isa(h, 'matlab.ui.container.GridLayout') && strcmp(char(h.Scrollable), 'on'))
             h = h.Parent;
         end
-        if ~isempty(h), scroll(h, 'bottom'); end
+        if isempty(h), return; end
+        try
+            scroll(h, btns.Methods);
+        catch
+            scroll(h, 'bottom');
+        end
+        drawnow;
     catch
     end
 end

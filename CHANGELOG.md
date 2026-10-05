@@ -10,6 +10,27 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+### Fixed
+
+- **Help checked against the 0.10.0 frames** (ROADMAP 1.0: one pass over
+  the Help and website). The demo numbers now follow the MATLAB frames:
+  EEG P300 (Target about 6, Novel 3.5, Standard 1 µV; partial η² 0.93;
+  Target − Standard about +5 µV; the N1 map about −3 µV; 12 to 15 Target /
+  Novel trials; band power and ERSP ranges), the checks of the test on the
+  EEG demo (all OK, with their values), laser speckle (peak +28%, the
+  contrast map's colours, the faults and perfusion demos' checks), LDF
+  (drift −1.4 and +5.4%/min; LDF Average opens relative to baseline), LFP
+  (the CSD's weaker sinks on channels 3 and 5, gamma +400 to +750%), MUA
+  (SNR 2.5; the faults channel's Signal-to-noise Check), Groups &
+  statistics (Friedman χ²(2) = 14.2, d_z about 3.5), and the PDF report
+  size. Labels and step numbers as the windows show them: **Min
+  interval**, the Groups tab's steps 2–4, MUA's Export step 5, the
+  optional notch and low-pass, the response map's orange, the speckle
+  demo's 80 × 64 px.
+- **Histology / culture** writes µm and µm² (not um, um2) in its settings.
+- **Session walkthrough frames** scroll to the session buttons before the
+  picture is taken (they were below the visible part of the window).
+
 ## [0.10.0] - 2026-10-05
 
 ### Added
