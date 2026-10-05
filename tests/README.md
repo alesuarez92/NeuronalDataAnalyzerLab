@@ -58,6 +58,30 @@ runtests('tests/ImagingTest')
 - **EDFTest** – `core/io/readEDF`, `writeEDF`: EDF+C with channels at two rates and annotations (durations, UTF-8 text), plain EDF, BDF 24-bit with the Status trigger word, EDF+D with a gap, a header written by hand from the specification, a file cut short, files that are not EDF; an EDF export opened through `SignalSource` (LDF and stimulus guessed, annotations as events); `SignalSourceTest` and `LDFFormatsWalkthroughTest` also open the LDF demo as EDF+
 - **EphysFormatsTest** – `core/io` electrophysiology readers on files from their synthetic writers: SpikeGLX imec (Neuropixels 1.0 / 2.0 gains, sync word) and nidq, Blackrock NSx 2.1 / 2.3 / 3.0 with NEV digital events and several data blocks, Neuralynx .ncs folders with Events.nev TTLs, Axon ABF 2 (gap-free, episodic with sweep starts, float32; ABF 1 refused), Open Ephys legacy .continuous (CH, ADC, TTL events, first timestamp), Intan RHS2000 (digital and analog inputs, stimulation current, DC data saved), Plexon .plx (versions 107 and 102, AI channels, events, spike times, gaps), Multi Channel Systems HDF5 (electrode, auxiliary and digital streams, events, gaps; MATLAB only); `FormatsFeaturesTest` opens the demo written in each of these formats through `EphysSource` (detection by extension, folder contents and first bytes) and `FormatsWalkthroughTest` loads it in Extract Ephys and processes the LFP
 - **ImagingTest** – `core/imaging`: ROI intensity, ΔF/F, movement on RGB stacks, kymograph propagation speed (all three methods), vessel diameter, toolbox-free smoothing and percentile normalization
+- **AppSmokeTest** – every window opens without errors
+- **DemoDataTest** – `DemoData`: the toolbox recovers the simulated ground truth of every demo file
+- **OnsetRuleTest** – one stimulus-onset rule for LDF, LFP / ERP and MUA
+- **LDFPipelineTest** – `LDFPipeline`: the same numbers as LDF Processing, the demo truth recovered
+- **LFPFeaturesTest** – `TimeFrequency` and `ERPAnalysis` on known oscillations and responses
+- **CSDFeaturesTest** – `CSDMethods` (standard, inverse and kernel CSD) on laminar data with a known CSD
+- **MUAFeaturesTest** – MUA cluster clean-up (merge, split, undo), rasters / PSTHs and correlograms
+- **ImagingFeaturesTest** – motion correction, cell detection and the robust vessel diameter
+- **HistologyTest** – `core/Histology`: cell counting, co-localisation and alignment
+- **StatsFeaturesTest** – `GroupStats`, `FigureExport` and the group demo data
+- **FormatsFeaturesTest** – `core/io`: Intan RHD, Open Ephys binary, NWB and `EphysSource` on the demo written in every format
+- **BatchFeaturesTest** – every Batch pipeline recovers the demo truths; errors are logged
+- **MethodsWriterTest** – the methods text (`core/MethodsWriter`) from sessions built on demo data
+- **SessionFeaturesTest** – session files: MD5, save / load, input checks, restore per window, frozen fields
+- **DemoWalkthroughTest** – drives each window through its steps on demo data (frames in `test-artifacts/screens/walkthrough/`)
+- **BatchWalkthroughTest** – Batch Processing on demo files
+- **CSDWalkthroughTest** – LFP Analysis' CSD step with every CSD method on the demo LFP
+- **LFPWalkthroughTest** – LFP Analysis' time-frequency step on the oscillation demo
+- **MUAWalkthroughTest** – MUA cluster clean-up, Raster & PSTH, correlograms and the saved results file
+- **ImagingWalkthroughTest** – ROI Analysis' advanced tools on demo data and microscope files
+- **HistologyWalkthroughTest** – the Histology / culture window on the demo images
+- **FormatsWalkthroughTest** – Extract Ephys on the demo written in every recording format
+- **StatsWalkthroughTest** – Signal Characterization's Groups & statistics on demo data
+- **SessionWalkthroughTest** – session buttons, reopened sessions and PDF reports of every window
 
 ## Fixtures
 

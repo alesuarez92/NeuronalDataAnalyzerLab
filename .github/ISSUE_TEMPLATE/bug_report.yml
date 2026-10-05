@@ -46,6 +46,7 @@ body:
         - LDF Extract
         - LDF Process
         - LDF Average
+        - Laser speckle
         - Ephys Extract
         - LFP analysis
         - MUA analysis
@@ -67,7 +68,7 @@ body:
       description: What you did, in order. A minimal recipe is best.
       placeholder: |
         1. Launch `NeuroAnalyzerLab`.
-        2. Click *Extract LDF Data*.
+        2. In the launcher's LDF tile, click *1 Extract*.
         3. Load `myfile.mat`.
         4. ...
     validations:
@@ -98,7 +99,7 @@ body:
         that helps reproduce the issue without sharing the data itself.
         Issues are public: do not attach or paste recordings, images or file
         names that identify patients, people or unpublished work. If a file
-        is needed, the demo data (*Try with demo data*) is best.
+        is needed, the demo data (*Try it with demo data* in the Help) is best.
 
   - type: checkboxes
     id: terms
@@ -107,5 +108,5 @@ body:
       options:
         - label: I have searched the existing issues for duplicates.
           required: true
-        - label: I am running the latest released version, or I confirmed the bug exists on `main`.
+        - label: I am running the latest released version, or I confirmed the bug exists on the development branch.
           required: true

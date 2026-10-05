@@ -12,15 +12,17 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [1.0.0] - 2026-10-05
 
-**1.0: the files, sessions and script functions listed in
-`docs/FORMATS.md` keep their names until 2.0** (ROADMAP: every window has
-its checks, formats frozen, tested on data with known answers, Help and
-website checked).
+**1.0: a stable release.** From 1.0 on, the session files, exported
+files and script functions listed in `docs/FORMATS.md` keep their names
+until 2.0. Every window has its quality checks and was tested on
+synthetic data with known answers; the Help and the website were checked
+against every window.
 
 ### Changed
 
-- **Formats ready to freeze for 1.0** (ROADMAP 1.0; listed in
-  `docs/FORMATS.md`, locked by tests):
+- **Formats frozen for 1.0** (listed in `docs/FORMATS.md`, locked by
+  tests). *If you read these files with your own scripts or spreadsheets,
+  update the names below:*
   - EEG measures have the same columns everywhere: `Participant,
     Condition, Value_uV, Latency_ms, Trials, PeakAtEdge` in EEG Analysis'
     `.csv` and `.mat` (latency was `Latency_s`) and in
@@ -52,24 +54,14 @@ website checked).
 
 ### Fixed
 
-- **Help checked against the 0.10.0 frames** (ROADMAP 1.0: one pass over
-  the Help and website). The demo numbers now follow the MATLAB frames:
-  EEG P300 (Target about 6, Novel 3.5, Standard 1 µV; partial η² 0.93;
-  Target − Standard about +5 µV; the N1 map about −3 µV; 12 to 15 Target /
-  Novel trials; band power and ERSP ranges), the checks of the test on the
-  EEG demo (all OK, with their values), laser speckle (peak +28%, the
-  contrast map's colours, the faults and perfusion demos' checks), LDF
-  (drift −1.4 and +5.4%/min; LDF Average opens relative to baseline), LFP
-  (the CSD's weaker sinks on channels 3 and 5, gamma +400 to +750%), MUA
-  (SNR 2.5; the faults channel's Signal-to-noise Check), Groups &
-  statistics (Friedman χ²(2) = 14.2, d_z about 3.5), and the PDF report
-  size. Labels and step numbers as the windows show them: **Min
-  interval**, the Groups tab's steps 2–4, MUA's Export step 5, the
-  optional notch and low-pass, the response map's orange, the speckle
-  demo's 80 × 64 px.
-- **Histology / culture** writes µm and µm² (not um, um2) in its settings.
-- **Session walkthrough frames** scroll to the session buttons before the
-  picture is taken (they were below the visible part of the window).
+- **Help** checked against every window: the demo results it quotes (EEG,
+  laser speckle, LDF, LFP, MUA, Groups & statistics) and the labels and
+  step numbers now match what the windows show. The quick starts show each
+  window's own step numbers (extra entries no longer shift them), and the
+  lists of file formats in the Help and on the launcher tiles name every
+  reader (LDF, laser speckle, electrophysiology, EEG, imaging).
+- **Histology / culture** shows µm and µm² in its setting labels, tooltips
+  and session summary (the exported column names keep ASCII `um`, `um2`).
 
 ## [0.10.0] - 2026-10-05
 
@@ -954,7 +946,11 @@ formats, but the public surface is not yet stable. Expect tightening
 of error handling, more validation around input formats, and additional
 analyses in 0.2.x.
 
-[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v0.7.0...HEAD
+[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.0
+[0.10.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.10.0
+[0.9.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.9.0
+[0.8.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.8.0
 [0.7.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.7.0
 [0.6.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.6.0
 [0.5.2]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.5.2

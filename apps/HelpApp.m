@@ -278,7 +278,7 @@ classdef HelpApp < handle
             UIKit.done(dlg);
             UIKit.setStatus(app.W.Status, sprintf(['Demo files written to %s (LDF export, cropped LDF, ' ...
                 'LDF trials, TDT tank, LFP, MUA, imaging stack, oscillation LFP, advanced imaging, histology, groups, ' ...
-                'Intan / Open Ephys / NWB).'], folder), 'success');
+                'every electrophysiology format).'], folder), 'success');
             if offerImport
                 uiconfirm(app.UIFig, sprintf(['The demo files are in\n%s\n\nUse this folder as the ' ...
                     'project Import folder, so every Load dialog starts there?'], folder), 'Demo files written', ...
@@ -342,8 +342,9 @@ classdef HelpApp < handle
                 esc(tp.group), esc(tp.title), esc(tp.summary));
             if ~isempty(tp.quick)
                 % Step numbers as literal text (CSS counters / ::before did not render in uihtml)
-                items = arrayfun(@(k) sprintf('<li><span class="num">%d</span><span class="txt">%s</span></li>', ...
-                    k, fmt(dropStepNo(tp.quick{k}))), 1:numel(tp.quick), 'UniformOutput', false);
+                nums = stepNumbers(tp.quick, '&bull;');
+                items = arrayfun(@(k) sprintf('<li><span class="num">%s</span><span class="txt">%s</span></li>', ...
+                    nums{k}, fmt(dropStepNo(tp.quick{k}))), 1:numel(tp.quick), 'UniformOutput', false);
                 parts{end+1} = ['<h2>Quick start</h2><ol class="steps">' strjoin(items, '') '</ol>'];
             end
             if ~isempty(tp.demo)
@@ -416,8 +417,9 @@ classdef HelpApp < handle
             s = {upper(tp.title); tp.summary; ''};
             if ~isempty(tp.quick)
                 s{end+1} = 'QUICK START';
+                nums = stepNumbers(tp.quick, '-');
                 for k = 1:numel(tp.quick)
-                    s{end+1} = sprintf('  %d. %s', k, strip(dropStepNo(tp.quick{k}))); %#ok<AGROW>
+                    s{end+1} = sprintf('  %s. %s', nums{k}, strip(dropStepNo(tp.quick{k}))); %#ok<AGROW>
                 end
                 s{end+1} = '';
             end
@@ -517,13 +519,14 @@ classdef HelpApp < handle
                 '| demo_eeg_faults.mat | EEG Analysis | One oddball participant (an EEGLAB dataset, trials) with faults for the **Checks** tab: blinks in most Target trials (a 100 µV rejection leaves few Target trials and removes far more Target than Standard trials), 8 of 32 channels noisy or flat, and Pz interpolated in EEGLAB |'
                 '| groups/ | Signal Characterization (Groups & statistics) | 24 LDF trial files: the same 8 animals in Control, Stimulated and Drug (true peaks 18, 30 and 24 PU) |'
                 '| groups_faults/ | Signal Characterization (Groups & statistics) | A study with faults for the **Checks** tab: 18 LDF trial files, the same 6 animals in Control, Stimulated and Drug; animal 6 responds three times as much to Stimulated (+40 instead of about +12 PU), and Drug raises every animal by the same 5–7 PU (sphericity violated) |'
-                '| formats/ | Ephys Extract | The first 6 s of demo channels 3–6 as an Intan .rhd, an Open Ephys binary folder and an NWB file |'
+                '| formats/ | Ephys Extract | The first 6 s of demo channels 3–6 in every format Extract Ephys reads: Intan .rhd / .rhs, Open Ephys binary and legacy, NWB, SpikeGLX, Blackrock, Neuralynx, Plexon, Multi Channel Systems HDF5 (MATLAB only) and ABF |'
                 'Each file also stores the ground truth in a `truth` variable. Use **Generate all demo files…** to write them to a folder (and optionally make it your Import folder), or the **Try it with demo data** button on any topic to open that window with its demo already loaded.'};
             t.inputs = {
-                'LabChart .mat export (LDF)'
-                'Laser speckle images: raw camera frames, contrast or exported perfusion images (.mat, TIFF, video)'
-                'TDT tank / block folder, Intan .rhd, Open Ephys binary folder or NWB 2.x file (electrophysiology; TDT needs the TDT MATLAB SDK)'
-                'Image stack .mat or multi-frame TIFF (imaging)'
+                'LDF recordings: LabChart, AcqKnowledge, Spike2, EDF / BDF or a text table'
+                'Laser speckle images: raw camera frames, contrast or exported perfusion images (.mat, TIFF, video, PeriCam PSI .dat)'
+                'Electrophysiology recordings: TDT tank (needs the TDT MATLAB SDK), Intan .rhd / .rhs, Open Ephys (binary or legacy), NWB 2.x, SpikeGLX, Blackrock, Neuralynx, Plexon .plx, Multi Channel Systems HDF5, Axon ABF'
+                'EEG: BrainVision, EDF / BDF, EGI .mff, XDF, EEG-BIDS, EEGLAB, FieldTrip or plain .mat'
+                'Image stacks: .mat, multi-frame TIFF, Inscopix .isxd, ThorImage, Bruker Prairie View or UCLA Miniscope (imaging); still images for histology (TIFF, PNG / JPG, .mat)'
                 'Any saved result with a time vector and signal (response features)'};
             t.outputs = {
                 'Intermediate .mat files that the next step loads (cropped LDF, LDF trials, LFP, MUA)'
@@ -534,8 +537,8 @@ classdef HelpApp < handle
                 'The **Learn** area: the **Course** (step-by-step lessons in the real windows) and the **Virtual lab** (a simulated experiment to plan, record and analyse) are shown with a greyed-out **Coming soon** button: they are not in this release. **? Help** at the top right opens this Help; every window''s topic has **Try it with demo data**.'
                 'The **Analyses** area has one tile per technique, grouped by family in the same order as the website''s Analyses menu. Each tile has its steps as numbered buttons (hover one to see which file goes in and out) and a **?** that opens its topic here.'
                 '| Family | Tile: windows, in order | Starts from | Ends with |'
-                '| Blood flow | LDF: 1 Extract → 2 Process → 3 Average; Laser speckle | LabChart .mat export; laser speckle images (raw, contrast or perfusion) | Trials .mat; grand average (mean ± SD); flow maps, flow per ROI, response map |'
-                '| Electrophysiology | LFP: 1 Extract → 2 LFP analysis; MUA: 1 Extract → 2 MUA analysis | TDT tank, Intan .rhd, Open Ephys folder or .nwb | ERP, CSD, time–frequency; spike times, clusters, rasters, rates |'
+                '| Blood flow | LDF: 1 Extract → 2 Process → 3 Average; Laser speckle | LDF recording (LabChart, AcqKnowledge, Spike2, EDF or a table); laser speckle images (raw, contrast or perfusion) | Trials .mat; grand average (mean ± SD); flow maps, flow per ROI, response map |'
+                '| Electrophysiology | LFP: 1 Extract → 2 LFP analysis; MUA: 1 Extract → 2 MUA analysis | TDT, Intan, Open Ephys, NWB, SpikeGLX, Blackrock, Neuralynx, Plexon, MCS or ABF recording | ERP, CSD, time–frequency; spike times, clusters, rasters, rates |'
                 '| EEG | EEG analysis | Raw or cleaned EEG: BrainVision .vhdr, EDF / BDF, EGI .mff, XDF, EEG-BIDS, EEGLAB .set, FieldTrip .mat or plain .mat, one file per participant | ERPs per condition, mean / peak amplitude, statistics, time–frequency |'
                 '| Imaging | ROI analysis; Histology / culture | Image stack (.mat or TIFF); still images (TIFF, PNG / JPG, .mat) | Brightness, ΔF/F, kymograph, vessel diameter; cell counts, markers, regions |'
                 '| Across techniques | Response features; Batch processing; Sessions and reports | LDF trials, LFP / ERP .mat or any t and y; a folder of files; a saved session | Feature table and group statistics; one summary table and a log; the analysis reopened in its window |'
@@ -550,7 +553,7 @@ classdef HelpApp < handle
                 '* **OK** (green): nothing to do. **Check** (amber): look at it; it may be fine. **Warning** (red): the numbers are probably wrong until you fix it. **Note** (grey): information, such as which model was used.'
                 '* The checks are saved in the session, listed on the PDF report (warnings first) and summed up in the methods text.'
                 '## Typical order'
-                'Each step saves a .mat file that the next step loads, so run the steps of a tile from left to right. Signal Characterization comes last: use it on the trials saved by **LDF Process**, on the ERP exported by **LFP analysis**, or on the LFP saved by **Extract Ephys**, to turn responses into numbers.'
+                'Each step saves a .mat file that the next step loads, so run the steps of a tile from left to right. Signal Characterization comes last: use it on the trials saved by **LDF Process** or **Laser speckle**, on the ERP exported by **LFP analysis**, or on the LFP saved by **Extract Ephys**, to turn responses into numbers.'
                 '## Project folders'
                 '* **Import folder**: where Load dialogs start (your raw data).'
                 '* **Export folder**: where Save / Export dialogs start (your results).'
@@ -558,7 +561,7 @@ classdef HelpApp < handle
                 '## Requirements'
                 '* MATLAB R2021a or later.'
                 '* **Signal Processing Toolbox**: filtering, downsampling and spike detection (LDF Process, Extract Ephys, MUA analysis).'
-                '* **Image Processing Toolbox**: drawing a ROI or line in ROI analysis.'
+                '* **Image Processing Toolbox**: drawing ROIs or a line in ROI analysis and ROIs in Laser speckle (without it, store the ROIs in the .mat file).'
                 '* **TDT MATLAB SDK**: only for Extract Ephys. See README, section "Install the TDT SDK".'
                 'The launcher status bar shows whether the Signal Processing Toolbox and the TDT SDK were found.'
                 '## Where to get help'
@@ -869,7 +872,7 @@ classdef HelpApp < handle
                 '**4 CSD**: choose the **Method** (Standard, iCSD delta, iCSD step, iCSD spline or kCSD), enter **Spacing (µm)** (filled in from the file when it gives `lfp_spacing_um`; otherwise type your probe''s contact spacing, the default is 100 µm) and the **Channel order** from top to bottom (at least 3 channels of the last ERP), then click **Compute CSD**; the **Checks** tab then also checks the spacing and where the CSD sink lies. iCSD and kCSD also ask for the conductivity **σ (S/m)** (0.3 for cortex) and the **Diameter (µm)** of the active tissue (500 by default). iCSD has an optional **Smoothing (µm)** (0 = off). kCSD has **R (µm)** and **λ**, where 0 = chosen automatically by cross-validation. Only the fields of the chosen method are shown.'
                 '**5 Export**: click **Export ERP / CSD…** to save a .mat that Signal Characterization can read.'
                 '**6 Time–frequency**: choose the **Channel**, **Frequencies (Hz)** (lowest – highest), **Wavelet cycles**, **Epoch (s)** and **Baseline (s)**. The band table (delta 1–4, theta 4–8, alpha 8–13, beta 13–30, gamma 30–80 Hz) holds common conventions: edit the limits for your preparation and tick **Plot** for the bands to show. **Try oscillation demo** loads a demo with known theta and gamma oscillations and selects channel 4.'
-                '**7 Time–frequency plots**: click **Spectrum** (power spectrum of the whole recording), **Spectrogram** (power over time with the stimuli marked), **ERSP / ITPC** (power change in dB and phase locking around each stimulus) and **Band power** (% change of each ticked band around the stimulus, mean ± SEM). Each opens its tab. ERSP and Band power use the stimulus onsets found with the ERP threshold (0.5 until you run the ERP).'
+                '**Time–frequency plots** (step 6): click **Spectrum** (power spectrum of the whole recording), **Spectrogram** (power over time with the stimuli marked), **ERSP / ITPC** (power change in dB and phase locking around each stimulus) and **Band power** (% change of each ticked band around the stimulus, mean ± SEM). Each opens its tab. ERSP and Band power use the stimulus onsets found with the ERP threshold (0.5 until you run the ERP).'
                 '**Session / report (optional)**: in step 5, **Save session…** stores the file (with checksum) and the ERP, CSD and time–frequency settings and results; **Open session…** re-runs them; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: `demo_lfp.mat`, 8 channels at 1017.25 Hz, 30 s, 100 µm spacing; 15 stimuli every 2 s from 1 s.'
@@ -1022,7 +1025,7 @@ classdef HelpApp < handle
                 'Inscopix `.isxd` movies (processed recordings; raw nVista files with frame headers: export them from Inscopix Data Processing first)'
                 'ThorImageLS: choose `Experiment.xml` (or the `.raw`) of the folder; Bruker Prairie View: choose the T-series `.xml` (its TIFFs are read, with their frame times); UCLA Miniscope: choose `0.avi` (or `msCam1.avi`): every numbered video of the folder is read, with the times of `timeStamps.csv`'};
             t.outputs = {
-                '.csv: `Time_s` plus one column per measure and ROI (`<measure>_<ROI name>`, e.g. `DFF_Cell_1`; measures Intensity, Movement, DFF, Speed), or `Diameter_px` (+ `Diameter_standard_px`, `Replaced` when robust); for a kymograph, a matrix (first row = time)'
+                '.csv: `Time_s` plus one column per measure and ROI (`<measure>_<ROI name>`, e.g. `DFF_Cell_1`; measures Intensity, Movement, DFF), or `Diameter_px` (+ `Diameter_standard_px`, `Replaced` when robust); for a kymograph, a matrix (first row = time)'
                 '.mat: struct `results` with the series (one row per ROI), `roiMasks` / `roiNames`, `roiMask` (ROI 1), `lineStart` / `lineEnd`, `motionCorrection` and `shifts`, and the preprocessing and diameter settings'};
             t.details = {
                 '## Methods using the ROI'
@@ -1074,7 +1077,7 @@ classdef HelpApp < handle
                 'Count cells in still images of sections or cultures, find the cells positive for a marker, compare regions, and align sections or time points.');
             t.quick = {
                 '**1 Load images**: click **Load images…** and choose one or more files (or **Try demo data**). TIFF: every page is a channel; PNG / JPG: the colours are channels; .mat: variable `images` (H × W × channels × images). Several files = several sections, time points or wells, with the same channels. Check the **Pixel size (µm)**: it is read from ImageJ TIFFs; otherwise type the value of your microscope.'
-                '**2 Align (optional)**: tick **Align channels** if the colours of one cell do not sit on top of each other. With several images choose **Align images**: **Shift (automatic)** for the same field imaged again (time points), **Landmarks (click points)** for serial sections (click the same 3 or more features in image 1 and in the other image, then **Finish**). Click **Align** and switch images to check the overlay.'
+                '**2 Align (optional)**: tick **Align channels** if the colours of one cell do not sit on top of each other. With several images choose **Align images**: **Shift (automatic)** for the same field imaged again (time points), **Landmarks (click points)** for serial sections: click **Pick landmarks…**, click the same 3 or more features in image 1 and in the image shown, then **Finish** (**Clear landmarks** starts again). Click **Align** and switch images to check the overlay.'
                 '**3 Count cells**: choose the channel in which every cell is visible (usually nuclei). The defaults suit nuclei of about 8–12 µm; click **Count cells**. Circles mark counted cells, grey × marks objects that were not counted. Switch **Show** to **What was thresholded** to see what counted as cell.'
                 '**4 Regions and markers**: every other channel is a marker; a cell is positive when at least **Positive if (% of cell)** of it is bright in that channel (yellow circles = positive for every marker). Click **Add region**, click the corners on the image, then **Finish**, to get counts and densities per region. **Import regions…** adds regions drawn in ImageJ / Fiji (a `.roi`, or the ROI Manager''s `RoiSet.zip`) or QuPath (annotations exported as GeoJSON), in the pixels of image 1; lines and points are skipped.'
                 '**5 Export**: **Export results…** writes a .csv with one row per cell plus `<name>_counts.csv` (per image and region), or a .mat with everything. **Save session…**, **Report (PDF)…** and **Methods text…** keep the analysis.'
@@ -1128,7 +1131,7 @@ classdef HelpApp < handle
             t = mkTopic('EEG Analysis', 'EEG', ...
                 'Clean raw recordings (bad channels, filters, re-reference), cut them into trials and reject the noisy ones, then average the trials of each condition, look at the ERPs, measure a component (mean or peak amplitude in a time window), compare conditions across participants and look at the time–frequency of each condition (ERSP, phase locking, band power). EEG already cleaned in EEGLAB, FieldTrip or MATLAB is read as it is.');
             t.quick = {
-                '**1 Load EEG**: click **Load EEG files…** and choose **one file per participant** (select several at once for a group), or **Try demo data** (8 cleaned participants) / **Try raw demo (continuous, not cleaned)** (3 raw recordings). EEGLAB .set, FieldTrip .mat, BrainVision .vhdr files (Brain Products; keep the .vmrk and .eeg files in the same folder) and EDF / BDF files are read as they are; for a plain .mat file a short form asks which variable holds the numbers, the sampling rate and the order of channels, samples and trials.'
+                '**1 Load EEG**: click **Load EEG files…** and choose **one file per participant** (select several at once for a group), or **Try demo data** (8 cleaned participants) / **Try raw demo (continuous, not cleaned)** (3 raw recordings). EEGLAB .set, FieldTrip .mat, BrainVision .vhdr files (Brain Products; keep the .vmrk and .eeg files in the same folder) EDF / BDF, EGI .mff (choose its info.xml), XDF and EEG-BIDS files are read as they are; for a plain .mat file a short form asks which variable holds the numbers, the sampling rate and the order of channels, samples and trials.'
                 '**Read the Overview tab** first: for every participant it says the channels, trials per condition, reference, electrode positions and **what was already done to the data** (filters, re-referencing, ICA, rejected trials, interpolated channels), read from the file, and then every step done here. Nothing in the file is run.'
                 '**Electrode layout…** (step 1, under the file information): the line under it says how many channels have a position (e.g. **32 of 32 channels placed: 32 from the file.**) and whether you confirmed the layout. Click it, look at the drawing (every electrode on the head, or on the skull for rodents) and the **Status** column, change the **Source**, load a **Positions file…** or type a name in **As** if something is wrong, and click **Use this layout**. Positions are needed only for scalp maps; everything else works without them.'
                 '**2 Clean recordings** (raw data; skip it for data already cleaned): choose a **Participant** and type its **Bad channels** (or click **Suggest**: flat or very noisy channels), set the **High-pass** (e.g. 0.1 Hz, 0 = off) and **Low-pass** (e.g. 30 Hz) filters, a **Notch** for line noise if needed (50 or 60 Hz and harmonics), the **Reference** (As recorded, Average of the good channels, Linked mastoids or chosen Channels) and click **Apply**.'
@@ -1235,13 +1238,13 @@ classdef HelpApp < handle
                 '## Continuous recordings'
                 '* **Cut into trials** takes, for every event, the samples from **Trial from** to **Trial to** around it; the event''s name (or the name given in **Events and names**) becomes the trial''s condition. Events too close to the start or end of the recording are left out, and the Overview says how many.'};
             t.trouble = {
-                '"needs a map" / the form opens', 'A plain .mat file does not say which variable is the EEG or how it is ordered. In the form choose the variable with the numbers, the sampling rate (a variable or typed), and the **Order of the numbers** (e.g. trials × channels × samples); the hint at the top says what was unclear.'
+                '"does not make clear which variable holds the EEG" / the form opens', 'A plain .mat file does not say which variable is the EEG or how it is ordered. In the form choose the variable with the numbers, the sampling rate (a variable or typed), and the **Order of the numbers** (e.g. trials × channels × samples); the hint at the top says what was unclear.'
                 '"Unknown channel"', 'The names in **Channels** must match the file''s channel names (any case), separated by commas. The Overview tab and the butterfly view show the names.'
                 '"other channels / other trial times than participant 1"', 'Every participant must have the same channels in the same order and the same trial times. Interpolate or remove channels and cut the trials the same way in EEGLAB / FieldTrip before loading them together.'
                 'Peaks flagged "on the window edge"', 'The window cuts through a slope instead of around a peak. Widen the window, check the direction (Positive / Negative), or use the mean amplitude.'
                 'Condition missing from the grand average', 'Only conditions present in every participant are averaged and compared. Check the Overview for the trials per condition of each participant.'
                 '"Every trial exceeds the threshold"', 'One noisy channel can fail every trial: the message names the channels that caused most rejections. Mark them bad in step 2 (or click **Suggest**), check the filters (no high-pass leaves drift and offsets in), then cut again.'
-                '"The filter is longer than each trial"', 'A 0.1 Hz high-pass needs about 33 s of data. Filter the continuous recording before cutting it into trials, or use the trials as they are.'
+                '"The filter (…) is longer than each trial"', 'A 0.1 Hz high-pass needs about 33 s of data. Filter the continuous recording before cutting it into trials, or use the trials as they are.'
                 'Time–frequency images mostly grey', 'The trials are short for the frequencies chosen: a 3-cycle wavelet at 4 Hz lasts about 0.75 s. Cut longer trials (step 3), raise the lowest frequency or use fewer **Wavelet cycles**; the line under the button says which frequencies have values and a baseline.'
                 '"The … band goes beyond the frequencies"', 'Band power uses the frequencies computed: widen **Frequencies** to cover the band (e.g. 4 to 40 Hz for Alpha and Beta; up to 80 Hz for Gamma, below half the sampling rate).'
                 'Statistics button greyed out', 'The test compares conditions across participants: load two or more participants, Show ERPs, then Measure.'
@@ -1277,7 +1280,7 @@ classdef HelpApp < handle
                 '* **Checks** (group demo, any design): no warnings. **Sample size** OK (8 animals, one value per file), **Normality** OK (Shapiro–Wilk does not reject it), **Robustness check** OK (both test families significant). Set **Value per** to **Each series** and run again: **Sample size** becomes a **Warning**, because the 64 trials per condition come from 8 animals (pseudoreplication).'
                 '* **Faults study** (`groups_faults/` in the demo folder: in **Files and groups** add `control_animal01–06.mat` as **Control**, `stimulated_animal01–06.mat` as **Stimulated** and `drug_animal01–06.mat` as **Drug**): **Repeated measures**, **Peak amplitude**, **Run test**. The Checks tab gives **Sample size** a **Check** (6 animals, fewer than 8), **Normality** a **Check** (the residuals are not normal; the most extreme value is `stimulated_animal06.mat`) and **Sphericity** a **Check** (violated: Mauchly''s test p < 0.001, Greenhouse–Geisser ε about 0.5, so the corrected p is reported). The test is still significant either way, so the **Robustness check** is OK. **Paired**, Control vs Stimulated: **Normality** a **Check** (animal 6''s difference, about +40 PU against about +12 PU for the others).'};
             t.inputs = {
-                'LDF trials from LDF Process: `segmentedLDF`, `segmentedTime` (one series per trial)'
+                'LDF trials from LDF Process: `segmentedLDF`, `segmentedTime` (one series per trial); the trials of **Save trials…** in the Laser speckle window have the same format (% change of one ROI)'
                 'LFP from Extract Ephys: `lfp_data`, `t_lfp` (mean over channels = one series)'
                 'ERP export from LFP analysis, or any `.mat` with `t` and `y` (or `t` and `LDF`)'};
             t.outputs = {
@@ -1321,7 +1324,7 @@ classdef HelpApp < handle
                 '"The paired design needs the same number of subjects in both groups"', 'Every animal needs one file in each group. Add the missing file or remove the extra one; the **#** column shows the pairing.'
                 'Wrong animals paired', 'The Results report lists every pair (`1: fileA ↔ fileB`). Files are added in alphabetical order; fix the order with **▲ Move up** / **▼ Move down**.'
                 '**Run test** is disabled', 'Add files to at least two groups. For a two-group design, choose two different groups in **Compare**.'
-                '"… value(s) excluded because the feature could not be computed"', 'The feature was NaN for those files (peak not found or never crossing 50%). Check **Onset t0**, **Baseline** and **Direction**, or choose another feature.'
+                '"… left out: the feature could not be computed"', 'The feature was NaN for those files (peak not found or never crossing 50%). Check **Onset t0**, **Baseline** and **Direction**, or choose another feature.'
                 'Checks: every series counted as a subject', 'Set **Value per** to **File (mean trace)**: one value per animal. Trials of one animal are not independent, so counting them as subjects makes p far too small.'
                 'Checks: not normal', 'Look at the Plot tab for the animal named in the row. Report the rank-based result (Method: Nonparametric) or both; do not remove an animal only because it is extreme.'
                 'Checks: the rank-based test cannot reach p < 0.05', 'With 5 pairs or fewer (3 vs 3 unpaired) the exact rank test cannot be significant whatever the data. Add animals, or report the parametric result with its normality check.'
@@ -1384,7 +1387,7 @@ classdef HelpApp < handle
                 'LDF: "no complete trial fits"', 'Pre-onset + Post-onset is longer than the recording around the stimuli: shorten the windows.'
                 'LFP: "Channel(s) … not in the file"', 'The Channels field lists numbers the file does not have: clear it (all channels) or use the numbers shown in LFP Analysis.'
                 'MUA: a red channel row (file orange) with "Too few spikes for clustering"', 'That channel has almost no spikes at this threshold: lower Threshold (k) or Min spikes / cluster, or leave the channel out; the other channels of the file are kept.'
-                'EEG: a red row with "needs a map"', 'A plain `.mat` array does not say which variable is the EEG: open it in EEG Analysis (a short form asks), or save it as an EEGLAB `.set` or FieldTrip `.mat`.'
+                'EEG: a red row with "does not make clear which variable holds the EEG"', 'A plain `.mat` array does not say which variable is the EEG: open it in EEG Analysis (a short form asks), or save it as an EEGLAB `.set` or FieldTrip `.mat`.'
                 'EEG: a red row with "No good channel to measure at"', 'Every channel in **Channels** is marked bad in that file (typed in Bad channels or suggested): choose other channels.'
                 'EEG: "Every trial exceeds the threshold" / few trials left', 'One noisy channel can fail every trial: add it to **Bad channels** (or tick **Also suggested bad channels**), check the filters (no high-pass leaves drift in), or raise the rejection threshold.'
                 'Imaging: "needs a line" or no diameter columns', 'Type the line across the vessel in **Line x1 y1 x2 y2 (px)** (read the coordinates in ROI Analysis).'
@@ -1467,6 +1470,22 @@ end
 %% dropStepNo - '**1 Load data**: ...' -> '**Load data**: ...' (the list numbers the steps)
 function s = dropStepNo(s)
     s = regexprep(s, '^\*\*\d+ ', '**');
+end
+
+%% stepNumbers - The number of each quick-start entry as the window shows it
+% Entries written as '**4 Title**' keep their own number (the step card's),
+% so extra entries in between do not shift the numbers; an entry without
+% one gets the bullet. Topics where no entry has a number are numbered 1, 2, ...
+function nums = stepNumbers(quick, bullet)
+    n = cellfun(@(q) regexp(q, '^\*\*(\d+) ', 'tokens', 'once'), quick, 'UniformOutput', false);
+    if all(cellfun(@isempty, n))
+        nums = arrayfun(@(k) sprintf('%d', k), 1:numel(quick), 'UniformOutput', false);
+        return;
+    end
+    nums = cell(1, numel(quick));
+    for k = 1:numel(quick)
+        if isempty(n{k}), nums{k} = bullet; else, nums{k} = n{k}{1}; end
+    end
 end
 
 %% esc - Escape HTML special characters

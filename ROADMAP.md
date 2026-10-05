@@ -46,6 +46,7 @@ them exposed two limits, which are now fixed.
 | ✅ | Time–frequency analysis | LFP | Welch spectrum, spectrogram, Morlet ERSP / ITPC and band power next to the ERP and CSD. |
 | ✅ | Per-unit responses | MUA | Raster and PSTH per unit, auto- and cross-correlograms. |
 | ✅ | Motion correction and many ROIs | Imaging | Rigid registration, several ROIs at once, automatic cell detection from a local correlation image. |
+| ✅ | Laser speckle flowmetry | Blood flow | Raw speckle, contrast or perfusion images (including PeriCam PSI `.dat`): speckle contrast, flow index, flow per ROI over time, trials and a response map. |
 | ✅ | Histology and culture images | Imaging | Cell counts in still images, marker-positive cells, counts per region and per mm², channel and section / time-point alignment (shift or landmarks), with plain-language checks. |
 | ✅ | More acquisition systems | Data formats | Intan RHD2000, Open Ephys binary and NWB 2.x import; NWB export. Then SpikeGLX, Blackrock, Neuralynx, Plexon `.plx`, Multi Channel Systems HDF5, Intan `.rhs`, Open Ephys legacy `.continuous` and Axon ABF 2 in Extract Ephys; LabChart, AcqKnowledge, Spike2, EDF and tables in Extract LDF. |
 | ✅ | Batch processing | Every pipeline | Run one pipeline over a folder of animals or sessions with the same settings and get one summary table plus a per-file log. |
@@ -56,10 +57,10 @@ them exposed two limits, which are now fixed.
 
 ## EEG
 
-EEG will get its own window, reusing the ERP, time–frequency and statistics
-code the LFP window already uses. It will stay general at first (any
-electrode layout, the most used file formats); formats and features for
-particular labs and systems will be added when they are needed.
+EEG has its own window (since 0.4.0), reusing the ERP, time–frequency and
+statistics code of the LFP window. It is general (any electrode layout, the
+most used file formats); formats and features for particular labs and
+systems are added when they are needed.
 
 **Data already cleaned in MATLAB comes first.** Cleaned EEG is usually
 already cut into trials with a condition per trial, so the window accepts
@@ -154,6 +155,7 @@ correctly and that teaches while it is used:
 |---|---|---|
 | ✅ | Methods-section writer | *Methods text…* in every window drafts the methods from one or several saved sessions: every step, parameter, software version and citation, with placeholders for what only you know. |
 | ✅ | Quality checks | A plain-language check per step (too few trials, refractory violations, CSD sink at an edge contact, sphericity, motion larger than a cell), each saying why it matters and what to try. Step 1 done: one format and one Checks tab for every window (Laser speckle and Histology use it), kept in sessions, reports and the methods text. Step 2 done: blood flow, the needle probe and perfusion images with the same checks (drift, movement artefacts, signal stuck at 0 or at the top, trials, time resolution) plus each source's own (probe baseline and filter; speckle field shift, speckle size, exposure, illumination, static scattering; clipped perfusion images), in LDF Process, Batch and Laser speckle, with demo files that contain each fault. Step 3 done: electrophysiology, in LFP, MUA and EEG Analysis and Batch (LFP: a stimulus artefact into the N1 window, the CSD sink at an edge contact, a missing electrode spacing; MUA: refractory violations, low signal-to-noise, spike amplitude drift; EEG: trials left per condition, a rejection that hits one condition more, unbalanced trial counts with a peak measure, many bad channels, a measured channel that was interpolated), with demo files that contain each fault. Step 4 done: imaging and statistics, in ROI Analysis (motion larger than a cell, bleaching, clipped pixels) and Groups & statistics and EEG Analysis' statistics (n and pseudoreplication, normality with Shapiro–Wilk, sphericity, equal spread), with demo files that contain each fault. |
+| 📅 | One-click installer | A `.mltbx` toolbox file, so installing and upgrading is one click instead of replacing the folder. |
 | 📅 | Live parameter previews | Thresholds, filters, CSD smoothing: a small preview updates as the value changes. |
 | 📅 | Import and compare | Kilosort / Phy units and Suite2p ROIs: quality checks, and side-by-side comparison with Neuronal Data Analyzer Lab's own sorting and cell detection. |
 | 📅 | Course and Virtual lab | A very interactive, hands-on course that uses a virtual lab: plan, record and analyse simulated experiments in the real windows, with feedback on every step. Coming soon (the launcher shows them as *Coming soon*). |

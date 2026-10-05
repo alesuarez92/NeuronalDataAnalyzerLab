@@ -14,7 +14,7 @@ body:
     attributes:
       label: Where is it?
       description: The Help topic and step, the website page, or the window and message.
-      placeholder: "Help, LDF Process, step 2 (Downsample and filter)"
+      placeholder: "Help, LDF Process, step 2 (Filter / downsample)"
     validations:
       required: true
 

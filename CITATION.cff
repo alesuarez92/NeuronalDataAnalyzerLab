@@ -13,16 +13,21 @@ authors:
 repository-code: "https://github.com/alesuarez92/NeuronalDataAnalyzerLab"
 url: "https://neuroanalyzerlab.com"
 abstract: >-
-  Neuroscience analysis toolbox for Laser Doppler Flowmetry, electrophysiology
-  (LFP, MUA), ROI / coregistered image analysis (brightness, movement, ΔF/F,
-  blood-flow speed, kymograph, vessel diameter), and signal characterization
-  (peak latency, onset delay, FWHM, AUC, rise/decay time, stimulation–response
-  integration). MATLAB.
+  Neuroscience analysis toolbox in MATLAB for blood flow (laser Doppler and
+  laser speckle flowmetry), electrophysiology (LFP, MUA, spike sorting), EEG
+  (raw and cleaned, ERPs, scalp maps, time–frequency, statistics), imaging
+  over time (ΔF/F, motion correction, cell detection, vessel diameter),
+  histology and culture cell counts, and response features with group
+  statistics; with batch processing, session files, quality checks, reports
+  and methods text.
 keywords:
   - neuroscience
   - electrophysiology
   - laser-doppler-flowmetry
   - calcium-imaging
+  - eeg
+  - laser-speckle
+  - histology
   - lfp
   - mua
   - signal-processing

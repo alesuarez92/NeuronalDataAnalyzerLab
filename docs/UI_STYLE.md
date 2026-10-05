@@ -32,7 +32,7 @@ Every window is built from **`core/UIKit.m`** with colors and sizes from
 │   [Save]          │                                          │
 ├───────────────────┴──────────────────────────────────────────┤
 │ ✓ Loaded rat12.mat (1000 Hz, 612 s)                          │  status  (UIKit.setStatus)
-│                         © … · Noncommercial licence · v0.x   │  footer
+│                         © … · Noncommercial licence · v1.0.0 │  footer
 └──────────────────────────────────────────────────────────────┘
 ```
 

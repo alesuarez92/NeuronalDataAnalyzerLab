@@ -6,7 +6,7 @@
 
 > **Install via [Releases](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/latest)**,
 > not the green *Code → Download ZIP* button at the top of this page.
-> The green button gives you the in-development `main` branch; the
+> The green button gives you the `main` branch without a version tag; the
 > Releases page gives you a tagged, tested version (currently
 > [v1.0.0](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.0)).
 > Full walk-through below in [Install](#install).
@@ -117,7 +117,7 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | `core/io/` | Readers and writers for electrophysiology (Intan RHD / RHS, Open Ephys binary and legacy, NWB, SpikeGLX, Blackrock, Neuralynx, Plexon, Multi Channel Systems HDF5, Axon ABF), blood-flow recordings (LabChart, AcqKnowledge, Spike2 exports, EDF / BDF, tables, Perimed), imaging files (TIFF metadata, Inscopix, ThorImage, Prairie View, Miniscope, ImageJ / QuPath regions), NumPy .npy, EEG files (BrainVision, EEGLAB, FieldTrip, EDF / BDF, EGI .mff, XDF, EEG-BIDS, plain matrices) and electrode position files (EEGLAB, BESA, ASA / FieldTrip / MNE .elc, EGI .sfp, BrainVision .bvef, EasyCap / BioSemi lists, tables, BIDS electrodes.tsv). |
 | `core/demo/`, `core/DemoData.m` | Synthetic demo recordings with ground truth. |
 | `core/Batch.m`, `core/Session.m`, `core/Report.m`, `core/MethodsWriter.m` | Batch processing, session files, PDF reports, methods text. |
-| `apps/` | Sub-app windows: Extract / Process / Average LDF, Extract Ephys, LFP & MUA processing and analysis, EEG Analysis, ROI Analysis, Histology / culture, Signal Characterization, Batch Processing, Help. |
+| `apps/` | Sub-app windows: Extract / Process / Average LDF, Laser Speckle Flowmetry, Extract Ephys, LFP & MUA processing and analysis, EEG Analysis, ROI Analysis, Histology / culture, Signal Characterization, Batch Processing, Help. |
 | `docs/` | Workflow and principle figures shown in the Help window; `FORMATS.md`, the files and functions kept stable from 1.0. |
 | `tests/` | Unit tests. Run via `run_tests`. |
 | `Utilities/` | Third-party utilities (e.g. TDT MATLAB SDK). |
@@ -129,7 +129,8 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
   (LDF Process, Extract Ephys, MUA analysis).
 - **Statistics and Machine Learning Toolbox**: spike sorting (PCA, k-means)
   in MUA analysis. Group statistics, EEG and histology need no toolbox.
-- **Image Processing Toolbox**: drawing a ROI or a line in ROI analysis.
+- **Image Processing Toolbox**: drawing ROIs or a line in ROI analysis and
+  ROIs in Laser speckle (without it, save the ROI masks in the .mat).
 - For TDT data: the **TDT MATLAB SDK** under `Utilities/TDTMatlabSDK/`.
   See [Install the TDT SDK](#install-the-tdt-sdk) below.
 
@@ -154,15 +155,15 @@ It has its own license and is not redistributed in this repo.
            └── ...
    ```
 
-4. Re-launch MATLAB (the SDK is added to the path automatically by
-   `ExtractEphysApp` when needed).
+4. Nothing else to do: the SDK is added to the path automatically when a
+   TDT recording is loaded.
 
 `Utilities/TDTMatlabSDK/` is `.gitignore`d, so this folder lives on your
 machine only — no need to remove it before pulling updates.
 
 If you don't process TDT data, you can skip this step entirely; the rest
-of the toolbox (LDF, EEG, ROI imaging, histology, signal characterization) works without
-the SDK.
+of the toolbox (LDF, laser speckle, LFP / MUA from the other systems, EEG,
+ROI imaging, histology, signal characterization) works without the SDK.
 
 ## Development
 
@@ -170,10 +171,10 @@ the SDK.
   See [tests/README.md](tests/README.md). CI runs code analysis and the
   tests on every push ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 - **Versioning:** semver, single source of truth in `core/UITheme.version`.
-  Each release is tagged (`v0.4.0`, ...); pushing the tag runs
+  Each release is tagged (`v1.0.0`, ...) and recorded in
+  [CHANGELOG.md](CHANGELOG.md); pushing the tag runs
   [release.yml](.github/workflows/release.yml), which publishes the GitHub
-  Release with that version's CHANGELOG section as notes and recorded in
-  [CHANGELOG.md](CHANGELOG.md).
+  Release with that version's CHANGELOG section as notes.
 - **Contributing:** see [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Roadmap:** planned work and open items for contributors are in
   [ROADMAP.md](ROADMAP.md).

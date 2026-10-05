@@ -79,11 +79,13 @@ source of truth — every app's footer reads from it.
 - `MAJOR` — incompatible change to the data formats consumed/produced
   by an app, or removal of a public-facing feature.
 
-Releases are git tags (`v0.4.0`, ...) with a corresponding entry in
+Releases are git tags (`v1.0.0`, ...) with a corresponding entry in
 [CHANGELOG.md](CHANGELOG.md). Release checklist:
 
 1. Set the new version in `core/UITheme.m` and `CITATION.cff` (with the
-   release date), the README badge, install link and *How to cite*.
+   release date), the README badge, install link and *How to cite*,
+   CONTRIBUTING's "currently", the bug report's version placeholder and
+   the version links at the bottom of the CHANGELOG.
 2. Move the CHANGELOG's Unreleased entries under the new version.
 3. Update Help for anything new: text, expected demo
    results, and screenshots from the CI artifact `window-screenshots`

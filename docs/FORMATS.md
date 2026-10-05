@@ -6,8 +6,8 @@ options may be added in any 1.x release. Tests fail when a listed name
 goes missing (`tests/StableFormatsTest.m`, `tests/SessionFeaturesTest.m`,
 `tests/SessionWalkthroughTest.m` and the window walkthroughs).
 
-Names written to files use ASCII units (`_uV`, `_ms`, `_um`); the windows
-show µV, ms and µm.
+Names written to files use ASCII units (`_uV`, `_ms`, `_um`; Histology:
+`(um)`, `(um2)`, `(mm2)`); the windows show µV, ms and µm.
 
 ## Session files
 
@@ -37,14 +37,14 @@ opening.
 | Extract Ephys | LFP `.mat` | `lfp_data, lfp_channels, lfp_fs, t_lfp, stim_data, stim_fs, t_stim`; `lfp_spacing_um` when the electrode spacing is given |
 | Extract Ephys | MUA `.mat` | `mua_data, mua_channels, mua_fs, t_mua, stim_data, stim_fs, t_stim, filterParams` |
 | Extract Ephys | `.nwb` | LFP in `/processing/ecephys/LFP`, stimulus in `/stimulus/presentation` (`core/io/writeNWB.m`) |
-| LFP Analysis | `<file>_ERP.mat` | `t, y, erp_avg, erp_std, erp_channels, erp_params, n_epochs, onset_times, lfp_fs, source_file`; with a CSD `csd, csd_channel_order, csd_spacing_um, csd_method, csd_unit, csd_params, csd_depth_um` |
-| MUA Analysis | `<file>_ch<N>_spikes.mat` | `SpikeResults, SpikeSortParams, clusterQuality, info` |
+| LFP Analysis | `<file>_ERP.mat` | `t, y, erp_avg, erp_std, erp_channels, erp_params, n_epochs, onset_times, lfp_fs, source_file`; with a CSD `csd, csd_channel_order, csd_spacing_um, csd_method, csd_unit, csd_params, csd_depth_um, csd_method_label, csd_grid, csd_grid_depth_um` (kCSD: `csd_kcsd`); TDT files: `erp_tdt_channels` |
+| MUA Analysis | `<file>_ch<N>_spikes.mat` (or `_ch<N>_seg<K>_spikes.mat`) | `SpikeResults, SpikeSortParams, clusterQuality, info` |
 | Laser speckle | `.csv` / `.mat` | `Time_s`, `FlowChange_pct_<ROI>`, `FlowIndex_<ROI>` / `results` |
-| ROI Analysis | `.csv` / `.mat` | `Time_s` and one column per measure and ROI (`<measure>_<ROI>`, e.g. `DFF_Cell_1`, also with one ROI), or `Diameter_px` / `results` |
-| Histology / culture | cells and counts `.csv`, `.mat` | `Image, Cell, x (um), y (um), Area (um2), Elongation, Region, …` / `Image, Region, Cells, Area (mm2), Cells per mm2, …` / `results` |
+| ROI Analysis | `.csv` / `.mat` | `Time_s` and one column per measure and ROI (`<measure>_<ROI>`, e.g. `DFF_Cell_1`, also with one ROI); diameter: `Time_s, Diameter_px` (+ `Diameter_standard_px, Replaced` when robust); kymograph: a matrix, first row time / `results` |
+| Histology / culture | `<name>.csv`, `<name>_counts.csv`, `.mat` | `Image, Cell, x (um), y (um), Area (um2), Elongation, Region`, then per marker `<marker> positive, <marker> part of cell (%)` / `Image, Region, Cells, Area (mm2), Cells per mm2`, then `Positive <marker>, % <marker>` (and `All markers positive`) / `results` |
 | EEG Analysis | `.csv` / `.mat` | `Participant, Condition, Value_uV, Latency_ms, Trials, PeakAtEdge` / `results` |
-| Signal Characterization | features `.csv` / `.mat`; group `.csv` / `.mat` | `Series` and the 9 feature columns (as Batch) / `data, colNames`; `Group, Subject, <feature>` / `results` |
-| Batch | `<name>_summary.csv`, `<name>_summary.mat`, `<name>_log.txt` | columns `File, Status, Message`, then `Batch.columns(pipeline)`; `.mat`: `summary` (table) and `batch` (`pipeline, params, files, fileStatus, messages, log, created`); **Export…** writes the same two variables |
+| Signal Characterization | features `.csv` / `.mat`; group `.csv` / `.mat` | `Series` and the 9 feature columns (as Batch) / `data, colNames`; `Group, Subject, <feature>` + `<name>_report.txt` / `results` |
+| Batch | `<name>_summary.csv`, `<name>_summary.mat`, `<name>_log.txt` | columns `File, Status, Message`, then `Batch.columns(pipeline)`; `.mat`: `summary` (table) and `batch` (`pipeline, params, files, fileStatus, messages, log, created`); LDF with Save trials: a `trials/` folder; **Export…** writes the same two variables to `.mat` (or the table to `.csv` / `.xlsx`) |
 | every window with sessions | report `.pdf`, methods `.txt` | one page; plain text |
 
 The 9 feature columns (`Batch.FeatureColumns`): `PeakLatency_s,
