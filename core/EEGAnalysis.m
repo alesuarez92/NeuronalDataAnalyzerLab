@@ -90,7 +90,8 @@
 %       Rows participant x condition for a list of EEG structs (one per
 %       participant; names = participant names): the options of
 %       conditionERPs and measure. Columns Participant, Condition,
-%       Value, Latency, Trials, AtEdge (a table).
+%       Value_uV, Latency_ms (peak only), Trials, PeakAtEdge (a table;
+%       the same columns as the window's .csv and Batch).
 %   s   = EEGAnalysis.describeMeasure(opts)
 %       The measure in one plain sentence (for the window and methods text).
 %   tf  = EEGAnalysis.timeFrequency(eeg, Name, Value)
@@ -487,8 +488,8 @@ classdef EEGAnalysis
                     E(end + 1, 1) = r(c).atEdge; %#ok<AGROW>
                 end
             end
-            T = table(P, Cn, V, L, N, E, 'VariableNames', ...
-                {'Participant', 'Condition', 'Value', 'Latency', 'Trials', 'AtEdge'});
+            T = table(P, Cn, V, L * 1000, N, E, 'VariableNames', ...
+                {'Participant', 'Condition', 'Value_uV', 'Latency_ms', 'Trials', 'PeakAtEdge'});
         end
 
         %% describeMeasure - One plain sentence for a measure's settings

@@ -94,6 +94,37 @@ function testSaveLoadRoundTrip(tests)
     tests.verifyError(@() Session.load(fullfile(d, 'missing.nasession.mat')), 'NeuroAnalyzer:Session:notFound');
 end
 
+%% testFormatFrozen - The session file's top-level fields and the format version (frozen for 1.0)
+function testFormatFrozen(tests)
+    d = tests.TestData.dir;
+    s = Session.new('ExtractLDFApp');
+    tests.verifyEqual(Session.Extension, '.nasession.mat');
+    tests.verifyEqual(Session.Format, 'NeuroAnalyzer session');
+    tests.verifyEqual(Session.FormatVersion, 1);
+    frozen = {'format', 'formatVersion', 'app', 'appTitle', 'toolboxVersion', 'matlabVersion', ...
+        'matlabRelease', 'os', 'created', 'inputs', 'settings', 'results', 'summary', 'checks', 'notes'};
+    tests.verifyTrue(all(ismember(frozen, fieldnames(s))), 'every frozen field is written');
+    tests.verifyTrue(all(ismember({'role', 'path', 'name', 'isFolder', 'bytes', 'modified', 'md5'}, ...
+        fieldnames(Session.fileInfo(writeFixtures(d), 'first')))), 'input fields');
+    % A session without formatVersion or the 0.x additions opens as version 1
+    old = rmfield(s, {'formatVersion', 'summary', 'checks', 'notes', 'appTitle'});
+    session = old; %#ok<NASGU>
+    p = fullfile(d, 'old.nasession.mat'); save(p, 'session');
+    s2 = Session.load(p);
+    tests.verifyEqual(s2.formatVersion, 1);
+    tests.verifyEqual(s2.notes, '');
+    tests.verifyEmpty(s2.checks);
+    % A session from a newer format is refused with a plain message
+    session = s; session.formatVersion = 2; %#ok<NASGU>
+    p = fullfile(d, 'newer.nasession.mat'); save(p, 'session');
+    tests.verifyError(@() Session.load(p), 'NeuroAnalyzer:Session:newer');
+    try
+        Session.load(p);
+    catch ME
+        tests.verifyTrue(contains(ME.message, 'Update the toolbox'), ME.message);
+    end
+end
+
 function testVerifyInputs(tests)
     d = fullfile(tests.TestData.dir, 'verify');
     mkdir(d);

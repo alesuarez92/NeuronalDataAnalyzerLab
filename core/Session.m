@@ -39,7 +39,11 @@
 %   out  = Session.save(path, s)         write (-v7, or -v7.3 when large);
 %                                        returns the path written (extension
 %                                        '.nasession.mat' added if missing)
-%   s    = Session.load(path)            read and validate
+%   s    = Session.load(path)            read, validate and upgrade
+%   s    = Session.upgrade(s, where)     bring an older format to the
+%                                        current one; a newer format is
+%                                        refused (error id
+%                                        NeuroAnalyzer:Session:newer)
 %   st   = Session.verifyInputs(s, sessionPath)
 %          per-input status: 'ok' | 'changed' (MD5 differs) | 'missing' |
 %          'moved' (not at the saved path, but a file with the same name and
@@ -148,11 +152,37 @@ classdef Session
             end
             s = d.session;
             Session.validate(s, p);
+            s = Session.upgrade(s, p);
+        end
+
+        %% upgrade - Bring a loaded session to the current format (one place for every format change)
+        % formatVersion missing = 1. A file from a newer format is refused
+        % with a plain message instead of being half read. Format changes
+        % after 1.0 raise Session.FormatVersion and add one step below that
+        % turns version k into k + 1, so every older file still opens.
+        % (Sessions saved before 1.0 keep the fallbacks in each window's
+        % restoreSession as well.)
+        function s = upgrade(s, where)
+            if nargin < 2, where = 'the session'; end
+            v = 1;
+            if isfield(s, 'formatVersion') && isnumeric(s.formatVersion) && isscalar(s.formatVersion)
+                v = double(s.formatVersion);
+            end
+            if v > Session.FormatVersion
+                saved = '';
+                if isfield(s, 'toolboxVersion'), saved = sprintf(' (Neuronal Data Analyzer Lab %s)', char(s.toolboxVersion)); end
+                error('NeuroAnalyzer:Session:newer', ['%s was saved by a newer version%s, session format %g; ' ...
+                    'this version reads format %g and older. Update the toolbox to open it.'], ...
+                    where, saved, v, Session.FormatVersion);
+            end
+            % Version 1: fields added during 0.x get their defaults
             if isempty(s.inputs), s.inputs = Session.emptyInputs(); end
             if ~isfield(s, 'summary'), s.summary = {}; end
             if ~isfield(s, 'checks'), s.checks = QualityChecks.none(); end
             if ~isfield(s, 'notes'), s.notes = ''; end
             if ~isfield(s, 'appTitle'), s.appTitle = ''; end
+            % (steps for formatVersion 2, 3, ... go here)
+            s.formatVersion = Session.FormatVersion;
         end
 
         %% validate - Error unless s has the session fields

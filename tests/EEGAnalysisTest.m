@@ -218,8 +218,8 @@ function testMeasureTable(tests)
     T = EEGAnalysis.measureTable(eegs, names, 'Baseline', [-0.2 0], 'Channels', {'Pz'}, ...
         'Window', [0.3 0.4]);
     verifyClass(tests, T, 'table');
-    verifyEqual(tests, T.Properties.VariableNames, {'Participant', 'Condition', 'Value', 'Latency', ...
-        'Trials', 'AtEdge'});
+    verifyEqual(tests, T.Properties.VariableNames, {'Participant', 'Condition', 'Value_uV', 'Latency_ms', ...
+        'Trials', 'PeakAtEdge'});
     verifyEqual(tests, height(T), 3 * n, 'one row per participant and condition');
     for p = 1:n
         rows = T(strcmp(T.Participant, names{p}), :);
@@ -227,18 +227,18 @@ function testMeasureTable(tests)
         erp = EEGAnalysis.conditionERPs(eegs{p}, 'Baseline', [-0.2 0]);
         r = EEGAnalysis.measure(erp, 'Channels', {'Pz'}, 'Window', [0.3 0.4]);
         verifyEqual(tests, rows.Condition, {r.condition}', 'same order as the window');
-        verifyEqual(tests, rows.Value, [r.value]', 'AbsTol', 1e-12, 'same numbers as measure');
+        verifyEqual(tests, rows.Value_uV, [r.value]', 'AbsTol', 1e-12, 'same numbers as measure');
         verifyEqual(tests, sum(rows.Trials), 65);
-        v = @(c) rows.Value(strcmp(rows.Condition, c));
+        v = @(c) rows.Value_uV(strcmp(rows.Condition, c));
         verifyGreaterThan(tests, v('Target'), v('Standard'));
     end
-    verifyTrue(tests, all(isnan(T.Latency)));
+    verifyTrue(tests, all(isnan(T.Latency_ms)));
     T = EEGAnalysis.measureTable(eegs(1), names(1), 'Conditions', {'Target'}, 'Channels', 'Cz', ...
         'Window', [0.05 0.15], 'Measure', 'peak', 'Polarity', 'negative');
     verifyEqual(tests, height(T), 1);
     verifyEqual(tests, T.Condition, {'Target'});
-    verifyLessThan(tests, T.Value, 0);
-    verifyEqual(tests, T.Latency, 0.1, 'AbsTol', 0.03);
+    verifyLessThan(tests, T.Value_uV, 0);
+    verifyEqual(tests, T.Latency_ms, 100, 'AbsTol', 30);
 end
 
 %% ------------------------------------------------------------- Epoching

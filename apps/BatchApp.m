@@ -461,7 +461,7 @@ classdef BatchApp < handle
             try
                 summary = app.Result.summary;
                 if strcmpi(ext, '.mat')
-                    batch = rmfield(app.Result, 'summary'); %#ok<NASGU>
+                    batch = app.Result.record; %#ok<NASGU>   % the same as <Name>_summary.mat
                     save(filePath, 'summary', 'batch');
                 else
                     writetable(summary, filePath);

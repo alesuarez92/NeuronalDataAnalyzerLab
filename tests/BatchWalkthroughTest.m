@@ -95,6 +95,12 @@ function testBatchPipelines(tests)
         % Export a copy, then remove the corrupt file: results are cleared
         verifyTrue(tests, logical(app.exportSummary(fullfile(work, 'ldf_copy.csv'))));
         verifyEqual(tests, exist(fullfile(work, 'ldf_copy.csv'), 'file'), 2);
+        % .mat: the same variables (summary, batch) as <Name>_summary.mat
+        verifyTrue(tests, logical(app.exportSummary(fullfile(work, 'ldf_copy.mat'))));
+        a = load(fullfile(work, 'ldf_copy.mat'));
+        b = load(R.paths.mat);
+        verifyEqual(tests, sort(fieldnames(a)), sort(fieldnames(b)));
+        verifyEqual(tests, a.batch, b.batch, 'Export saves the same batch record');
         app.removeFiles(5);
         verifyNumElements(tests, app.Files, 4);
         verifyEmpty(tests, app.Result);

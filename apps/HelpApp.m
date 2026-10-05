@@ -790,7 +790,7 @@ classdef HelpApp < handle
                 '**1 Load recording**: choose the **Source** (the acquisition system or file format; see **Inputs**), click **Load recording…** and select the file or folder it asks for (a TDT tank / block folder, an Open Ephys or Neuralynx folder, or a data file). The channel lists are filled from the recording.'
                 '**2 Choose channels**: pick the **Stimulus channel** (TDT: Whis; Intan: DIGITAL-IN / ANALOG-IN, and the stimulation current in .rhs files; Open Ephys: TTL line / ADC; NWB: stimulus TimeSeries or trials; SpikeGLX: sync or digital bits, analog inputs; Blackrock: analog inputs, digital input bits from the .nev; Neuralynx: TTL bits; Plexon: AI channels, event channels; Multi Channel Systems: auxiliary and digital streams, events; ABF: current, TTL or stimulus channels) and one or more raw channels (**All** / **None** help).'
                 '**3 Process**: optionally **Plot RAW**; then **Process LFP…** (low-pass, optional 60 Hz notch, downsample) and/or **Process MUA…** (band-pass, default 300–3000 Hz).'
-                '**4 Save**: **Save LFP…** / **Save MUA…**, choose which channels to keep and a file name (default `<recording>_LFP.mat` / `<recording>_MUA.mat`). Open these files in **LFP analysis** / **MUA analysis**. **Export NWB…** writes the processed LFP and its stimulus channel as an NWB 2.x file (default `<recording>_LFP.nwb`).'
+                '**4 Save**: type the probe''s **Electrode spacing (µm)** if you know it (0 = not known; it is saved with the LFP and used for the CSD), then **Save LFP…** / **Save MUA…**, choose which channels to keep and a file name (default `<recording>_LFP.mat` / `<recording>_MUA.mat`). Open these files in **LFP analysis** / **MUA analysis**. **Export NWB…** writes the processed LFP and its stimulus channel as an NWB 2.x file (default `<recording>_LFP.nwb`).'
                 '**Session / report (optional)**: in step 4, **Save session…** stores the recording (with checksum), channels and LFP / MUA settings; **Open session…** re-processes them; **Report (PDF)…** writes a one-page summary. See **Sessions and reports**.'};
             t.demo = {
                 '* **Data**: a TDT-like demo block (30 s): 8 raw channels (`xRAW`, 24414 Hz, electrodes 100 µm apart) and the whisker stimulus (`Whis`: 20 ms pulses every 2 s from 1 s, 15 stimuli). The demo tank is read by a built-in stand-in, so the TDT SDK is not needed for it.'
@@ -813,7 +813,7 @@ classdef HelpApp < handle
                 'Open Ephys legacy folder: `<processor>_CH<n>.continuous` files (GUI before 0.6), `all_channels.events`'
                 'Axon ABF 2 `.abf` (pCLAMP 10+; gap-free or episodic, sweeps put one after the other)'};
             t.outputs = {
-                'LFP `.mat`: `lfp_data` (channels × samples), `lfp_channels`, `lfp_fs`, `t_lfp`, `stim_data`, `stim_fs`, `t_stim`'
+                'LFP `.mat`: `lfp_data` (channels × samples), `lfp_channels`, `lfp_fs`, `t_lfp`, `stim_data`, `stim_fs`, `t_stim`, and `lfp_spacing_um` when **Electrode spacing (µm)** is filled in'
                 'MUA `.mat`: `mua_data`, `mua_channels`, `mua_fs`, `t_mua`, `stim_data`, `stim_fs`, `t_stim`, `filterParams`'
                 'NWB `.nwb` (Export NWB…): LFP in volts in /processing/ecephys/LFP, the stimulus in /stimulus/presentation, electrodes with source channel names. Written with matnwb when installed, otherwise an NWB-style export (not validated).'};
             t.details = {
@@ -884,7 +884,7 @@ classdef HelpApp < handle
                 '* **Spectrogram** (2–80 Hz): a steady band at 6 Hz, and short 40 Hz patches just after each dashed stimulus line.'
                 '* **ERSP / ITPC** (2–80 Hz, 7 cycles, baseline −0.4 to −0.1 s): about **+10 to +12 dB at 36–44 Hz between 50 and 250 ms**, ITPC ≈ **0.97** there, and ≈ 0 dB before the stimulus and after ~0.3 s. The ERP itself (N1 / P2) adds a brief broadband increase with high ITPC in the first ~50 ms. On channel 8 (no gamma) there is no 40 Hz increase. 14 of the 15 stimuli are used (the last epoch would run past the end of the recording), and 13 at the lowest frequencies.'
                 '* **Band power** (channel 4): the ERP itself (N1 / P2) gives a very large, brief increase in the first ~50 ms in every band, so the y-axis is scaled to it (the status bar''s "largest change" therefore looks from 50 ms on); the **gamma burst** (roughly **+400 to +750 %**) is the plateau at 0.05–0.25 s. Theta also swings around the ERP. On **channel 8** (far from the ERP, no gamma) **theta stays flat** (~0 %): theta is not modulated by the stimuli.'};
-            t.inputs = {'LFP `.mat` from Extract Ephys: `lfp_data`, `stim_data`, `t_lfp`, `t_stim`, `lfp_fs`, `stim_fs` (all required); optional `lfp_spacing_um`, the probe''s contact spacing in µm (fills **Spacing (µm)**)'};
+            t.inputs = {'LFP `.mat` from Extract Ephys: `lfp_data`, `stim_data`, `t_lfp`, `t_stim`, `lfp_fs`, `stim_fs` (all required); optional `lfp_spacing_um`, the probe''s contact spacing in µm (written by Extract Ephys when its **Electrode spacing** is filled in; fills **Spacing (µm)**)'};
             t.outputs = {
                 'Tabs: Stimulus (threshold and detected onsets), ERP overlay, ERP per channel (mean ± SD), CSD map'
                 'Export `.mat`: `t`, `y` (ERP averaged over channels), `erp_avg`, `erp_std`, `erp_channels`, `n_epochs`, `onset_times`, `erp_params`, and `csd` when computed'
@@ -1173,7 +1173,7 @@ classdef HelpApp < handle
                 'Electrode positions files (**Electrode layout…** → **Positions file…**): EEGLAB `.loc` / `.locs` / `.ced` / `.xyz`, BESA `.elp` / `.sfp`, ASA / FieldTrip / MNE `.elc`, EGI `.sfp`, BrainVision `.bvef`, EasyCap / BioSemi `Site Theta Phi` lists, `.csv` / `.tsv` tables (x / y / z, angles, or ap / ml in mm from bregma) and BIDS `electrodes.tsv`'
                 'One file per participant, all with the same channels and trial times'};
             t.outputs = {
-                '.csv: one row per participant and condition: Participant, Condition, Value_uV, Latency_s (peak only), Trials, PeakAtEdge (1 = the peak lies on the window edge)'
+                '.csv: one row per participant and condition: Participant, Condition, Value_uV, Latency_ms (peak only), Trials, PeakAtEdge (1 = the peak lies on the window edge)'
                 '.mat: struct `results` with the ERPs of every participant and the grand average, the settings, the measures, the statistics and the time–frequency of step 7 (`timeFrequency` per participant, `grandTimeFrequency`); a .mat file can be written with the time–frequency alone'};
             t.details = {
                 '## Electrode layout (step 1)'
@@ -1360,7 +1360,7 @@ classdef HelpApp < handle
                 'Imaging: `.mat` with `stack` (or `frames`), optional `timeVec` / `t` and `roiMask` / `roiMasks`, or a multi-frame TIFF'
                 'Response features: any file Signal Characterization reads (`segmentedLDF` + `segmentedTime`, `lfp_data` + `t_lfp`, `t` + `y`, `t` + `LDF`)'};
             t.outputs = {
-                '`<name>_summary.csv` and `<name>_summary.mat` (table `summary` + struct `batch` with the settings, files, statuses and log): columns File, Status, Message, then the pipeline''s results'
+                '`<name>_summary.csv` and `<name>_summary.mat` (table `summary` + struct `batch` with the pipeline, settings, files, statuses, messages, log and date; **Export…** in the window saves the same two variables): columns File, Status, Message, then the pipeline''s results'
                 'LDF, LFP, MUA and EEG: a **Checks** column: the checks of the matching window (LDF Process, LFP Analysis, MUA Analysis, EEG Analysis) in one cell (**OK**, **1 to check: Topic: …** or **2 warnings: Topic: …**, the first of the most serious kind): per file for LDF, LFP and EEG (the same on every row of the file), per channel for MUA; the log line of each file ends with the same. The checks do not change the Status: read them before using the numbers'
                 '`<name>_log.txt`: date, settings and one line per file (result or error)'
                 'LDF: `trials/<file>_segments.mat` per recording (`segmentedLDF`, `segmentedTime`, `Fs`), ready for LDF Average'};
@@ -1409,7 +1409,7 @@ classdef HelpApp < handle
                 'A `.nasession.mat` file saved by the same window (Open session)'
                 'The input files the session refers to, at their saved location, next to the session file, or chosen when asked'};
             t.outputs = {
-                '`<name>.nasession.mat`: variable `session` with `app`, `toolboxVersion`, `matlabVersion`, `os`, `created` (ISO 8601), `inputs` (role, path, name, bytes, modified, md5), `settings`, `results`, `summary`, `checks` (level, topic, found, why, action), `notes`'
+                '`<name>.nasession.mat`: variable `session` with `format`, `formatVersion` (1; a file from a newer format is refused with a message to update the toolbox, older ones are upgraded when opened), `app`, `appTitle`, `toolboxVersion`, `matlabVersion`, `os`, `created` (ISO 8601), `inputs` (role, path, name, bytes, modified, md5), `settings`, `results`, `summary`, `checks` (level, topic, found, why, action), `notes`'
                 '`<name>_report.pdf`: one A4 page (window image + versions, inputs with MD5, checks, settings, key results)'
                 '`<name>_methods.txt`: the methods text as edited (UTF-8, opens in Word), with its reference list'};
             t.details = {

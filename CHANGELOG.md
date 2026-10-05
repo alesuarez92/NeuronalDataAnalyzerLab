@@ -10,6 +10,29 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+### Changed
+
+- **Formats ready to freeze for 1.0** (ROADMAP 1.0; listed in
+  `docs/FORMATS.md`, locked by tests):
+  - EEG measures have the same columns everywhere: `Participant,
+    Condition, Value_uV, Latency_ms, Trials, PeakAtEdge` in EEG Analysis'
+    `.csv` and `.mat` (latency was `Latency_s`) and in
+    `EEGAnalysis.measureTable` (was `Value, Latency, AtEdge`, latency in
+    s), as in Batch.
+  - Batch: **Export…** to `.mat` saves the same `batch` record as
+    `<name>_summary.mat` (it saved the whole run result under that name);
+    `Batch.run` returns it as `R.record`.
+  - Sessions: `Session.load` reads `formatVersion`, upgrades older files
+    in one place (`Session.upgrade`) and refuses a file from a newer
+    format with a message to update the toolbox.
+
+### Added
+
+- **Extract Ephys: Electrode spacing (µm)** in step 4, saved with the LFP
+  as `lfp_spacing_um` (0 = not known) and kept in sessions; LFP Analysis
+  and Batch use it for the CSD and the spacing check says it came from
+  the file. Until now only the demo files carried it.
+
 ### Fixed
 
 - **Help checked against the 0.10.0 frames** (ROADMAP 1.0: one pass over

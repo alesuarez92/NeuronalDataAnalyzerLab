@@ -23,7 +23,9 @@
 %                      trace; smoothing only draws a rectified display envelope.
 %   4 Save           - Save LFP / Save MUA write .mat files for
 %                      LFPAnalysisApp and MUAAnalysisApp, using the channels
-%                      and stim channel snapshotted when processing ran.
+%                      and stim channel snapshotted when processing ran;
+%                      Electrode spacing (µm, 0 = not known) goes into the
+%                      LFP file as lfp_spacing_um (LFP Analysis, Batch).
 %                      Export NWB… writes the processed LFP + stimulus as an
 %                      NWB 2.x file (writeNWB: matnwb when installed,
 %                      otherwise an "NWB-style export (not validated)").
@@ -35,7 +37,7 @@
 % same demo written in that format by core/demo/demoFormats.m.
 % Programmatic use (no dialogs): openTank(folder), openRecording(path, format),
 % loadDemo(format), setChannels(stim, raw), plotRAWData(),
-% processLFPData(params), processMUAData(params), saveLFPTo(path, sel),
+% processLFPData(params), processMUAData(params), setSpacing(um), saveLFPTo(path, sel),
 % saveMUATo(path, sel), exportNWB(path).
 % Sessions (step 4 buttons; core/Session.m, core/Report.m):
 % saveSessionTo(path, notes), openSession(path), makeReport(pdfPath),
@@ -62,6 +64,7 @@ classdef ExtractEphysApp < handle
         ProcessMUABtn
         SaveLFPBtn
         SaveMUABtn
+        SpacingEdit          % electrode spacing (µm) saved with the LFP as lfp_spacing_um (0 = not known)
         ExportNWBBtn         % Export the processed LFP (+ stimulus) as NWB
         FsLabel              % Summary of processed LFP / MUA (rate, channels, saved)
         PlotCard             % Card around the plot area (title = what is shown)
@@ -109,7 +112,7 @@ classdef ExtractEphysApp < handle
             W.Body.RowHeight = {'1x'};
 
             left = uigridlayout(W.Body, [4 1], 'RowHeight', ...
-                {136 + T.controlHeight + 14, 240, 116, 124 + T.buttonHeight + 6 + UIKit.sessionButtonsHeight() + 6}, ... % fixed: the column scrolls ...
+                {136 + T.controlHeight + 14, 240, 116, 124 + T.buttonHeight + 6 + T.controlHeight + 6 + UIKit.sessionButtonsHeight() + 6}, ... % fixed: the column scrolls ...
                 'Padding', [0 0 0 0], 'RowSpacing', 10, 'BackgroundColor', T.bgGray, ...
                 'Scrollable', 'on');
             left.Layout.Row = 1; left.Layout.Column = 1;
@@ -172,9 +175,12 @@ classdef ExtractEphysApp < handle
             app.PlotRAWBtn.Layout.Column = [1 2];
 
             % --- 4 Save ---
-            g = cardGrid(left, {22, bh, bh, UIKit.sessionButtonsHeight(), '1x'}, 2);
+            g = cardGrid(left, {22, T.controlHeight, bh, bh, UIKit.sessionButtonsHeight(), '1x'}, 2);
             lbl = UIKit.step(g, 4, 'Save');
             lbl.Layout.Column = [1 2];
+            app.SpacingEdit = UIKit.field(g, ['Electrode spacing (' char(181) 'm)'], 'numeric', 0, ...
+                ['Distance between neighbouring contacts of the probe. Saved with the LFP (lfp_spacing_um), ' ...
+                'so LFP Analysis and Batch use it for the CSD. 0 = not known (not saved)'], [0 Inf]);
             app.SaveLFPBtn = UIKit.button(g, 'Save LFP…', @(~,~)app.saveLFPData(), 'secondary', ...
                 'Save the processed LFP (+ stimulus) as .mat for LFP Analysis');
             app.SaveMUABtn = UIKit.button(g, 'Save MUA…', @(~,~)app.saveMUAData(), 'secondary', ...
@@ -183,11 +189,11 @@ classdef ExtractEphysApp < handle
                 ['Export the processed LFP (volts, at the LFP rate) and the stimulus channel as an ' ...
                 'NWB 2.x file. Uses matnwb when installed; otherwise an NWB-style export ' ...
                 '(not validated) by the built-in writer']);
-            app.ExportNWBBtn.Layout.Row = 3; app.ExportNWBBtn.Layout.Column = [1 2];
+            app.ExportNWBBtn.Layout.Row = 4; app.ExportNWBBtn.Layout.Column = [1 2];
             app.SessionBtns = UIKit.sessionButtons(g, app);
-            app.SessionBtns.Grid.Layout.Row = 4; app.SessionBtns.Grid.Layout.Column = [1 2];
+            app.SessionBtns.Grid.Layout.Row = 5; app.SessionBtns.Grid.Layout.Column = [1 2];
             app.FsLabel = infoLabel(g, '');
-            app.FsLabel.Layout.Row = 5; app.FsLabel.Layout.Column = [1 2];
+            app.FsLabel.Layout.Row = 6; app.FsLabel.Layout.Column = [1 2];
 
             % --- Plots ---
             app.PlotCard = UIKit.card(W.Body, 'Signals');
@@ -689,6 +695,12 @@ classdef ExtractEphysApp < handle
             app.writeLFP(processedLFP, fsLFP, selection, fullfile(path, file));
         end
 
+        %% setSpacing - Electrode spacing (µm) saved with the LFP; 0 = not known
+        function setSpacing(app, um)
+            if isempty(um) || ~isfinite(um) || um < 0, um = 0; end
+            app.SpacingEdit.Value = double(um);
+        end
+
         %% saveLFPTo - Save the last processed LFP to filePath without dialogs
         % selection: indices into the processed channels (default: all).
         % Returns true on success.
@@ -965,7 +977,7 @@ classdef ExtractEphysApp < handle
         function st = sessionState(app)
             st.inputs = [];
             st.settings = struct('format', app.SourceFormat, 'stimChannel', [], 'rawChannels', [], ...
-                'lfp', [], 'mua', []);
+                'lfp', [], 'mua', [], 'spacingUm', app.SpacingEdit.Value);
             st.results = struct();
             st.summary = {};
             if isempty(app.Data), return; end
@@ -1013,6 +1025,7 @@ classdef ExtractEphysApp < handle
             if isfield(cfg, 'rawChannels') && ~isempty(cfg.rawChannels)
                 app.setChannels(cfg.stimChannel, cfg.rawChannels);
             end
+            if isfield(cfg, 'spacingUm'), app.setSpacing(cfg.spacingUm); end
             ok = true;
         end
     end
@@ -1037,6 +1050,10 @@ classdef ExtractEphysApp < handle
                 save(filePath, ...
                     'lfp_data', 'lfp_channels', 'lfp_fs', 't_lfp', ...
                     'stim_data', 'stim_fs', 't_stim');
+                if app.SpacingEdit.Value > 0
+                    lfp_spacing_um = app.SpacingEdit.Value; %#ok<NASGU>
+                    save(filePath, 'lfp_spacing_um', '-append');
+                end
             catch ME
                 app.fail('Save LFP failed', ME);
                 return;

@@ -39,7 +39,8 @@
 %       Message, then the pipeline's columns), fileStatus (cellstr per file),
 %       messages (cellstr per file), log (cellstr), paths (folder, csv,
 %       mat, log, trials), nOK, nWarning, nError, nSkipped, cancelled,
-%       elapsed (s).
+%       elapsed (s), record (the variable batch of <Name>_summary.mat:
+%       pipeline, params, files, fileStatus, messages, log, created).
 %   [rows, info] = Batch.processFile(pipeline, file, params, outFolder)
 %       One file: rows is a struct array (one element per summary row),
 %       info a one-line description for the log. Throws on failure.
@@ -451,7 +452,8 @@ classdef Batch
             R = struct('pipeline', pipeline, 'params', params, 'files', {files}, ...
                 'summary', summary, 'fileStatus', {fileStatus}, 'messages', {messages}, ...
                 'log', {logLines(:)}, 'paths', paths, 'nOK', nOK, 'nWarning', nWarn, ...
-                'nError', nErr, 'nSkipped', nSkip, 'cancelled', cancelled, 'elapsed', elapsed);
+                'nError', nErr, 'nSkipped', nSkip, 'cancelled', cancelled, 'elapsed', elapsed, ...
+                'record', batch);
         end
 
         %% processFile - Run one file through a pipeline; rows of the summary

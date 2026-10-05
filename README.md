@@ -43,8 +43,10 @@ any window with synthetic data whose answers are known; the
 launcher their tiles show a greyed-out *Coming soon* button.
 
 > **Status: early release (v0.10.0).** The UI works end-to-end on the lab's
-> data formats, but the public surface is not yet stable. See
-> [CHANGELOG.md](CHANGELOG.md) for what's in this release and what's next.
+> data formats. The session files, exported files and script functions that
+> 1.0 will keep stable are listed in [docs/FORMATS.md](docs/FORMATS.md); see
+> [CHANGELOG.md](CHANGELOG.md) for what's in this release and
+> [ROADMAP.md](ROADMAP.md) for what 1.0 still needs.
 
 ## Licence and use
 
@@ -116,7 +118,7 @@ issues / PRs back to this repo instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | `core/demo/`, `core/DemoData.m` | Synthetic demo recordings with ground truth. |
 | `core/Batch.m`, `core/Session.m`, `core/Report.m`, `core/MethodsWriter.m` | Batch processing, session files, PDF reports, methods text. |
 | `apps/` | Sub-app windows: Extract / Process / Average LDF, Extract Ephys, LFP & MUA processing and analysis, EEG Analysis, ROI Analysis, Histology / culture, Signal Characterization, Batch Processing, Help. |
-| `docs/` | Workflow and principle figures shown in the Help window. |
+| `docs/` | Workflow and principle figures shown in the Help window; `FORMATS.md`, the files and functions kept stable from 1.0. |
 | `tests/` | Unit tests. Run via `run_tests`. |
 | `Utilities/` | Third-party utilities (e.g. TDT MATLAB SDK). |
 
