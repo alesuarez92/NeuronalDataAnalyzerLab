@@ -11,10 +11,10 @@
 %            ? Help
 %   folders  Import / Export folder and Set folders
 %   body     (scrolls when the window is small)
-%            LEARN: Course and Virtual lab (Coming soon, disabled), two per
-%            row. Help is the ? Help button in the cover; every window's
-%            Help topic has "Try it with demo data" (synthetic data whose
-%            answers are known)
+%            LEARN: Course (opens the Course website in the browser) and
+%            Virtual lab (Coming soon, disabled), two per row. Help is the
+%            ? Help button in the cover; every window's Help topic has
+%            "Try it with demo data" (synthetic data whose answers are known)
 %            ANALYSES: one tile per technique, grouped by family: Blood
 %            flow, Electrophysiology, EEG, Imaging, Across techniques. A
 %            tile has a description, its steps as numbered buttons in order
@@ -46,6 +46,7 @@ classdef Main < handle
         StatusLabel        % Status bar (toolbox availability, last action)
         Columns = 0        % Tile columns of the current layout
         LastOpened         % Last window opened from the launcher ([] if none or it failed)
+        BrowserOpener      % Function that opens a web address in the browser ([] = Main.openInBrowser; tests replace it)
         % Environment checks (set by checkSignalToolbox / checkTDTSDK)
         HasSignalToolbox = true
         HasTDTSDK = false
@@ -208,7 +209,7 @@ classdef Main < handle
                 p = uipanel(app.LearnGrid, 'BackgroundColor', T.cardBg, 'BorderType', 'line', ...
                     'HighlightColor', T.cardBorder);
                 app.LearnTiles(i) = p;
-                g = uigridlayout(p, [2 2], 'ColumnWidth', {'1x', 84}, 'RowHeight', {20, '1x'}, ...
+                g = uigridlayout(p, [2 2], 'ColumnWidth', {'1x', 116}, 'RowHeight', {20, '1x'}, ...
                     'Padding', [12 8 12 8], 'RowSpacing', 2, 'ColumnSpacing', 10, 'BackgroundColor', T.cardBg);
                 uilabel(g, 'Text', L(i).name, 'FontSize', T.fontButton + 1, 'FontWeight', 'bold', ...
                     'FontColor', T.sectionTitleColor);
@@ -218,10 +219,9 @@ classdef Main < handle
                 c = uigridlayout(g, [3 1], 'RowHeight', {'1x', T.buttonHeight, '1x'}, ...
                     'Padding', [0 0 0 0], 'RowSpacing', 0, 'BackgroundColor', T.cardBg);
                 uilabel(c, 'Text', '');
-                b = UIKit.button(c, 'Open', @(~,~)app.openLearn(id), 'secondary', L(i).tooltip);
+                b = UIKit.button(c, L(i).button, @(~,~)app.openLearn(id), 'secondary', L(i).tooltip);
                 b.Layout.Row = 2;
                 if ~L(i).available
-                    b.Text = 'Coming soon';
                     b.Enable = 'off';
                 end
                 c.Layout.Row = [1 2]; c.Layout.Column = 2;
@@ -385,6 +385,7 @@ classdef Main < handle
         end
 
         %% openLearn - Open a Learn item by id ('course', 'lab')
+        % The Course is a website: it opens in the browser (openWebPage).
         function win = openLearn(app, id)
             L = Techniques.learn();
             it = L(strcmp({L.id}, id));
@@ -392,8 +393,30 @@ classdef Main < handle
                 win = [];
                 app.LastOpened = [];
                 UIKit.setStatus(app.StatusLabel, sprintf('%s: coming soon', it.name), 'warning');
+            elseif ~isempty(it.url)
+                win = [];
+                app.LastOpened = [];
+                app.openWebPage(it.url, it.name);
             else
                 win = app.launch(str2func(it.window), it.name);
+            end
+        end
+
+        %% openWebPage - Open a web address in the browser; if that fails, show it to copy
+        function ok = openWebPage(app, url, name)
+            opener = app.BrowserOpener;
+            if isempty(opener), opener = @Main.openInBrowser; end
+            try
+                opener(url);
+                ok = true;
+                UIKit.setStatus(app.StatusLabel, sprintf('%s website opened in your browser', name), 'success');
+            catch
+                ok = false;
+                UIKit.setStatus(app.StatusLabel, sprintf('Could not open your browser. %s website: %s', ...
+                    name, url), 'warning');
+                UIKit.alert(app.UIFig, sprintf(['Could not open your web browser.\n\n' ...
+                    'Copy this address into your browser to open the %s website:\n%s'], ...
+                    name, url), name, 'warning');
             end
         end
 
@@ -511,6 +534,14 @@ classdef Main < handle
     end
 
     methods (Static)
+        %% openInBrowser - Open a web address in the system browser (error if it cannot)
+        function openInBrowser(url)
+            stat = web(url, '-browser');
+            if stat ~= 0
+                error('NeuroAnalyzer:Main:browser', 'No web browser could be opened (code %d).', stat);
+            end
+        end
+
         %% columnsFor - Tile columns for a window width (1 to 3)
         function n = columnsFor(width)
             content = width - 32 - 18;           % body padding and room for a scroll bar

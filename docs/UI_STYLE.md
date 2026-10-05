@@ -54,7 +54,7 @@ Every window is built from **`core/UIKit.m`** with colors and sizes from
 ├──────────────────────────────────────────────────────────────┤
 │ Import folder: …   Export folder: …            [Set folders] │
 ├──────────────────────────────────────────────────────────────┤
-│ LEARN      Course · Virtual lab                              │  2 tiles per row (both disabled "Coming soon")
+│ LEARN      Course · Virtual lab                              │  2 tiles per row (Course opens its website; Virtual lab disabled "Coming soon")
 │ ANALYSES                                                     │
 │ ▌BLOOD FLOW ───────  ▌ELECTROPHYSIOLOGY ─────────────────    │  family headings
 │ ┌ LDF ─────── ? ┐    ┌ LFP ──────── ? ┐ ┌ MUA ──────── ? ┐  │  tiles: colour stripe,

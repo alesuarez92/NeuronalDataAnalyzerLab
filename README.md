@@ -11,7 +11,7 @@
 > [v1.0.1](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.1)).
 > Full walk-through below in [Install](#install).
 
-![The launcher: Learn (Course and Virtual lab, coming soon) and one tile per analysis, grouped as blood flow, electrophysiology, EEG, imaging and across techniques](docs/main-launcher.png)
+![The launcher: Learn (Course, and Virtual lab coming soon) and one tile per analysis, grouped as blood flow, electrophysiology, EEG, imaging and across techniques](docs/main-launcher.png)
 
 Neuroscience analysis toolbox for **Laser Doppler Flowmetry** and **laser
 speckle flowmetry** (blood-flow maps, flow per ROI over time, responses),
@@ -38,9 +38,12 @@ answers**, so results can be checked before using real recordings.
 Everything needed to learn the tool is free: the in-app **Help** explains
 every window step by step, and its *Try it with demo data* button opens
 any window with synthetic data whose answers are known; the
-[project website](https://neuroanalyzerlab.com) (linked at the bottom of every window) has a guide and walkthroughs. A hands-on **Course** and a **Virtual lab**
-(plan, record and analyse a simulated experiment) are coming soon, also free; in the
-launcher their tiles show a greyed-out *Coming soon* button.
+[project website](https://neuroanalyzerlab.com) (linked at the bottom of every window) has a guide and walkthroughs. The hands-on **Course**
+is on its own website, [course.neuroanalyzerlab.com](https://course.neuroanalyzerlab.com/):
+free step-by-step lessons in the real windows, which open on request. In the
+launcher, **Open the Course** under **Learn** opens it in your web browser. The
+**Virtual lab** (plan, record and analyse a simulated experiment) is coming soon,
+also free; in the launcher its tile shows a greyed-out *Coming soon* button.
 
 > **Status: 1.0 (v1.0.1).** Every window works end-to-end and has its
 > quality checks. The session files, exported files and script functions

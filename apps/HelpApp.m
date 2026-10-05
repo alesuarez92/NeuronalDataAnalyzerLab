@@ -47,6 +47,7 @@ classdef HelpApp < handle
     properties(Constant)
         IssuesURL = 'https://github.com/alesuarez92/NeuronalDataAnalyzerLab/issues'
         WebsiteURL = 'https://neuroanalyzerlab.com'
+        CourseURL = 'https://course.neuroanalyzerlab.com/'   % the Course website (launcher: Learn > Course)
     end
 
     methods
@@ -489,7 +490,7 @@ classdef HelpApp < handle
                 'Neuronal Data Analyzer Lab: analysis of blood flow (LDF, laser speckle), electrophysiology, EEG and imaging, step by step.');
             t.quick = {
                 'In the launcher, click **Set folders** and choose your **Import** folder (raw data) and **Export** folder (results). You can use one folder for both.'
-                'New here? Pick a window on the left and click **Try it with demo data**: it opens that window with synthetic data whose answers are known, so you can practise and check your numbers before using your own recordings. The **Course** and the **Virtual lab** are coming soon.'
+                ['New here? Pick a window on the left and click **Try it with demo data**: it opens that window with synthetic data whose answers are known, so you can practise and check your numbers before using your own recordings. The **Course** (free step-by-step lessons, on request) is on the Course website (' HelpApp.CourseURL '): in the launcher, click **Open the Course** under **Learn**. The **Virtual lab** is coming soon.']
                 'Under **Analyses**, find the tile for your data (grouped as Blood flow, Electrophysiology, EEG, Imaging and Across techniques) and click its numbered steps **in order**.'
                 'In every window, work down the numbered step cards on the left: **Load** → **Settings** → **Run** → **Save**. The teal button is the recommended next action; greyed-out buttons are not possible yet.'
                 'Read the **status bar** at the bottom of each window: it says what happened and what to do next.'
@@ -534,7 +535,7 @@ classdef HelpApp < handle
             t.detailsTitle = 'Overview';
             t.details = {
                 '## The launcher'
-                'The **Learn** area: the **Course** (step-by-step lessons in the real windows) and the **Virtual lab** (a simulated experiment to plan, record and analyse) are shown with a greyed-out **Coming soon** button: they are not in this release. **? Help** at the top right opens this Help; every window''s topic has **Try it with demo data**.'
+                ['The **Learn** area: **Open the Course** opens the Course website (' HelpApp.CourseURL ') in your web browser: free step-by-step lessons in the real windows, which open on request. The **Virtual lab** (a simulated experiment to plan, record and analyse) has a greyed-out **Coming soon** button: it is not in this release. **? Help** at the top right opens this Help; every window''s topic has **Try it with demo data**.']
                 'The **Analyses** area has one tile per technique, grouped by family in the same order as the website''s Analyses menu. Each tile has its steps as numbered buttons (hover one to see which file goes in and out) and a **?** that opens its topic here.'
                 '| Family | Tile: windows, in order | Starts from | Ends with |'
                 '| Blood flow | LDF: 1 Extract → 2 Process → 3 Average; Laser speckle | LDF recording (LabChart, AcqKnowledge export, Spike2, EDF or a table); laser speckle images (raw, contrast or perfusion) | Trials .mat; grand average (mean ± SD); flow maps, flow per ROI, response map |'

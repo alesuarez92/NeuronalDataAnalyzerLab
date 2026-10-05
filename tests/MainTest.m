@@ -8,8 +8,10 @@
 % cover hidden) and back. Then presses every button through its
 % ButtonPushedFcn, as a click does: each step button opens its step's
 % window, each ? and the header Help open Help on the right topic; the
-% Learn area has only the Course and the Virtual lab, whose disabled
-% "Coming soon" buttons open nothing.
+% Learn area has only the Course, whose button opens the Course website
+% in the browser (a stand-in opener in the test, so no browser opens; if
+% the browser fails, the address is shown), and the Virtual lab, whose
+% disabled "Coming soon" button opens nothing.
 % "Open a session..." asks for a file with a dialog, so its work is
 % tested through openSessionFile(p): a session saved by Extract LDF opens
 % in Extract LDF, a session of an unknown window is refused.
@@ -239,14 +241,30 @@ end
 
 function testLearnButtons(tests)
     app = Main(); c = onCleanup(@() delete(app.UIFig));
-    for id = {'course', 'lab'}
-        b = app.LearnButtons.(id{1});
-        tests.verifyEqual(b.Text, 'Coming soon', ['Learn: ' id{1}]);
-        tests.verifyEqual(char(b.Enable), 'off', ['Learn: ' id{1} ' is disabled']);
-        press(b);
-        tests.verifyEmpty(app.LastOpened, ['Learn: ' id{1} ' opens nothing']);
-        tests.verifyTrue(contains(app.StatusLabel.Text, 'coming soon'), app.StatusLabel.Text);
-    end
+    % The Course opens its website; a stand-in records the address instead of opening a browser
+    b = app.LearnButtons.course;
+    tests.verifyEqual(b.Text, 'Open the Course');
+    tests.verifyEqual(char(b.Enable), 'on', 'Learn: the Course is available');
+    tests.verifyTrue(contains(b.Tooltip, 'browser'), 'the tooltip says it opens the browser');
+    app.BrowserOpener = @(u) setappdata(app.UIFig, 'openedURL', u);
+    press(b);
+    tests.verifyEqual(getappdata(app.UIFig, 'openedURL'), 'https://course.neuroanalyzerlab.com/', ...
+        'Learn: the Course button opens the Course website');
+    tests.verifyEqual(getappdata(app.UIFig, 'openedURL'), HelpApp.CourseURL);
+    tests.verifyEmpty(app.LastOpened, 'Learn: the Course opens no window');
+    tests.verifyTrue(contains(app.StatusLabel.Text, 'Course website opened in your browser'), app.StatusLabel.Text);
+    % No browser: the address is shown so it can be copied
+    app.BrowserOpener = @(u) error('test:nobrowser', 'no browser');
+    win = app.openLearn('course');
+    tests.verifyEmpty(win);
+    tests.verifyTrue(contains(app.StatusLabel.Text, HelpApp.CourseURL), app.StatusLabel.Text);
+    % The Virtual lab: coming soon, disabled
+    b = app.LearnButtons.lab;
+    tests.verifyEqual(b.Text, 'Coming soon', 'Learn: lab');
+    tests.verifyEqual(char(b.Enable), 'off', 'Learn: lab is disabled');
+    press(b);
+    tests.verifyEmpty(app.LastOpened, 'Learn: lab opens nothing');
+    tests.verifyTrue(contains(app.StatusLabel.Text, 'coming soon'), app.StatusLabel.Text);
     tests.verifyEqual(fieldnames(app.LearnButtons)', {'course', 'lab'}, ...
         'Help and demo data are reached through ? Help, not Learn cards');
 end

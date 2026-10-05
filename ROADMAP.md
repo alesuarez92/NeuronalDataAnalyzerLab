@@ -157,7 +157,7 @@ correctly and that teaches while it is used:
 | 📅 | One-click installer | A `.mltbx` toolbox file, so installing and upgrading is one click instead of replacing the folder. |
 | 📅 | Live parameter previews | Thresholds, filters, CSD smoothing: a small preview updates as the value changes. |
 | 📅 | Import and compare | Kilosort / Phy units and Suite2p ROIs: quality checks, and side-by-side comparison with Neuronal Data Analyzer Lab's own sorting and cell detection. |
-| 📅 | Course and Virtual lab | A very interactive, hands-on course that uses a virtual lab: plan, record and analyse simulated experiments in the real windows, with feedback on every step. Coming soon (the launcher shows them as *Coming soon*). |
+| 📅 | Course and Virtual lab | A very interactive, hands-on course that uses a virtual lab: plan, record and analyse simulated experiments in the real windows, with feedback on every step. The Course is on its website, https://course.neuroanalyzerlab.com/ (free lessons, on request; the launcher's **Open the Course** opens it in the browser). The Virtual lab is coming soon (the launcher shows it as *Coming soon*). |
 | 📅 | Ground-truth playground | Change noise, electrode spacing, sink depth, spike overlap or motion in the demo data and see where each method holds up or fails. |
 
 ## Open for contributors

@@ -10,6 +10,16 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+### Changed
+
+- **Launcher: the Course is open.** Under **Learn**, the Course tile's
+  button is now **Open the Course**: it opens the Course website,
+  https://course.neuroanalyzerlab.com/, in your web browser (free
+  step-by-step lessons in the real windows; lessons open on request). The
+  status bar says when the website was opened; if no browser can be opened,
+  the address is shown so you can copy it. The Help (Welcome topic) says
+  where the Course is. The **Virtual lab** is still *Coming soon*.
+
 ## [1.0.1] - 2026-10-05
 
 **A legal-compliance release.** It removes file readers whose layouts did

@@ -16,8 +16,10 @@
 %       it in the window that saved it)
 %   L = Techniques.learn()      the Learn area: id, name, description,
 %       window, help, web ('' = no website page yet), tooltip, available
-%       (false = shown with a disabled "Coming soon" button: Course and
-%       Virtual lab are not in this release)
+%       (false = shown with a disabled "Coming soon" button: the Virtual
+%       lab is not in this release), url (a website the button opens in
+%       the browser instead of a window: the Course, HelpApp.CourseURL;
+%       '' = none) and button (the button's text)
 %   c = Techniques.windows()    every window class named in the tables
 %   [labels, classes] = Techniques.demoChoices()  windows that have demo
 %       data, named like the windows ("Extract LDF", "EEG analysis")
@@ -26,8 +28,8 @@
 %   p = Techniques.pageForTopic(topic)    website page of a Help topic
 %
 % Families follow the website's Analyses menu, so people find things in
-% the same place in the app and online. The Learn items have no website
-% page while they are not ready.
+% the same place in the app and online. The Course is a separate website
+% (HelpApp.CourseURL); the Virtual lab has no page while it is not ready.
 % =========================================================================
 
 classdef Techniques
@@ -149,9 +151,11 @@ classdef Techniques
         function L = learn()
             L = [ ...
                 lrn('course', 'Course', ...
-                    'Step-by-step lessons in the real windows, with sample data and checks. Coming soon.', ...
+                    ['Free step-by-step lessons in the real windows, on the Course website. ' ...
+                     'Lessons open on request.'], ...
                     '', 'Welcome', '', ...
-                    'Coming soon: step-by-step lessons in the real windows, with sample data and checks', false), ...
+                    ['Opens the Course website in your browser: ' HelpApp.CourseURL], true, ...
+                    HelpApp.CourseURL, 'Open the Course'), ...
                 lrn('lab', 'Virtual lab', ...
                     'Plan, record and analyse a simulated experiment, with feedback on every step. Coming soon.', ...
                     '', 'Welcome', '', ...
@@ -253,9 +257,14 @@ function s = stp(label, window, help, tooltip, action)
     s = struct('label', label, 'window', window, 'help', help, 'tooltip', tooltip, 'action', action);
 end
 
-function l = lrn(id, name, description, window, help, web, tooltip, available)
+function l = lrn(id, name, description, window, help, web, tooltip, available, url, button)
+    if nargin < 9, url = ''; end
+    if nargin < 10
+        if available, button = 'Open'; else, button = 'Coming soon'; end
+    end
     l = struct('id', id, 'name', name, 'description', description, 'window', window, ...
-        'help', help, 'web', web, 'tooltip', tooltip, 'available', logical(available));
+        'help', help, 'web', web, 'tooltip', tooltip, 'available', logical(available), ...
+        'url', url, 'button', button);
 end
 
 function s = ephysExtractTip()

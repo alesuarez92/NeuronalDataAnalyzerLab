@@ -25,7 +25,7 @@ end
 
 function testEveryWindowClassExists(tests)
     c = Techniques.windows();
-    tests.verifyGreaterThanOrEqual(numel(c), 12);   % 12 windows with Laser speckle (Course, Virtual lab: not yet)
+    tests.verifyGreaterThanOrEqual(numel(c), 12);   % 12 windows with Laser speckle (the Course is a website; Virtual lab: not yet)
     for k = 1:numel(c)
         mc = meta.class.fromName(c{k});
         tests.verifyNotEmpty(mc, sprintf('window class %s does not exist', c{k}));
@@ -64,10 +64,27 @@ function testRowsAreComplete(tests)
     tests.verifyEqual({T(sort(first)).family}, {F.id}, 'tiles are listed family by family, in family order');
     L = Techniques.learn();
     tests.verifyEqual({L.id}, {'course', 'lab'});
-    tests.verifyEqual([L.available], [false false], 'Course and Virtual lab: coming soon');
+    tests.verifyEqual([L.available], [true false], 'Course available, Virtual lab coming soon');
+    tests.verifyEqual(L(1).url, HelpApp.CourseURL, 'the Course button opens the Course website');
+    tests.verifyEqual(L(1).button, 'Open the Course');
+    tests.verifyTrue(contains(L(1).tooltip, 'browser'), 'the tooltip says it opens the browser');
+    tests.verifyEqual(L(2).url, '', 'the Virtual lab has no website');
+    tests.verifyEqual(L(2).button, 'Coming soon');
     for i = 1:numel(L)
         tests.verifyTrue(any(strcmp(topics, L(i).help)), sprintf('learn %s: no Help topic', L(i).id));
+        if L(i).available
+            tests.verifyTrue(~isempty(L(i).url) || ~isempty(L(i).window), ...
+                sprintf('learn %s: available but opens neither a window nor a website', L(i).id));
+        end
     end
+end
+
+function testCourseURL(tests)
+    % One place for the Course address: the launcher and Help both use it
+    tests.verifyEqual(HelpApp.CourseURL, 'https://course.neuroanalyzerlab.com/');
+    H = HelpApp.topicData();
+    w = H(strcmp({H.title}, 'Welcome'));
+    tests.verifyTrue(any(contains(w.quick, HelpApp.CourseURL)), 'Welcome says where the Course is');
 end
 
 function testSessionsOpenInEveryAnalysisWindow(tests)
