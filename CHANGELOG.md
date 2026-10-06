@@ -10,8 +10,6 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
-## [1.0.2] - 2026-10-06
-
 ### Changed
 
 - **Launcher: the Course is open.** Under **Learn**, the Course tile's
@@ -1033,8 +1031,7 @@ formats, but the public surface is not yet stable. Expect tightening
 of error handling, more validation around input formats, and additional
 analyses in 0.2.x.
 
-[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v1.0.2...HEAD
-[1.0.2]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.2
+[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v1.0.1...HEAD
 [1.0.1]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.1
 [1.0.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.0
 [0.10.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.10.0

@@ -34,6 +34,13 @@ The owner accepts bugs and errors; he does not accept legal risk. Always take th
   `.claude/settings.json`) blocks git commands that create or push such a
   branch.
 
+## Versions (owner, 2026-10-06)
+
+- Do not change the version number (`core/UITheme.m`, `CITATION.cff`, README, a new changelog section)
+  and do not release unless there is a real change in the app and the owner asks for a release.
+  Every release means new screenshots for him. Website-only changes (addresses, wording on the site)
+  never need a release; collect app changes under `## [Unreleased]` until he asks.
+
 ## Commits
 
 - Author: `Alejandro Suarez <107207149+alesuarez92@users.noreply.github.com>`

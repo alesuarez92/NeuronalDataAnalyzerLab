@@ -1,6 +1,6 @@
 # Neuronal Data Analyzer Lab
 
-[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](CHANGELOG.md)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE.txt)
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2021a+-orange.svg)](https://www.mathworks.com/products/matlab.html)
 
@@ -8,7 +8,7 @@
 > not the green *Code → Download ZIP* button at the top of this page.
 > The green button gives you the `main` branch without a version tag; the
 > Releases page gives you a tagged, tested version (currently
-> [v1.0.2](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.2)).
+> [v1.0.1](https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.1)).
 > Full walk-through below in [Install](#install).
 
 ![The launcher: Learn (Course, and Virtual lab coming soon) and one tile per analysis, grouped as blood flow, electrophysiology, EEG, imaging and across techniques](docs/main-launcher.png)
@@ -45,7 +45,7 @@ launcher, **Open the Course** under **Learn** opens it in your web browser. The
 **Virtual lab** (plan, record and analyse a simulated experiment) is coming soon,
 also free; in the launcher its tile shows a greyed-out *Coming soon* button.
 
-> **Status: 1.0 (v1.0.2).** Every window works end-to-end and has its
+> **Status: 1.0 (v1.0.1).** Every window works end-to-end and has its
 > quality checks. The session files, exported files and script functions
 > listed in [docs/FORMATS.md](docs/FORMATS.md) keep their names until 2.0;
 > see [CHANGELOG.md](CHANGELOG.md) for what's in this release and
@@ -201,7 +201,7 @@ The website has the same on its Community page (About → Community).
 If you use Neuronal Data Analyzer Lab, or results produced with it, in work
 that you publish or present, please cite it (a request, not a licence condition):
 
-> Suarez, A. (2026). *Neuronal Data Analyzer Lab* (version 1.0.2) [Computer
+> Suarez, A. (2026). *Neuronal Data Analyzer Lab* (version 1.0.1) [Computer
 > software]. https://github.com/alesuarez92/NeuronalDataAnalyzerLab
 
 GitHub's **Cite this repository** button (right-hand column) gives the same
