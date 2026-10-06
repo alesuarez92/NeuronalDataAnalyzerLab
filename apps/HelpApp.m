@@ -46,8 +46,8 @@ classdef HelpApp < handle
 
     properties(Constant)
         IssuesURL = 'https://github.com/alesuarez92/NeuronalDataAnalyzerLab/issues'
-        WebsiteURL = 'https://neuroanalyzerlab.com'
-        CourseURL = 'https://course.neuroanalyzerlab.com/'   % the Course website (launcher: Learn > Course)
+        WebsiteURL = 'https://toolbox.neuroanalyzerlab.com'   % the toolbox website (neuroanalyzerlab.com redirects its old pages here)
+        CourseURL = 'https://toolbox.neuroanalyzerlab.com/course/'   % the Course (launcher: Learn > Course)
     end
 
     methods
@@ -535,7 +535,7 @@ classdef HelpApp < handle
             t.detailsTitle = 'Overview';
             t.details = {
                 '## The launcher'
-                ['The **Learn** area: **Open the Course** opens the Course website (' HelpApp.CourseURL ') in your web browser: free step-by-step lessons in the real windows, which open on request. The **Virtual lab** (a simulated experiment to plan, record and analyse) has a greyed-out **Coming soon** button: it is not in this release. **? Help** at the top right opens this Help; every window''s topic has **Try it with demo data**.']
+                ['The **Learn** area: **Open the Course** opens the Course website (' HelpApp.CourseURL ') in your web browser: free step-by-step lessons in the real windows, open to everyone without an account (Lesson 1, laser Doppler flowmetry, is open; more follow). The **Virtual lab** (a simulated experiment to plan, record and analyse) has a greyed-out **Coming soon** button: it is not in this release. **? Help** at the top right opens this Help; every window''s topic has **Try it with demo data**.']
                 'The **Analyses** area has one tile per technique, grouped by family in the same order as the website''s Analyses menu. Each tile has its steps as numbered buttons (hover one to see which file goes in and out) and a **?** that opens its topic here.'
                 '| Family | Tile: windows, in order | Starts from | Ends with |'
                 '| Blood flow | LDF: 1 Extract → 2 Process → 3 Average; Laser speckle | LDF recording (LabChart, AcqKnowledge export, Spike2, EDF or a table); laser speckle images (raw, contrast or perfusion) | Trials .mat; grand average (mean ± SD); flow maps, flow per ROI, response map |'
@@ -566,7 +566,7 @@ classdef HelpApp < handle
                 '* **TDT MATLAB SDK**: only for Extract Ephys. See README, section "Install the TDT SDK".'
                 'The launcher status bar shows whether the Signal Processing Toolbox and the TDT SDK were found.'
                 '## Where to get help'
-                'Every window has a **? Help** button that opens its topic here; **Learn more** opens the matching page of the website, https://neuroanalyzerlab.com, which is also linked at the bottom of every window. To report a bug or ask for a feature, click **Report a problem** or open https://github.com/alesuarez92/NeuronalDataAnalyzerLab/issues. Include your MATLAB version, the window, what you clicked and the exact message from the status bar or error dialog.'};
+                'Every window has a **? Help** button that opens its topic here; **Learn more** opens the matching page of the website, https://toolbox.neuroanalyzerlab.com, which is also linked at the bottom of every window. To report a bug or ask for a feature, click **Report a problem** or open https://github.com/alesuarez92/NeuronalDataAnalyzerLab/issues. Include your MATLAB version, the window, what you clicked and the exact message from the status bar or error dialog.'};
             t.trouble = {
                 'Undefined function ''Main'', ''UIKit'' or ''HelpApp''', 'The toolbox is not on the MATLAB path. Run `addpath(genpath(''<toolbox folder>''))`, optionally `savepath`, then launch with `NeuroAnalyzerLab`.'
                 'Launcher warns "Signal Processing Toolbox was not found"', 'Filtering, downsampling and spike detection will fail. Install it from Home → Add-Ons, or check your license with `ver`.'

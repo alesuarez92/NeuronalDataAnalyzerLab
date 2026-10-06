@@ -81,7 +81,7 @@ end
 
 function testCourseURL(tests)
     % One place for the Course address: the launcher and Help both use it
-    tests.verifyEqual(HelpApp.CourseURL, 'https://course.neuroanalyzerlab.com/');
+    tests.verifyEqual(HelpApp.CourseURL, 'https://toolbox.neuroanalyzerlab.com/course/');
     H = HelpApp.topicData();
     w = H(strcmp({H.title}, 'Welcome'));
     tests.verifyTrue(any(contains(w.quick, HelpApp.CourseURL)), 'Welcome says where the Course is');

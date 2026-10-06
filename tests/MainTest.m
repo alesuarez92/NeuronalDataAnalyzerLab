@@ -248,7 +248,7 @@ function testLearnButtons(tests)
     tests.verifyTrue(contains(b.Tooltip, 'browser'), 'the tooltip says it opens the browser');
     app.BrowserOpener = @(u) setappdata(app.UIFig, 'openedURL', u);
     press(b);
-    tests.verifyEqual(getappdata(app.UIFig, 'openedURL'), 'https://course.neuroanalyzerlab.com/', ...
+    tests.verifyEqual(getappdata(app.UIFig, 'openedURL'), 'https://toolbox.neuroanalyzerlab.com/course/', ...
         'Learn: the Course button opens the Course website');
     tests.verifyEqual(getappdata(app.UIFig, 'openedURL'), HelpApp.CourseURL);
     tests.verifyEmpty(app.LastOpened, 'Learn: the Course opens no window');

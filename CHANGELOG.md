@@ -10,15 +10,22 @@ at 0.5.1; their notes are kept below as a record of what the tool does.*
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-06
+
 ### Changed
 
 - **Launcher: the Course is open.** Under **Learn**, the Course tile's
-  button is now **Open the Course**: it opens the Course website,
-  https://course.neuroanalyzerlab.com/, in your web browser (free
-  step-by-step lessons in the real windows; lessons open on request). The
+  button is now **Open the Course**: it opens the Course,
+  https://toolbox.neuroanalyzerlab.com/course/, in your web browser (free
+  step-by-step lessons in the real windows, open to everyone without an
+  account; Lesson 1, laser Doppler flowmetry, is open). The
   status bar says when the website was opened; if no browser can be opened,
   the address is shown so you can copy it. The Help (Welcome topic) says
   where the Course is. The **Virtual lab** is still *Coming soon*.
+- **Website address.** The toolbox website moved to
+  https://toolbox.neuroanalyzerlab.com (the footer link of every window and
+  **Learn more** in the Help open it); the old addresses on
+  neuroanalyzerlab.com redirect there.
 - **Statistics tests use the project's own numbers.** The checks of the
   t-tests, rank tests, ANOVA, Tukey HSD and Kruskal-Wallis no longer use
   published data sets; they use made-up numbers whose expected results
@@ -1026,7 +1033,9 @@ formats, but the public surface is not yet stable. Expect tightening
 of error handling, more validation around input formats, and additional
 analyses in 0.2.x.
 
-[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v1.0.0...HEAD
+[unreleased]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.2
+[1.0.1]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.1
 [1.0.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v1.0.0
 [0.10.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.10.0
 [0.9.0]: https://github.com/alesuarez92/NeuronalDataAnalyzerLab/releases/tag/v0.9.0

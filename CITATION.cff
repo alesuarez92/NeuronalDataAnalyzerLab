@@ -10,7 +10,7 @@ authors:
     email: alesr713@gmail.com
     orcid: "https://orcid.org/0000-0002-0931-8512"
 repository-code: "https://github.com/alesuarez92/NeuronalDataAnalyzerLab"
-url: "https://neuroanalyzerlab.com"
+url: "https://toolbox.neuroanalyzerlab.com"
 abstract: >-
   Neuroscience analysis toolbox in MATLAB for blood flow (laser Doppler and
   laser speckle flowmetry), electrophysiology (LFP, MUA, spike sorting), EEG
@@ -32,5 +32,5 @@ keywords:
   - signal-processing
   - matlab
 license: PolyForm-Noncommercial-1.0.0
-version: "1.0.1"
-date-released: "2026-10-05"
+version: "1.0.2"
+date-released: "2026-10-06"
